@@ -34,21 +34,21 @@ struct VertexOutput1d {
   @builtin(position) fragPosition: vec4<f32>,
   @location(0) p: vec3<f32>,
   @location(1) lam: f32,
-  @location(2) id: u32,
+  @location(2) @interpolate(flat) id: u32,
 };
 
 struct VertexOutput2d {
   @builtin(position) fragPosition: vec4<f32>,
   @location(0) p: vec3<f32>,
   @location(1) lam: vec2<f32>,
-  @location(2) id: u32,
+  @location(2) @interpolate(flat) id: u32,
 };
 
 struct VertexOutput3d {
   @builtin(position) fragPosition: vec4<f32>,
   @location(0) p: vec3<f32>,
   @location(1) lam: vec3<f32>,
-  @location(2) id: u32,
+  @location(2) @interpolate(flat) id: u32,
 };
 
 fn calcPosition(p: vec3<f32>) -> vec4<f32> {
@@ -114,10 +114,17 @@ fn mainVertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instan
 }
 
 @fragment
-fn mainFragmentTrig(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) id: u32) -> @location(0) vec4<f32> {
+fn mainFragmentTrig(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
     checkClipping(p);
     let value = evalTrig(id, 0u, lam);
     return getColor(value);
+}
+
+@fragment
+fn mainFragmentTrigMesh(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
+    checkClipping(p);
+    let value = id;
+    return vec4<f32>(0., 1.0, 0.0, 1.0);
 }
 
 @fragment
@@ -146,7 +153,7 @@ fn mainFragmentDeferred(@builtin(position) coord: vec4<f32>) -> @location(0) vec
 
 
 @fragment
-fn mainFragmentTrigToGBuffer(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) id: u32) -> @location(0) vec4<f32> {
+fn mainFragmentTrigToGBuffer(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
     checkClipping(p);
     let value = evalTrig(id, 0u, lam);
     return vec4<f32>(bitcast<f32>(id), lam, 0.0);

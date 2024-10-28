@@ -97,6 +97,7 @@ async def main():
             # )
 
     render_function = create_proxy(render)
+    gpu.input_handler._update_uniforms()
     gpu.input_handler.render_function = render_function
 
     render_function.request_id = js.requestAnimationFrame(render_function)
