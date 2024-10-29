@@ -61,6 +61,7 @@ class WebGPU:
     """WebGPU management class, handles "global" state, like device, canvas, frame/depth buffer, colormap and uniforms"""
 
     def __init__(self, device, canvas):
+        self._is_first_render_pass = True
         self.render_function = None
         self.device = device
         self.format = js.navigator.gpu.getPreferredCanvasFormat()
@@ -100,6 +101,7 @@ class WebGPU:
         self.input_handler = InputHandler(canvas, self.uniforms)
 
     def begin_render_pass(self, command_encoder):
+        load_op = "clear" if self._is_first_render_pass else "load"
         render_pass_encoder = command_encoder.beginRenderPass(
             to_js(
                 {
@@ -107,7 +109,7 @@ class WebGPU:
                         {
                             "view": self.context.getCurrentTexture().createView(),
                             "clearValue": {"r": 1, "g": 1, "b": 1, "a": 1},
-                            "loadOp": "clear",
+                            "loadOp": load_op,
                             "storeOp": "store",
                         }
                     ],
@@ -115,7 +117,7 @@ class WebGPU:
                         "view": self.depth_texture.createView(
                             to_js({"format": self.depth_format, "aspect": "all"})
                         ),
-                        "depthLoadOp": "clear",
+                        "depthLoadOp": load_op,
                         "depthStoreOp": "store",
                         "depthClearValue": 1.0,
                     },
@@ -125,7 +127,12 @@ class WebGPU:
         render_pass_encoder.setViewport(
             0, 0, self.canvas.width, self.canvas.height, 0.0, 1.0
         )
+        self._is_first_render_pass = False
         return render_pass_encoder
+
+    def create_command_encoder(self):
+        self._is_first_render_pass = True
+        return self.device.createCommandEncoder()
 
     def __del__(self):
         self.depth_texture.destroy()

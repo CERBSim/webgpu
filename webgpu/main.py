@@ -83,7 +83,7 @@ async def main():
         # copy camera position etc. to GPU
         gpu.uniforms.update_buffer()
 
-        command_encoder = gpu.device.createCommandEncoder()
+        command_encoder = gpu.create_command_encoder()
 
         mesh_object.render(command_encoder)
 
