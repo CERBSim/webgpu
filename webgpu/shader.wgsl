@@ -11,7 +11,11 @@ struct Uniforms {
   aspect: f32,
   eval_mode: u32,
   do_clipping: u32,
-  padding: u32,
+  font_width: u32,
+  font_height: u32,
+  padding0: u32,
+  padding1: u32,
+  padding2: u32,
 };
 
 const VALUES_OFFSET: u32 = 2; // storing number of components and order of basis functions in first two entries
@@ -28,7 +32,7 @@ const VALUES_OFFSET: u32 = 2; // storing number of components and order of basis
 @group(0) @binding(9) var<storage> index : array<u32>;
 
 @group(0) @binding(10) var gBufferLam : texture_2d<f32>;
-// @group(0) @binding(11) var gBufferDepth : texture_depth_2d;
+@group(0) @binding(11) var font : texture_2d<f32>;
 
 struct VertexOutput1d {
   @builtin(position) fragPosition: vec4<f32>,
@@ -178,3 +182,73 @@ fn mainVertexDeferred(@builtin(vertex_index) vertexId: u32) -> VertexOutputDefer
 }
 
 
+struct FragmentTextInput {
+    @builtin(position) fragPosition: vec4<f32>,
+    @location(0) tex_coord: vec2<f32>,
+};
+
+@vertex
+fn mainVertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) pointId: u32) -> FragmentTextInput {
+    var p = vec3<f32>(vertices[3 * pointId], vertices[3 * pointId + 1], vertices[3 * pointId + 2]);
+    if uniforms.do_clipping != 0 {
+        if dot(uniforms.clipping_plane, vec4<f32>(p, 1.0)) < 0 {
+            return FragmentTextInput(vec4<f32>(-1.0, -1.0, 0.0, 1.0), vec2<f32>(0.));
+        }
+    }
+
+    var position = calcPosition(p);
+    let i_digit = vertexId / 6;
+    let vi = vertexId % 6;
+
+    var length = 1u;
+    var n = 10u;
+    while n <= pointId + 1 {
+        length++;
+        n *= 10u;
+    }
+
+    if i_digit >= length {
+        return FragmentTextInput(vec4<f32>(-1.0, -1.0, 0.0, 1.0), vec2<f32>(0.));
+    }
+
+    var digit = pointId + 1;
+    for (var i = 0u; i < i_digit; i++) {
+        digit = digit / 10;
+    }
+    digit = digit % 10;
+
+    let w: f32 = 2 * f32(uniforms.font_width) / 1000.;
+    let h: f32 = 2 * f32(uniforms.font_height) / 800.;
+
+    var tex_coord = vec2<f32>(
+        f32((digit + 16) * uniforms.font_width),
+        f32(uniforms.font_height)
+    );
+
+    if vi == 2 || vi == 4 || vi == 5 {
+        position.y += h * position.w;
+        tex_coord.y = 0.0;
+    }
+
+    position.x += f32(length - i_digit -1) * w * position.w;
+
+    if vi == 1 || vi == 2 || vi == 4 {
+        position.x += w * position.w;
+        tex_coord.x += f32(uniforms.font_width);
+    }
+
+    return FragmentTextInput(position, tex_coord);
+}
+
+@fragment
+fn mainFragmentText(@location(0) tex_coord: vec2<f32>) -> @location(0) vec4<f32> {
+    let alpha: f32 = textureLoad(
+        font,
+        vec2i(floor(tex_coord)),
+        0
+    ).x;
+    if alpha < 0.01 {
+      discard;
+    }
+    return vec4(0., 0., 0., alpha);
+}

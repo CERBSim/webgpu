@@ -22,7 +22,9 @@ async def main():
 
     gpu = await init_webgpu(js.document.getElementById("canvas"))
 
-    if 1:
+    point_number_object = None
+
+    if 0:
         # create new ngsolve mesh and evaluate arbitrary function on it
         mesh = ngs.Mesh(unit_square.GenerateMesh(maxh=0.5))
         order = 6
@@ -36,7 +38,7 @@ async def main():
         # create testing mesh, this one also supports indexed or deferred rendering
         # but has always P1 and 'x' hard-coded as function
         query = urllib.parse.parse_qs(js.location.search[1:])
-        N = 100
+        N = 10
         # N = int(5000/2**.5)
         # N = int(2000 / 2**0.5)
         # N = int(50/2**.5)
@@ -49,6 +51,7 @@ async def main():
         # mesh_object = MeshRenderObjectIndexed(gpu, buffers, n_trigs)
         # mesh_object = MeshRenderObjectDeferred(gpu, buffers, n_trigs)
 
+        point_number_object = PointNumbersRenderObject(gpu, buffers, font_size=16)
     # move mesh to center and scale it
     for i in [0, 5, 10]:
         gpu.uniforms.mat[i] = 1.8
@@ -86,6 +89,9 @@ async def main():
         command_encoder = gpu.create_command_encoder()
 
         mesh_object.render(command_encoder)
+
+        if point_number_object is not None:
+            point_number_object.render(command_encoder)
 
         gpu.device.queue.submit([command_encoder.finish()])
         if frame_counter < 20:

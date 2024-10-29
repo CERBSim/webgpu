@@ -97,6 +97,7 @@ def main():
             observer.stop()
     if _have_dev_dependencies:
         observer.join()
+    http_thread.join()
 
 
 if __name__ == "__main__":

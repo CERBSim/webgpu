@@ -508,3 +508,89 @@ def create_testing_square_mesh(gpu, n):
     gpu.device.queue.submit([command_encoder.finish()])
 
     return n_trigs, buffers
+
+
+class PointNumbersRenderObject:
+    """Render a point numbers of a mesh"""
+
+    def __init__(self, gpu, buffers, font_size=20):
+
+        self._buffers = buffers
+        self.gpu = gpu
+        self.device = Device(gpu.device)
+        self.n_verts = self._buffers["vertices"].size // (4 * 3)
+
+        self.set_font_size(font_size)
+        self.n_digits = 6
+
+    def get_bindings(self):
+        return [
+            *self.gpu.uniforms.get_bindings(),
+            TextureBinding(Binding.FONT_TEXTURE, self.texture, dim=2),
+            BufferBinding(Binding.VERTICES, self._buffers["vertices"]),
+        ]
+
+    def _create_pipeline(self):
+        bind_layout, self._bind_group = self.device.create_bind_group(
+            self.get_bindings(), "PointNumbersRenderObject"
+        )
+        pipeline_layout = self.device.create_pipeline_layout(bind_layout)
+        shader_module = self.device.compile_files(
+            "webgpu/shader.wgsl", "webgpu/eval.wgsl"
+        )
+        self._pipeline = self.gpu.device.createRenderPipeline(
+            to_js(
+                {
+                    "label": "PointNumbersRenderObject",
+                    "layout": pipeline_layout,
+                    "vertex": {
+                        "module": shader_module,
+                        "entryPoint": "mainVertexPointNumber",
+                    },
+                    "fragment": {
+                        "module": shader_module,
+                        "entryPoint": "mainFragmentText",
+                        "targets": [
+                            {
+                                "format": self.gpu.format,
+                                "blend": {
+                                    "color": {
+                                        "operation": "add",
+                                        "srcFactor": "one",
+                                        "dstFactor": "one-minus-src-alpha",
+                                    },
+                                    "alpha": {
+                                        "operation": "add",
+                                        "srcFactor": "one",
+                                        "dstFactor": "one-minus-src-alpha",
+                                    },
+                                },
+                            }
+                        ],
+                    },
+                    "primitive": {
+                        "topology": "triangle-list",
+                        "cullMode": "none",
+                        "frontFace": "ccw",
+                    },
+                    "depthStencil": self.gpu.depth_stencil,
+                }
+            )
+        )
+
+    def render(self, encoder):
+        render_pass = self.gpu.begin_render_pass(encoder)
+        render_pass.setBindGroup(0, self._bind_group)
+        render_pass.setPipeline(self._pipeline)
+        render_pass.draw(self.n_digits * 6, self.n_verts, 0, 0)
+        render_pass.end()
+
+    def set_font_size(self, font_size: int):
+        from .font import create_font_texture
+
+        self.texture = create_font_texture(self.gpu.device, font_size)
+        char_width = self.texture.width // (127 - 32)
+        char_height = self.texture.height
+        self.gpu.uniforms.font_width = char_width
+        self.gpu.uniforms.font_height = char_height
+        self._create_pipeline()

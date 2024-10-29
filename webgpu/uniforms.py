@@ -17,6 +17,7 @@ class Binding:
     VERTICES = 8
     INDEX = 9
     GBUFFERLAM = 10
+    FONT_TEXTURE = 11
 
 
 class ClippingPlaneUniform(ct.Structure):
@@ -42,7 +43,11 @@ class Uniforms(ct.Structure):
         ("aspect", ct.c_float),
         ("eval_mode", ct.c_uint32),
         ("do_clipping", ct.c_uint32),
-        ("padding", ct.c_uint32),
+        ("font_width", ct.c_uint32),
+        ("font_height", ct.c_uint32),
+        ("padding0", ct.c_uint32),
+        ("padding1", ct.c_uint32),
+        ("padding2", ct.c_uint32),
     ]
 
     def __init__(self, device):

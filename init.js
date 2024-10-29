@@ -5,6 +5,8 @@ const files = [
   "colormap.py",
   "compute.wgsl",
   "eval.wgsl",
+  "font.py",
+  "fonts.json",
   "gpu.py",
   "input_handler.py",
   "main.py",
