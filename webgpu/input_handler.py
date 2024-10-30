@@ -1,5 +1,6 @@
 import js
 import numpy as np
+from .utils import to_js
 
 
 class Transform:
@@ -145,7 +146,7 @@ class InputHandler:
         if event not in self._callbacks:
             self._callbacks[event] = []
         self._callbacks[event].append(func)
-        self.canvas.addEventListener(event, func)
+        self.canvas.addEventListener(event, func, to_js({"capture": True}))
 
     def register_callbacks(self):
         self.unregister_callbacks()

@@ -1,7 +1,6 @@
 import math
 import typing
 
-import js
 import ngsolve as ngs
 import ngsolve.webgui
 import numpy as np
@@ -166,6 +165,7 @@ class MeshRenderObjectDeferred(RenderObject):
     _g_buffer_format = "rgba32float"
 
     def __init__(self, gpu, data):
+        import js
 
         # texture to store g-buffer (trig index and barycentric coordinates)
         self._g_buffer = gpu.device.createTexture(
@@ -378,7 +378,7 @@ class MeshData:
 
     def load(self, data: dict):
         for name in self.__BUFFER_NAMES:
-            setattr(self, name, decode_bytes(data.get(name, b"")))
+            setattr(self, name, decode_bytes(data.get(name, "")))
 
         for name in self.__INT_NAMES:
             setattr(self, name, data.get(name, 0))
@@ -388,7 +388,7 @@ class MeshData:
         for name in self.__BUFFER_NAMES:
             data[name] = encode_bytes(getattr(self, name))
 
-        for name in self.__BUFFER_NAMES:
+        for name in self.__INT_NAMES:
             data[name] = getattr(self, name)
 
         return data
@@ -397,8 +397,14 @@ class MeshData:
         # TODO: implement other element types than triangles
         # TODO: handle region correctly to draw only part of the mesh
         # TODO: set up proper index buffer - it's currently slow and wrong (due to ngsolve vertex numbering)
+        for name in self.__BUFFER_NAMES:
+            setattr(self, name, b"")
+        for name in self.__INT_NAMES:
+            setattr(self, name, 0)
+
         if region_or_mesh is None:
             return
+
         if isinstance(region_or_mesh, ngs.Region):
             mesh = region_or_mesh.mesh
             region = region_or_mesh
@@ -467,6 +473,8 @@ class MeshData:
 
 
 def create_function_value_buffers(device, cf, region, order):
+    import js
+
     """Evaluate a coefficient function on a mesh and create GPU buffer with the values,
     returns a dictionary with the buffer as value and the name/element type as key"""
     # TODO: implement other element types than triangles

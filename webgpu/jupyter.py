@@ -122,18 +122,13 @@ def _draw_client(data):
         cf = data["cf"]
         order = data.get("order", 1)
 
-        region = mesh.Region(ngs.VOL)
-
-        n_trigs, buffers = webgpu.mesh.create_mesh_buffers(gpu.device, region)
-        buffers = buffers | webgpu.mesh.create_function_value_buffers(
-            gpu.device, cf, region, order
-        )
-        mesh_object = webgpu.mesh.MeshRenderObject(gpu, buffers, n_trigs)
+        mesh_data = webgpu.mesh.MeshData(mesh, cf, order)
+        mesh_object = webgpu.mesh.MeshRenderObject(gpu, mesh_data)
 
         def render_function(t):
             gpu.uniforms.update_buffer()
 
-            encoder = gpu.device.createCommandEncoder()
+            encoder = gpu.create_command_encoder()
             mesh_object.render(encoder)
             gpu.device.queue.submit([encoder.finish()])
 
@@ -204,12 +199,8 @@ if not _is_pyodide:
             )
         )
 
-    def Draw(cf, mesh, init_function=None):
+    def Draw(cf, mesh):
         data = {"cf": cf, "mesh": mesh}
-
-        if init_function is not None:
-            data["init_function"] = _encode_function(init_function)
-
         _run_js_code(data)
 
     def DrawCustom(data, client_function):

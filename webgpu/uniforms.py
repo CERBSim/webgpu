@@ -1,7 +1,5 @@
 import ctypes as ct
 
-import js
-
 from .utils import UniformBinding, to_js
 
 
@@ -51,6 +49,8 @@ class Uniforms(ct.Structure):
     ]
 
     def __init__(self, device):
+        import js
+
         self.device = device
         self.do_clipping = 1
         self.clipping_plane.normal[0] = 1
@@ -86,6 +86,8 @@ class Uniforms(ct.Structure):
         return [UniformBinding(Binding.UNIFORMS, self.buffer)]
 
     def update_buffer(self):
+        import js
+
         """Copy the current data to the GPU buffer"""
         data = js.Uint8Array.new(bytes(self))
         self.device.queue.writeBuffer(self.buffer, 0, data)

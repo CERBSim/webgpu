@@ -8,7 +8,7 @@ from .shader import get_shader_code
 def encode_bytes(data: bytes) -> str:
     if data == b"":
         return ""
-    return base64.b64encode(zlib.compress(data)).decode()
+    return base64.b64encode(zlib.compress(data)).decode("utf-8")
 
 
 def decode_bytes(data: str) -> bytes:
