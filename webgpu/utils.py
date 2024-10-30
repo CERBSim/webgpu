@@ -143,6 +143,12 @@ class Device:
             to_js({"label": label, "bindGroupLayouts": [binding_layout]})
         )
 
+    def create_render_pipeline(self, binding_layout, options):
+        options["layout"] = self.create_pipeline_layout(
+            binding_layout, label=options.get("label", "")
+        )
+        return self.device.createRenderPipeline(to_js(options))
+
     def create_buffer(self, size_or_data: int | bytes, usage=None):
         import js
 

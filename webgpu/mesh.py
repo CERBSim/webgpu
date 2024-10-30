@@ -57,35 +57,32 @@ class MeshRenderObject(RenderObject):
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "MeshRenderObject"
         )
-        pipeline_layout = self.device.create_pipeline_layout(bind_layout)
         shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
-        self._pipeline = self.gpu.device.createRenderPipeline(
-            to_js(
-                {
-                    "label": "MeshRenderObject",
-                    "layout": pipeline_layout,
-                    "vertex": {
-                        "module": shader_module,
-                        "entryPoint": "mainVertexTrigP1",
-                    },
-                    "fragment": {
-                        "module": shader_module,
-                        "entryPoint": "mainFragmentTrig",
-                        "targets": [{"format": self.gpu.format}],
-                    },
-                    "primitive": {
-                        "topology": "triangle-list",
-                        "cullMode": "none",
-                        "frontFace": "ccw",
-                    },
-                    "depthStencil": {
-                        **self.gpu.depth_stencil,
-                        # shift trigs behind to ensure that edges are rendered properly
-                        "depthBias": 1.0,
-                        "depthBiasSlopeScale": 1,
-                    },
-                }
-            )
+        self._pipeline = self.device.create_render_pipeline(
+            bind_layout,
+            {
+                "label": "MeshRenderObject",
+                "vertex": {
+                    "module": shader_module,
+                    "entryPoint": "mainVertexTrigP1",
+                },
+                "fragment": {
+                    "module": shader_module,
+                    "entryPoint": "mainFragmentTrig",
+                    "targets": [{"format": self.gpu.format}],
+                },
+                "primitive": {
+                    "topology": "triangle-list",
+                    "cullMode": "none",
+                    "frontFace": "ccw",
+                },
+                "depthStencil": {
+                    **self.gpu.depth_stencil,
+                    # shift trigs behind to ensure that edges are rendered properly
+                    "depthBias": 1.0,
+                    "depthBiasSlopeScale": 1,
+                },
+            },
         )
 
     def render(self, encoder):
@@ -114,35 +111,32 @@ class MeshRenderObjectIndexed(RenderObject):
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "MeshRenderObject"
         )
-        pipeline_layout = self.device.create_pipeline_layout(bind_layout)
-        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
-        self._pipeline = self.gpu.device.createRenderPipeline(
-            to_js(
-                {
-                    "label": "MeshRenderObjectIndexed",
-                    "layout": pipeline_layout,
-                    "vertex": {
-                        "module": shader_module,
-                        "entryPoint": "mainVertexTrigP1Indexed",
-                    },
-                    "fragment": {
-                        "module": shader_module,
-                        "entryPoint": "mainFragmentTrig",
-                        "targets": [{"format": self.gpu.format}],
-                    },
-                    "primitive": {
-                        "topology": "triangle-list",
-                        "cullMode": "none",
-                        "frontFace": "ccw",
-                    },
-                    "depthStencil": {
-                        **self.gpu.depth_stencil,
-                        # shift trigs behind to ensure that edges are rendered properly
-                        "depthBias": 1.0,
-                        "depthBiasSlopeScale": 1,
-                    },
-                }
-            )
+        shader = self.device.compile_files("shader.wgsl", "eval.wgsl")
+        self._pipeline = self.device.create_render_pipeline(
+            bind_layout,
+            options={
+                "label": "MeshRenderObjectIndexed",
+                "vertex": {
+                    "module": shader,
+                    "entryPoint": "mainVertexTrigP1Indexed",
+                },
+                "fragment": {
+                    "module": shader,
+                    "entryPoint": "mainFragmentTrig",
+                    "targets": [{"format": self.gpu.format}],
+                },
+                "primitive": {
+                    "topology": "triangle-list",
+                    "cullMode": "none",
+                    "frontFace": "ccw",
+                },
+                "depthStencil": {
+                    **self.gpu.depth_stencil,
+                    # shift trigs behind to ensure that edges are rendered properly
+                    "depthBias": 1.0,
+                    "depthBiasSlopeScale": 1,
+                },
+            },
         )
 
     def render(self, encoder):
@@ -208,36 +202,33 @@ class MeshRenderObjectDeferred(RenderObject):
         bind_layout_pass1, self._bind_group_pass1 = self.device.create_bind_group(
             self.get_bindings_pass1(), "MeshRenderObjectDeferredPass1"
         )
-        pipeline_layout_pass1 = self.device.create_pipeline_layout(bind_layout_pass1)
         shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
-        self._pipeline_pass1 = self.gpu.device.createRenderPipeline(
-            to_js(
-                {
-                    "label": "MeshRenderObjectDeferredPass1",
-                    "layout": pipeline_layout_pass1,
-                    "vertex": {
-                        "module": shader_module,
-                        "entryPoint": "mainVertexTrigP1Indexed",
-                    },
-                    "fragment": {
-                        "module": shader_module,
-                        "entryPoint": "mainFragmentTrigToGBuffer",
-                        "targets": [{"format": self._g_buffer_format}],
-                    },
+        self._pipeline_pass1 = self.device.create_render_pipeline(
+            bind_layout_pass1,
+            {
+                "label": "MeshRenderObjectDeferredPass1",
+                "vertex": {
+                    "module": shader_module,
+                    "entryPoint": "mainVertexTrigP1Indexed",
+                },
+                "fragment": {
+                    "module": shader_module,
+                    "entryPoint": "mainFragmentTrigToGBuffer",
                     "targets": [{"format": self._g_buffer_format}],
-                    "primitive": {
-                        "topology": "triangle-list",
-                        "cullMode": "none",
-                        "frontFace": "ccw",
-                    },
-                    "depthStencil": {
-                        **self.gpu.depth_stencil,
-                        # shift trigs behind to ensure that edges are rendered properly
-                        "depthBias": 1.0,
-                        "depthBiasSlopeScale": 1,
-                    },
-                }
-            )
+                },
+                "targets": [{"format": self._g_buffer_format}],
+                "primitive": {
+                    "topology": "triangle-list",
+                    "cullMode": "none",
+                    "frontFace": "ccw",
+                },
+                "depthStencil": {
+                    **self.gpu.depth_stencil,
+                    # shift trigs behind to ensure that edges are rendered properly
+                    "depthBias": 1.0,
+                    "depthBiasSlopeScale": 1,
+                },
+            },
         )
 
         bind_layout_pass2, self._bind_group_pass2 = self.device.create_bind_group(
@@ -245,37 +236,33 @@ class MeshRenderObjectDeferred(RenderObject):
             "mesh_object_deferred_pass2",
         )
 
-        deferred_pipeline_layout = self.device.create_pipeline_layout(bind_layout_pass2)
-
-        self._pipeline_pass2 = self.gpu.device.createRenderPipeline(
-            to_js(
-                {
-                    "label": "trigs_deferred",
-                    "layout": deferred_pipeline_layout,
-                    "vertex": {
-                        "module": shader_module,
-                        "entryPoint": "mainVertexDeferred",
-                    },
-                    "fragment": {
-                        "module": shader_module,
-                        "entryPoint": "mainFragmentDeferred",
-                        "targets": [{"format": self.gpu.format}],
-                    },
-                    "primitive": {
-                        "topology": "triangle-strip",
-                        "cullMode": "none",
-                        "frontFace": "ccw",
-                    },
-                    "depthStencil": {
-                        **self.gpu.depth_stencil,
-                        "depthWriteEnabled": False,
-                        "depthCompare": "always",
-                        # shift trigs behind to ensure that edges are rendered properly
-                        # "depthBias": 1.0,
-                        # "depthBiasSlopeScale": 1,
-                    },
-                }
-            )
+        self._pipeline_pass2 = self.device.create_render_pipeline(
+            bind_layout_pass2,
+            {
+                "label": "trigs_deferred",
+                "vertex": {
+                    "module": shader_module,
+                    "entryPoint": "mainVertexDeferred",
+                },
+                "fragment": {
+                    "module": shader_module,
+                    "entryPoint": "mainFragmentDeferred",
+                    "targets": [{"format": self.gpu.format}],
+                },
+                "primitive": {
+                    "topology": "triangle-strip",
+                    "cullMode": "none",
+                    "frontFace": "ccw",
+                },
+                "depthStencil": {
+                    **self.gpu.depth_stencil,
+                    "depthWriteEnabled": False,
+                    "depthCompare": "always",
+                    # shift trigs behind to ensure that edges are rendered properly
+                    # "depthBias": 1.0,
+                    # "depthBiasSlopeScale": 1,
+                },
+            },
         )
 
     def render(self, encoder):
