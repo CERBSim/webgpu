@@ -35,9 +35,7 @@ class MeshRenderObject:
             self.get_bindings(), "MeshRenderObject"
         )
         pipeline_layout = self.device.create_pipeline_layout(bind_layout)
-        shader_module = self.device.compile_files(
-            "webgpu/shader.wgsl", "webgpu/eval.wgsl"
-        )
+        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
         self._pipeline = self.gpu.device.createRenderPipeline(
             to_js(
                 {
@@ -102,9 +100,7 @@ class MeshRenderObjectIndexed:
             self.get_bindings(), "MeshRenderObject"
         )
         pipeline_layout = self.device.create_pipeline_layout(bind_layout)
-        shader_module = self.device.compile_files(
-            "webgpu/shader.wgsl", "webgpu/eval.wgsl"
-        )
+        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
         self._pipeline = self.gpu.device.createRenderPipeline(
             to_js(
                 {
@@ -200,9 +196,7 @@ class MeshRenderObjectDeferred:
             self.get_bindings_pass1(), "MeshRenderObjectDeferredPass1"
         )
         pipeline_layout_pass1 = self.device.create_pipeline_layout(bind_layout_pass1)
-        shader_module = self.device.compile_files(
-            "webgpu/shader.wgsl", "webgpu/eval.wgsl"
-        )
+        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
         self._pipeline_pass1 = self.gpu.device.createRenderPipeline(
             to_js(
                 {
@@ -472,7 +466,7 @@ def create_testing_square_mesh(gpu, n):
         "index": index_buffer,
     }
 
-    shader_module = device.compile_files("webgpu/compute.wgsl")
+    shader_module = device.compile_files("compute.wgsl")
 
     bindings = []
     for name in ["trigs", "trig_function_values", "vertices", "index"]:
@@ -535,9 +529,7 @@ class PointNumbersRenderObject:
             self.get_bindings(), "PointNumbersRenderObject"
         )
         pipeline_layout = self.device.create_pipeline_layout(bind_layout)
-        shader_module = self.device.compile_files(
-            "webgpu/shader.wgsl", "webgpu/eval.wgsl"
-        )
+        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
         self._pipeline = self.gpu.device.createRenderPipeline(
             to_js(
                 {

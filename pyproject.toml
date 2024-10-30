@@ -25,4 +25,4 @@ include = ["webgpu*"]
 
 [tool.setuptools.package-data]
 # Include .wgsl and .js files in the webgpu package
-webgpu = ["*.wgsl", "*.js"]
+webgpu = ["shader/*.wgsl", "*.js"]

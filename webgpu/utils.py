@@ -3,6 +3,7 @@ from pathlib import Path
 import js
 from pyodide.ffi import create_proxy
 from pyodide.ffi import to_js as _to_js
+from .shader import get_shader_code
 
 
 class ShaderStage:
@@ -132,7 +133,5 @@ class Device:
         return self.device.createBuffer(to_js({"size": size, "usage": usage}))
 
     def compile_files(self, *files):
-        code = ""
-        for file in files:
-            code += Path(file).read_text()
+        code = get_shader_code(files)
         return self.device.createShaderModule(to_js({"code": code}))
