@@ -1,5 +1,6 @@
 import js
 import numpy as np
+
 from .utils import to_js
 
 
@@ -79,13 +80,33 @@ class InputHandler:
         self._update_uniforms()
 
     def _update_uniforms(self):
-        near = 1
-        far = 100
+        near = 0.1
+        far = 10
+        fov = 45
+        aspect = 1.0
+
+        zoom = 1.0
+        top = near * (np.tan(np.radians(fov) / 2)) * zoom
+        height = 2 * top
+        width = aspect * height
+        left = -0.5 * width
+        right = left + width
+        bottom = top - height
+
+        x = 2 * near / (right - left)
+        y = 2 * near / (top - bottom)
+
+        a = (right + left) / (right - left)
+        b = (top + bottom) / (top - bottom)
+
+        c = -far / (far - near)
+        d = (-far * near) / (far - near)
+
         proj_mat = np.array(
             [
-                [near, 0, 0, 0],
-                [0, near, 0, 0],
-                [0, 0, -(near + far) / (far - near), -2 * near * far / (far - near)],
+                [x, 0, a, 0],
+                [0, y, b, 0],
+                [0, 0, c, d],
                 [0, 0, -1, 0],
             ]
         )
