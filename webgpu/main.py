@@ -7,11 +7,11 @@ import ngsolve as ngs
 from netgen.occ import unit_square
 from pyodide.ffi import create_proxy
 
-from .gpu import init_webgpu
+from .gpu import WebGPU, init_webgpu
 from .mesh import *
 
-gpu = None
-mesh_object = None
+gpu: WebGPU = None
+mesh_object: RenderObject = None
 
 cf = None
 render_function = None
@@ -68,7 +68,7 @@ async def main():
         if point_number_object is not None:
             point_number_object.render(command_encoder)
 
-        gpu.device.queue.submit([command_encoder.finish()])
+        gpu.native_device.queue.submit([command_encoder.finish()])
         if frame_counter < 20:
             js.requestAnimationFrame(render_function)
 

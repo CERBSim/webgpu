@@ -5,7 +5,7 @@ import js
 from .colormap import Colormap
 from .input_handler import InputHandler
 from .uniforms import Uniforms
-from .utils import to_js
+from .utils import to_js, Device
 
 
 async def init_webgpu(canvas):
@@ -63,7 +63,8 @@ class WebGPU:
     def __init__(self, device, canvas):
         self._is_first_render_pass = True
         self.render_function = None
-        self.device = device
+        self.native_device = device
+        self.device = Device(device)
         self.format = js.navigator.gpu.getPreferredCanvasFormat()
         self.canvas = canvas
 
@@ -130,7 +131,7 @@ class WebGPU:
 
     def create_command_encoder(self):
         self._is_first_render_pass = True
-        return self.device.createCommandEncoder()
+        return self.native_device.createCommandEncoder()
 
     def __del__(self):
         self.depth_texture.destroy()

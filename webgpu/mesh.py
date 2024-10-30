@@ -5,6 +5,7 @@ import ngsolve as ngs
 import ngsolve.webgui
 import numpy as np
 
+from .gpu import WebGPU
 from .uniforms import Binding
 from .utils import (
     BufferBinding,
@@ -21,11 +22,12 @@ class RenderObject:
     """Base class for render objects"""
 
     data: typing.Any
+    gpu: WebGPU
     _buffers: dict = {}
 
     def __init__(self, gpu, data):
         self.gpu = gpu
-        self.device = Device(gpu.device)
+        self.on_resize()
         self.update_data(data)
 
     def update_data(self, data):
@@ -38,6 +40,13 @@ class RenderObject:
 
     def render(self, encoder):
         pass
+
+    def on_resize(self):
+        pass
+
+    @property
+    def device(self):
+        return self.gpu.device
 
 
 class MeshRenderObject(RenderObject):
@@ -157,24 +166,21 @@ class MeshRenderObjectDeferred(RenderObject):
     """
 
     _g_buffer_format = "rgba32float"
+    _g_buffer = None
 
-    def __init__(self, gpu, data):
+    def on_resize(self):
+        # texture to store g-buffer (trig index and barycentric coordinates)
         import js
 
-        # texture to store g-buffer (trig index and barycentric coordinates)
-        self._g_buffer = gpu.device.createTexture(
-            to_js(
-                {
-                    "label": "gBufferLam",
-                    "size": [gpu.canvas.width, gpu.canvas.height],
-                    "usage": js.GPUTextureUsage.RENDER_ATTACHMENT
-                    | js.GPUTextureUsage.TEXTURE_BINDING,
-                    "format": self._g_buffer_format,
-                }
-            )
+        self._g_buffer = self.device.create_texture(
+            {
+                "label": "gBufferLam",
+                "size": [self.gpu.canvas.width, self.gpu.canvas.height],
+                "usage": js.GPUTextureUsage.RENDER_ATTACHMENT
+                | js.GPUTextureUsage.TEXTURE_BINDING,
+                "format": self._g_buffer_format,
+            }
         )
-
-        super().__init__(gpu, data)
 
     def get_bindings_pass1(self):
         return [
@@ -459,26 +465,6 @@ class MeshData:
             buf.destroy()
 
 
-def create_function_value_buffers(device, cf, region, order):
-    import js
-
-    """Evaluate a coefficient function on a mesh and create GPU buffer with the values,
-    returns a dictionary with the buffer as value and the name/element type as key"""
-    # TODO: implement other element types than triangles
-    values = evaluate_cf(cf, region, order)
-    data = js.Uint8Array.new(values.tobytes())
-    buffer = device.createBuffer(
-        to_js(
-            {
-                "size": data.length,
-                "usage": js.GPUBufferUsage.STORAGE | js.GPUBufferUsage.COPY_DST,
-            }
-        )
-    )
-    device.queue.writeBuffer(buffer, 0, data)
-    return {"trig_function_values": buffer}
-
-
 def evaluate_cf(cf, region, order):
     """Evaluate a coefficient function on a mesh and returns the values as a flat array, ready to copy to the GPU as storage buffer.
     The first two entries are the function dimension and the polynomial order of the stored values.
@@ -513,7 +499,7 @@ def evaluate_cf(cf, region, order):
 
 
 def create_testing_square_mesh(gpu, n):
-    device = Device(gpu.device)
+    device = gpu.device
     # launch compute shader
     n = math.ceil(n / 16) * 16
     n_trigs = 2 * n * n
@@ -558,24 +544,23 @@ def create_testing_square_mesh(gpu, n):
 
     layout, group = device.create_bind_group(bindings, "create_test_mesh")
 
-    pipeline = gpu.device.createComputePipeline(
-        to_js(
-            {
-                "label": "create_test_mesh",
-                "layout": device.create_pipeline_layout(layout, "create_test_mesh"),
-                "compute": {"module": shader_module, "entryPoint": "create_mesh"},
-            }
-        )
+    pipeline = device.create_compute_pipeline(
+        layout,
+        {
+            "label": "create_test_mesh",
+            "layout": device.create_pipeline_layout(layout, "create_test_mesh"),
+            "compute": {"module": shader_module, "entryPoint": "create_mesh"},
+        },
     )
 
-    command_encoder = gpu.device.createCommandEncoder()
+    command_encoder = gpu.native_device.createCommandEncoder()
     pass_encoder = command_encoder.beginComputePass()
     pass_encoder.setPipeline(pipeline)
     pass_encoder.setBindGroup(0, group)
 
     pass_encoder.dispatchWorkgroups(n // 16, 1, 1)
     pass_encoder.end()
-    gpu.device.queue.submit([command_encoder.finish()])
+    gpu.native_device.queue.submit([command_encoder.finish()])
 
     data = MeshData()
     data._buffers = buffers
@@ -595,7 +580,7 @@ class PointNumbersRenderObject:
         self._texture = None
 
         self.gpu = gpu
-        self.device = Device(gpu.device)
+        self.device = gpu.device
         self.n_digits = 6
         self.set_font_size(font_size)
         self.update_data(data)
@@ -616,46 +601,43 @@ class PointNumbersRenderObject:
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "PointNumbersRenderObject"
         )
-        pipeline_layout = self.device.create_pipeline_layout(bind_layout)
         shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
-        self._pipeline = self.gpu.device.createRenderPipeline(
-            to_js(
-                {
-                    "label": "PointNumbersRenderObject",
-                    "layout": pipeline_layout,
-                    "vertex": {
-                        "module": shader_module,
-                        "entryPoint": "mainVertexPointNumber",
-                    },
-                    "fragment": {
-                        "module": shader_module,
-                        "entryPoint": "mainFragmentText",
-                        "targets": [
-                            {
-                                "format": self.gpu.format,
-                                "blend": {
-                                    "color": {
-                                        "operation": "add",
-                                        "srcFactor": "one",
-                                        "dstFactor": "one-minus-src-alpha",
-                                    },
-                                    "alpha": {
-                                        "operation": "add",
-                                        "srcFactor": "one",
-                                        "dstFactor": "one-minus-src-alpha",
-                                    },
+        self._pipeline = self.device.create_render_pipeline(
+            bind_layout,
+            {
+                "label": "PointNumbersRenderObject",
+                "vertex": {
+                    "module": shader_module,
+                    "entryPoint": "mainVertexPointNumber",
+                },
+                "fragment": {
+                    "module": shader_module,
+                    "entryPoint": "mainFragmentText",
+                    "targets": [
+                        {
+                            "format": self.gpu.format,
+                            "blend": {
+                                "color": {
+                                    "operation": "add",
+                                    "srcFactor": "one",
+                                    "dstFactor": "one-minus-src-alpha",
                                 },
-                            }
-                        ],
-                    },
-                    "primitive": {
-                        "topology": "triangle-list",
-                        "cullMode": "none",
-                        "frontFace": "ccw",
-                    },
-                    "depthStencil": self.gpu.depth_stencil,
-                }
-            )
+                                "alpha": {
+                                    "operation": "add",
+                                    "srcFactor": "one",
+                                    "dstFactor": "one-minus-src-alpha",
+                                },
+                            },
+                        }
+                    ],
+                },
+                "primitive": {
+                    "topology": "triangle-list",
+                    "cullMode": "none",
+                    "frontFace": "ccw",
+                },
+                "depthStencil": self.gpu.depth_stencil,
+            },
         )
 
     def render(self, encoder):

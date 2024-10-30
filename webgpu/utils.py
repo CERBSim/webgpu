@@ -143,11 +143,17 @@ class Device:
             to_js({"label": label, "bindGroupLayouts": [binding_layout]})
         )
 
-    def create_render_pipeline(self, binding_layout, options):
+    def create_render_pipeline(self, binding_layout, options: dict):
         options["layout"] = self.create_pipeline_layout(
             binding_layout, label=options.get("label", "")
         )
         return self.device.createRenderPipeline(to_js(options))
+
+    def create_compute_pipeline(self, binding_layout, options: dict):
+        options["layout"] = self.create_pipeline_layout(
+            binding_layout, label=options.get("label", "")
+        )
+        return self.device.createComputePipeline(to_js(options))
 
     def create_buffer(self, size_or_data: int | bytes, usage=None):
         import js
@@ -173,6 +179,19 @@ class Device:
         for name, value in data.items():
             buffers[name] = self.create_buffer(value)
         return buffers
+
+    def create_texture(self, options: dict):
+        return self.device.createTexture(to_js(options))
+
+    def write_texture(self, texture, data: bytes, bytes_per_row: int, size: list):
+        import js
+
+        return self.device.queue.writeTexture(
+            to_js({"texture": texture}),
+            js.Uint8Array.new(data),
+            to_js({"bytesPerRow": bytes_per_row}),
+            size,
+        )
 
     def compile_files(self, *files):
         code = get_shader_code(files)
