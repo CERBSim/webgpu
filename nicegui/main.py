@@ -149,11 +149,9 @@ def draw_function(expr):
     order = 6
     region = mesh.Region(ngs.VOL)
     cf = eval(expr, globals() | ngs.__dict__, locals())
-    n_trigs, buffers = webgpu.mesh.create_mesh_buffers(gpu.device, region)
-    buffers = buffers | webgpu.mesh.create_function_value_buffers(
-        gpu.device, cf, region, order
-    )
-    mesh_object = webgpu.mesh.MeshRenderObject(gpu, buffers, n_trigs)
+
+    data = webgpu.mesh.MeshData(region, cf, order)
+    mesh_object = webgpu.mesh.MeshRenderObject(gpu, data)
     webgpu.main.mesh_object = mesh_object
     js.requestAnimationFrame(webgpu.main.render_function)
 

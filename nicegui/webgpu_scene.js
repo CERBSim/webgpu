@@ -65,20 +65,24 @@ console.log("load init_webgpu.js");
 const files = [
   "__init__.py",
   "colormap.py",
-  "compute.wgsl",
-  "eval.wgsl",
+  "font.py",
+  "fonts.json",
   "gpu.py",
   "input_handler.py",
   "main.py",
   "mesh.py",
-  "shader.wgsl",
   "uniforms.py",
   "utils.py",
+  "shader/__init__.py",
+  "shader/eval.wgsl",
+  "shader/shader.wgsl",
+  "shader/compute.wgsl",
 ];
 
 async function reload() {
   try {
     pyodide.FS.mkdir("webgpu");
+    pyodide.FS.mkdir("webgpu/shader");
   } catch {}
   for (var file of files) {
     const data = await (
