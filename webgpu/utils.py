@@ -1,9 +1,20 @@
+import base64
+import zlib
 from pathlib import Path
 
-import js
-from pyodide.ffi import create_proxy
-from pyodide.ffi import to_js as _to_js
 from .shader import get_shader_code
+
+
+def encode_bytes(data: bytes) -> str:
+    if data == b"":
+        return ""
+    return base64.b64encode(zlib.compress(data)).decode()
+
+
+def decode_bytes(data: str) -> bytes:
+    if data == "":
+        return b""
+    return zlib.decompress(base64.b64decode(data.encode()))
 
 
 class ShaderStage:
@@ -14,6 +25,9 @@ class ShaderStage:
 
 
 def to_js(value):
+    import js
+    from pyodide.ffi import to_js as _to_js
+
     return _to_js(value, dict_converter=js.Object.fromEntries)
 
 
@@ -129,8 +143,30 @@ class Device:
             to_js({"label": label, "bindGroupLayouts": [binding_layout]})
         )
 
-    def create_buffer(self, size, usage=js.GPUBufferUsage.STORAGE):
-        return self.device.createBuffer(to_js({"size": size, "usage": usage}))
+    def create_buffer(self, size_or_data: int | bytes, usage=None):
+        import js
+
+        usage = (
+            js.GPUBufferUsage.STORAGE | js.GPUBufferUsage.COPY_DST
+            if usage is None
+            else usage
+        )
+        if isinstance(size_or_data, int):
+            size = size_or_data
+            data = None
+        else:
+            size = len(size_or_data)
+            data = size_or_data
+        buffer = self.device.createBuffer(to_js({"size": size, "usage": usage}))
+        if data is not None:
+            self.device.queue.writeBuffer(buffer, 0, js.Uint8Array.new(data))
+        return buffer
+
+    def data_to_buffers(self, data: dict):
+        buffers = {}
+        for name, value in data.items():
+            buffers[name] = self.create_buffer(value)
+        return buffers
 
     def compile_files(self, *files):
         code = get_shader_code(files)

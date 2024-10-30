@@ -1,8 +1,6 @@
 import js
 import numpy as np
 
-from .utils import create_proxy
-
 
 class Transform:
     def __init__(self):
@@ -141,6 +139,8 @@ class InputHandler:
         self._callbacks = {}
 
     def on(self, event, func):
+        from pyodide.ffi import create_proxy
+
         func = create_proxy(func)
         if event not in self._callbacks:
             self._callbacks[event] = []

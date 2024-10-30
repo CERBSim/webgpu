@@ -46,6 +46,7 @@ struct VertexOutput2d {
   @location(0) p: vec3<f32>,
   @location(1) lam: vec2<f32>,
   @location(2) @interpolate(flat) id: u32,
+  @location(3) n: vec3<f32>,
 };
 
 struct VertexOutput3d {
@@ -53,6 +54,7 @@ struct VertexOutput3d {
   @location(0) p: vec3<f32>,
   @location(1) lam: vec3<f32>,
   @location(2) @interpolate(flat) id: u32,
+  @location(3) n: vec3<f32>,
 };
 
 fn calcPosition(p: vec3<f32>) -> vec4<f32> {
@@ -68,7 +70,7 @@ fn checkClipping(p: vec3<f32>) {
 }
 
 fn getColor(value: f32) -> vec4<f32> {
-    let v = (value - uniforms.colormap.x) / uniforms.colormap.y;
+    let v = (value - uniforms.colormap.x) / (uniforms.colormap.y - uniforms.colormap.x);
     return textureSample(colormap, colormap_sampler, v);
 }
 
@@ -86,41 +88,49 @@ fn mainVertexEdgeP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_inde
     return VertexOutput1d(position, p, lam, edgeId);
 }
 
-@vertex
-fn mainVertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
-    let trig = trigs_p1[trigId];
-    var p = vec3<f32>(trig.p[3 * vertexId], trig.p[3 * vertexId + 1], trig.p[3 * vertexId + 2]);
-
+fn calcTrig(p: array<vec3<f32>, 3>, vertexId: u32, trigId: u32) -> VertexOutput2d {
     var lam: vec2<f32> = vec2<f32>(0.);
     if vertexId < 2 {
         lam[vertexId] = 1.0;
     }
 
-    var position = calcPosition(p);
+    let position = calcPosition(p[vertexId]);
+    let normal = cross(p[1] - p[0], p[2] - p[0]);
 
-    return VertexOutput2d(position, p, lam, trigId);
+    return VertexOutput2d(position, p[vertexId], lam, trigId, normal);
 }
 
+@vertex
+fn mainVertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
+    let trig = trigs_p1[trigId];
+    var p = array<vec3<f32>, 3>(
+        vec3<f32>(trig.p[0], trig.p[1], trig.p[2]),
+        vec3<f32>(trig.p[3], trig.p[4], trig.p[5]),
+        vec3<f32>(trig.p[6], trig.p[7], trig.p[8])
+    );
+    return calcTrig(p, vertexId, trigId);
+}
 
 @vertex
 fn mainVertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
-    let vid = index[3 * trigId + vertexId];
-    var p = vec3<f32>(vertices[3 * vid], vertices[3 * vid + 1], vertices[3 * vid + 2]);
-
-    var lam: vec2<f32> = vec2<f32>(0.);
-    if (vertexId) < 2 {
-        lam[vertexId] = 1.0;
-    }
-
-    var position = calcPosition(p);
-
-    return VertexOutput2d(position, p, lam, trigId);
+    let vid = array<u32, 3>(
+        index[3 * trigId + 0],
+        index[3 * trigId + 1],
+        index[3 * trigId + 2]
+    );
+    var p = array<vec3<f32>, 3>(
+        vec3<f32>(vertices[3 * vid[0] ], vertices[3 * vid[0] + 1], vertices[3 * vid[0] + 2]),
+        vec3<f32>(vertices[3 * vid[1] ], vertices[3 * vid[1] + 1], vertices[3 * vid[1] + 2]),
+        vec3<f32>(vertices[3 * vid[2] ], vertices[3 * vid[2] + 1], vertices[3 * vid[2] + 2])
+    );
+    return calcTrig(p, vertexId, trigId);
 }
 
+
 @fragment
-fn mainFragmentTrig(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
-    checkClipping(p);
-    let value = evalTrig(id, 0u, lam);
+fn mainFragmentTrig(input: VertexOutput2d) -> @location(0) vec4<f32> {
+    checkClipping(input.p);
+    let value = evalTrig(input.id, 0u, input.lam);
     return getColor(value);
 }
 
@@ -132,10 +142,15 @@ fn mainFragmentTrigMesh(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, 
 }
 
 @fragment
-fn mainFragmentEdge(@location(0) p: vec3<f32>) -> @location(0) vec4<f32> {
+fn mainFragmentEdge(@location(0) p : vec3< f32>) -> @location(0) vec4<f32> {
     checkClipping(p);
     return vec4<f32>(0, 0, 0, 1.0);
 }
+
+struct DeferredFragmentOutput {
+  @builtin(position) fragPosition: vec4<f32>,
+
+};
 
 @fragment
 fn mainFragmentDeferred(@builtin(position) coord: vec4<f32>) -> @location(0) vec4<f32> {

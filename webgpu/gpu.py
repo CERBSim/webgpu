@@ -100,30 +100,28 @@ class WebGPU:
         )
         self.input_handler = InputHandler(canvas, self.uniforms)
 
-    def begin_render_pass(self, command_encoder):
+    def begin_render_pass(self, command_encoder, args={}):
         load_op = "clear" if self._is_first_render_pass else "load"
-        render_pass_encoder = command_encoder.beginRenderPass(
-            to_js(
+        options = {
+            "colorAttachments": [
                 {
-                    "colorAttachments": [
-                        {
-                            "view": self.context.getCurrentTexture().createView(),
-                            "clearValue": {"r": 1, "g": 1, "b": 1, "a": 1},
-                            "loadOp": load_op,
-                            "storeOp": "store",
-                        }
-                    ],
-                    "depthStencilAttachment": {
-                        "view": self.depth_texture.createView(
-                            to_js({"format": self.depth_format, "aspect": "all"})
-                        ),
-                        "depthLoadOp": load_op,
-                        "depthStoreOp": "store",
-                        "depthClearValue": 1.0,
-                    },
-                },
-            )
-        )
+                    "view": self.context.getCurrentTexture().createView(),
+                    "clearValue": {"r": 1, "g": 1, "b": 1, "a": 1},
+                    "loadOp": load_op,
+                    "storeOp": "store",
+                }
+            ],
+            "depthStencilAttachment": {
+                "view": self.depth_texture.createView(
+                    to_js({"format": self.depth_format, "aspect": "all"})
+                ),
+                "depthLoadOp": load_op,
+                "depthStoreOp": "store",
+                "depthClearValue": 1.0,
+            },
+        } | args
+
+        render_pass_encoder = command_encoder.beginRenderPass(to_js(options))
         render_pass_encoder.setViewport(
             0, 0, self.canvas.width, self.canvas.height, 0.0, 1.0
         )

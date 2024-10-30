@@ -15,7 +15,7 @@ class Binding:
     TRIGS = 5
     TRIG_FUNCTION_VALUES = 6
     VERTICES = 8
-    INDEX = 9
+    TRIGS_INDEX = 9
     GBUFFERLAM = 10
     FONT_TEXTURE = 11
 

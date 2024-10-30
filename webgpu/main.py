@@ -5,7 +5,7 @@ import urllib.parse
 import js
 import ngsolve as ngs
 from netgen.occ import unit_square
-from pyodide.ffi import create_once_callable, create_proxy
+from pyodide.ffi import create_proxy
 
 from .gpu import init_webgpu
 from .mesh import *
@@ -24,64 +24,39 @@ async def main():
 
     point_number_object = None
 
-    if 0:
+    if 1:
         # create new ngsolve mesh and evaluate arbitrary function on it
-        mesh = ngs.Mesh(unit_square.GenerateMesh(maxh=0.5))
-        order = 6
-        region = mesh.Region(ngs.VOL)
+        mesh = ngs.Mesh(unit_square.GenerateMesh(maxh=0.2))
+        order = 1
         cf = cf or ngs.sin(10 * ngs.x) * ngs.sin(10 * ngs.y)
-        n_trigs, buffers = create_mesh_buffers(gpu.device, region)
-        buffers = buffers | create_function_value_buffers(gpu.device, cf, region, order)
-        mesh_object = MeshRenderObject(gpu, buffers, n_trigs)
-
+        data = MeshData(mesh, cf, order)
+        gpu.uniforms.colormap.min = -1
+        gpu.uniforms.colormap.max = 1
     else:
-        # create testing mesh, this one also supports indexed or deferred rendering
+        # use compute shader to create a unit_square mesh
         # but has always P1 and 'x' hard-coded as function
         query = urllib.parse.parse_qs(js.location.search[1:])
         N = 10
-        # N = int(5000/2**.5)
-        # N = int(2000 / 2**0.5)
-        # N = int(50/2**.5)
-        # N = 1
         N = int(query.get("n", [N])[0])
-        # print("creating ", N * N, "triangles")
-        n_trigs, buffers = create_testing_square_mesh(gpu, N)
+        data = create_testing_square_mesh(gpu, N)
 
-        mesh_object = MeshRenderObject(gpu, buffers, n_trigs)
-        # mesh_object = MeshRenderObjectIndexed(gpu, buffers, n_trigs)
-        # mesh_object = MeshRenderObjectDeferred(gpu, buffers, n_trigs)
-
-        point_number_object = PointNumbersRenderObject(gpu, buffers, font_size=16)
-    # move mesh to center and scale it
-    for i in [0, 5, 10]:
-        gpu.uniforms.mat[i] = 1.8
-
-    gpu.uniforms.mat[15] = 1.0
-
-    # translate to center
-    gpu.uniforms.mat[12] = -0.5 * 1.8
-    gpu.uniforms.mat[13] = -0.5 * 1.8
+    mesh_object = MeshRenderObject(gpu, data)
+    # mesh_object = MeshRenderObjectIndexed(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
+    # mesh_object = MeshRenderObjectDeferred(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
+    point_number_object = PointNumbersRenderObject(gpu, data, font_size=16)
 
     t_last = 0
     fps = 0
     frame_counter = 0
 
     def render(time):
+        # this is the render function, it's called for every frame
+
         nonlocal t_last, fps, frame_counter
         dt = time - t_last
         t_last = time
         frame_counter += 1
-        # if dt < 20:
-        #     print('returning')
-        #     return
         print(f"frame time {dt:.2f} ms")
-        # if dt > 1e-3:
-        #     frame_counter += 1
-        #     fps = 0.9 * fps + 0.1 * 1000 / dt
-        #     if frame_counter % 30 == 0:
-        #         print(f"fps {fps:.2f}")
-
-        # this is the render function, it's called for every frame
 
         # copy camera position etc. to GPU
         gpu.uniforms.update_buffer()
@@ -96,11 +71,6 @@ async def main():
         gpu.device.queue.submit([command_encoder.finish()])
         if frame_counter < 20:
             js.requestAnimationFrame(render_function)
-            # gpu.device.queue.onSubmittedWorkDone().then(
-            #     create_once_callable(
-            #         lambda _: js.requestAnimationFrame(render_function)
-            #     )
-            # )
 
     render_function = create_proxy(render)
     gpu.input_handler._update_uniforms()
