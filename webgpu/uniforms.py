@@ -17,24 +17,63 @@ class Binding:
     GBUFFERLAM = 10
     FONT_TEXTURE = 11
 
-
-class ClippingPlaneUniform(ct.Structure):
-    _fields_ = [("normal", ct.c_float * 3), ("dist", ct.c_float)]
-
-
-class ComplexUniform(ct.Structure):
-    _fields_ = [("re", ct.c_float), ("im", ct.c_float)]
+    MESH_UNIFORMS = 20
+    TET = 21
+    PYRAMID = 22
+    PRISM = 23
+    HEX = 24
 
 
-class ColormapUniform(ct.Structure):
-    _fields_ = [("min", ct.c_float), ("max", ct.c_float)]
+class UniformBase(ct.Structure):
+
+    def __init__(self, device):
+        import js
+
+        self.device = device
+        self._buffer = device.create_buffer(
+            len(bytes(self)),
+            js.GPUBufferUsage.UNIFORM | js.GPUBufferUsage.COPY_DST,
+        )
+
+        size = len(bytes(self))
+        if size % 16:
+            raise ValueError(
+                f"Size of type {type(self)} must be multiple of 16, current size: {size}"
+            )
+
+    def update_buffer(self):
+        self.device.write_buffer(self._buffer, bytes(self))
+
+    def get_bindings(self):
+        return [UniformBinding(self._binding, self._buffer)]
+
+    def __del__(self):
+        self._buffer.destroy()
 
 
-class Uniforms(ct.Structure):
+class MeshUniforms(UniformBase):
+    _binding = Binding.MESH_UNIFORMS
+    _fields_ = [("shrink", ct.c_float), ("padding", ct.c_float * 3)]
+
+
+class Uniforms(UniformBase):
     """Uniforms class, derived from ctypes.Structure to ensure correct memory layout"""
 
+    _binding = Binding.UNIFORMS
+
+    class ClippingPlaneUniform(ct.Structure):
+        _fields_ = [("normal", ct.c_float * 3), ("dist", ct.c_float)]
+
+    class ComplexUniform(ct.Structure):
+        _fields_ = [("re", ct.c_float), ("im", ct.c_float)]
+
+    class ColormapUniform(ct.Structure):
+        _fields_ = [("min", ct.c_float), ("max", ct.c_float)]
+
     _fields_ = [
-        ("mat", ct.c_float * 16),
+        ("model_view", ct.c_float * 16),
+        ("model_view_projection", ct.c_float * 16),
+        ("normal_mat", ct.c_float * 16),
         ("clipping_plane", ClippingPlaneUniform),
         ("colormap", ColormapUniform),
         ("scaling", ComplexUniform),
@@ -49,7 +88,7 @@ class Uniforms(ct.Structure):
     ]
 
     def __init__(self, device):
-        import js
+        super().__init__(device)
 
         self.device = device
         self.do_clipping = 1
@@ -63,34 +102,3 @@ class Uniforms(ct.Structure):
         self.scaling.re = 0.0
         self.aspect = 0.0
         self.eval_mode = 0
-
-        for i in range(16):
-            self.mat[i] = 0.0
-
-        uniforms_size = len(bytes(self))
-        if uniforms_size % 16:
-            raise ValueError(
-                f"Uniforms size must be multiple of 16, current size: {uniforms_size}"
-            )
-
-        self.buffer = device.createBuffer(
-            to_js(
-                {
-                    "size": len(bytes(self)),
-                    "usage": js.GPUBufferUsage.UNIFORM | js.GPUBufferUsage.COPY_DST,
-                }
-            )
-        )
-
-    def get_bindings(self):
-        return [UniformBinding(Binding.UNIFORMS, self.buffer)]
-
-    def update_buffer(self):
-        import js
-
-        """Copy the current data to the GPU buffer"""
-        data = js.Uint8Array.new(bytes(self))
-        self.device.queue.writeBuffer(self.buffer, 0, data)
-
-    def __del__(self):
-        self.buffer.destroy()

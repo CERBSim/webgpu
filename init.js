@@ -15,6 +15,7 @@ const files = [
   "shader/eval.wgsl",
   "shader/shader.wgsl",
   "shader/compute.wgsl",
+  "shader/mesh.wgsl",
 ];
 
 async function reload() {

@@ -4,7 +4,9 @@ struct TrigP1 { p: array<f32, 9>, index: i32 }; // 3 vertices with 3 coordinates
 struct TrigP2 { p: array<f32, 18>, index: i32 };
 
 struct Uniforms {
-  mat: mat4x4<f32>,
+  model_view: mat4x4<f32>,
+  model_view_projection: mat4x4<f32>,
+  normal_mat: mat4x4<f32>,
   clipping_plane: vec4<f32>,
   colormap: vec2<f32>,
   scaling: vec2<f32>,
@@ -29,7 +31,7 @@ const VALUES_OFFSET: u32 = 2; // storing number of components and order of basis
 @group(0) @binding(6) var<storage> trig_function_values : array<f32>;
 @group(0) @binding(7) var<storage> seg_function_values : array<f32>;
 @group(0) @binding(8) var<storage> vertices : array<f32>;
-@group(0) @binding(9) var<storage> index : array<u32>;
+@group(0) @binding(9) var<storage> trigs : array<u32>;
 
 @group(0) @binding(10) var gBufferLam : texture_2d<f32>;
 @group(0) @binding(11) var font : texture_2d<f32>;
@@ -58,7 +60,7 @@ struct VertexOutput3d {
 };
 
 fn calcPosition(p: vec3<f32>) -> vec4<f32> {
-    return uniforms.mat * vec4<f32>(p, 1.0);
+    return uniforms.model_view_projection * vec4<f32>(p, 1.0);
 }
 
 fn checkClipping(p: vec3<f32>) {
@@ -114,9 +116,9 @@ fn mainVertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_inde
 @vertex
 fn mainVertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
     let vid = array<u32, 3>(
-        index[3 * trigId + 0],
-        index[3 * trigId + 1],
-        index[3 * trigId + 2]
+        trigs[3 * trigId + 0],
+        trigs[3 * trigId + 1],
+        trigs[3 * trigId + 2]
     );
     var p = array<vec3<f32>, 3>(
         vec3<f32>(vertices[3 * vid[0] ], vertices[3 * vid[0] + 1], vertices[3 * vid[0] + 2]),

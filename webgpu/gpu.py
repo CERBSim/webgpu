@@ -4,7 +4,7 @@ import js
 
 from .colormap import Colormap
 from .input_handler import InputHandler
-from .uniforms import Uniforms
+from .uniforms import Uniforms, MeshUniforms
 from .utils import to_js, Device
 
 
@@ -70,7 +70,9 @@ class WebGPU:
 
         print("canvas", canvas.width, canvas.height, canvas)
 
-        self.uniforms = Uniforms(device)
+        self.uniforms = Uniforms(self.device)
+        self.mesh_uniforms = MeshUniforms(self.device)
+        self.mesh_uniforms.shrink = 0.5
 
         self.context = canvas.getContext("webgpu")
         self.context.configure(

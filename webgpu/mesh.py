@@ -1,5 +1,6 @@
 import math
 import typing
+from enum import Enum
 
 import ngsolve as ngs
 import ngsolve.webgui
@@ -9,13 +10,56 @@ from .gpu import WebGPU
 from .uniforms import Binding
 from .utils import (
     BufferBinding,
-    Device,
     ShaderStage,
     TextureBinding,
     decode_bytes,
     encode_bytes,
     to_js,
 )
+
+
+class _eltype:
+    dim: int
+    primitive_topology: str
+    num_vertices_per_primitive: int
+
+    def __init__(self, dim, primitive_topology, num_vertices_per_primitive):
+        self.dim = dim
+        self.primitive_topology = primitive_topology
+        self.num_vertices_per_primitive = num_vertices_per_primitive
+
+
+class ElType(Enum):
+    POINT = _eltype(0, "point-list", 1)
+    SEG = _eltype(1, "line-list", 2)
+    TRIG = _eltype(2, "triangle-list", 3)
+    QUAD = _eltype(2, "triangle-list", 2 * 3)
+    TET = _eltype(3, "triangle-list", 4 * 3)
+    HEX = _eltype(3, "triangle-list", 6 * 2 * 3)
+    PRISM = _eltype(3, "triangle-list", 2 * 3 + 3 * 2 * 3)
+    PYRAMID = _eltype(3, "triangle-list", 4 + 2 * 3)
+
+    @staticmethod
+    def from_dim_np(dim: int, np: int):
+        if dim == 2:
+            if np == 3:
+                return ElType.TRIG
+            if np == 4:
+                return ElType.QUAD
+        if dim == 3:
+            if np == 4:
+                return ElType.TET
+            if np == 8:
+                return ElType.HEX
+            if np == 6:
+                return ElType.PRISM
+            if np == 5:
+                return ElType.PYRAMID
+        raise ValueError(f"Unsupported element type dim={dim} np={np}")
+
+
+ElTypes2D = [ElType.TRIG, ElType.QUAD]
+ElTypes3D = [ElType.TET, ElType.HEX, ElType.PRISM, ElType.PYRAMID]
 
 
 class RenderObject:
@@ -325,6 +369,78 @@ class MeshRenderObjectDeferred(RenderObject):
         pass2.end()
 
 
+class Mesh3dElementsRenderObject(RenderObject):
+    def get_bindings(self):
+        bindings = [
+            *self.gpu.uniforms.get_bindings(),
+            *self.gpu.colormap.get_bindings(),
+            *self.gpu.mesh_uniforms.get_bindings(),
+            BufferBinding(Binding.VERTICES, self._buffers["vertices"]),
+        ]
+
+        for eltype in ElType:
+            if self.data.num_els[eltype.name]:
+                bindings.append(
+                    BufferBinding(
+                        getattr(Binding, eltype.name), self._buffers[eltype.name]
+                    )
+                )
+
+        return bindings
+
+    def _create_pipelines(self):
+        label = "Mesh3dElementsRenderObject"
+        bind_layout, self._bind_group = self.device.create_bind_group(
+            self.get_bindings(), label
+        )
+        shader_module = self.device.compile_files(
+            "shader.wgsl", "mesh.wgsl", "eval.wgsl"
+        )
+
+        self._pipelines = {}
+        for eltype in ElType:
+
+            if self.data.num_els[eltype.name] == 0:
+                continue
+            el_name = eltype.name.capitalize()
+
+            self._pipelines[eltype.name] = self.device.create_render_pipeline(
+                bind_layout,
+                {
+                    "label": f"{label}:{el_name}",
+                    "vertex": {
+                        "module": shader_module,
+                        "entryPoint": f"vertexMesh{el_name}",
+                    },
+                    "fragment": {
+                        "module": shader_module,
+                        "entryPoint": "fragmentMesh",
+                        "targets": [{"format": self.gpu.format}],
+                    },
+                    "primitive": {
+                        "topology": eltype.value.primitive_topology,
+                        "cullMode": "none",
+                        "frontFace": "ccw",
+                    },
+                    "depthStencil": {
+                        **self.gpu.depth_stencil,
+                        # shift trigs behind to ensure that edges are rendered properly
+                        "depthBias": 1.0,
+                        "depthBiasSlopeScale": 1,
+                    },
+                },
+            )
+
+    def render(self, encoder):
+        render_pass = self.gpu.begin_render_pass(encoder)
+        render_pass.setBindGroup(0, self._bind_group)
+        for name, pipeline in self._pipelines.items():
+            eltype = ElType[name].value
+            render_pass.setPipeline(pipeline)
+            render_pass.draw(eltype.num_vertices_per_primitive, self.data.num_els[name])
+        render_pass.end()
+
+
 def _get_bernstein_matrix_trig(n, intrule):
     """Create inverse vandermonde matrix for the Bernstein basis functions on a triangle of degree n and given integration points"""
     ndtrig = int((n + 1) * (n + 2) / 2)
@@ -352,11 +468,15 @@ class MeshData:
     trigs_index: bytes
     edges: bytes
     trig_function_values: bytes
+    tests: bytes
 
     num_trigs: int
     num_verts: int
     num_edges: int
+    num_tets: int
     func_dim: int
+    num_elements: dict[str, int]
+    elements: dict[str, bytes]
 
     _buffers: dict = {}
 
@@ -424,7 +544,7 @@ class MeshData:
 
         trigs_index = np.zeros((self.num_trigs, 3), dtype=np.uint32)
         for i, el in enumerate(mesh.ngmesh.Elements2D()):
-            trigs_index[i, :] = [p.nr - 1 for p in el.vertices]
+            trigs_index[i, :] = [p.nr - 1 for p in el.vertices[:3]]
         self.trigs_index = trigs_index.tobytes()
 
         edge_points = points.reshape(-1, 3, 3)
@@ -449,6 +569,22 @@ class MeshData:
             self.trig_function_values = evaluate_cf(cf, region, order).tobytes()
             self.func_dim = cf.dim
 
+        self.num_els = {eltype.name: 0 for eltype in ElType}
+        self.elements = {eltype.name: [] for eltype in ElType}
+
+        for i, el in enumerate(mesh.ngmesh.Elements3D()):
+            eltype = ElType.from_dim_np(3, len(el.vertices))
+            data = [p.nr - 1 for p in el.vertices]
+            data.append(el.index)
+            data.append(i)
+            self.elements[eltype.name].append(data)
+            self.num_els[eltype.name] += 1
+
+        for eltype in self.elements:
+            self.elements[eltype] = np.array(
+                self.elements[eltype], dtype=np.uint32
+            ).tobytes()
+
     def get_buffers(self, device):
         if not self._buffers:
             data = {}
@@ -456,6 +592,9 @@ class MeshData:
                 b = getattr(self, name)
                 if b:
                     data[name] = b
+
+            for eltype in self.elements:
+                data[eltype] = self.elements[eltype]
 
             self._buffers = device.data_to_buffers(data)
         return self._buffers

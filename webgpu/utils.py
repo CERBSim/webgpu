@@ -174,6 +174,11 @@ class Device:
             self.device.queue.writeBuffer(buffer, 0, js.Uint8Array.new(data))
         return buffer
 
+    def write_buffer(self, buffer, data: bytes, offset=0):
+        import js
+
+        self.device.queue.writeBuffer(buffer, offset, js.Uint8Array.new(data))
+
     def data_to_buffers(self, data: dict):
         buffers = {}
         for name, value in data.items():

@@ -53,6 +53,10 @@ class Transform:
         return self._mat @ self._rot_mat @ self._scale_mat @ self._center_mat
 
     @property
+    def normal_mat(self):
+        return self._mat @ self._rot_mat @ self._scale_mat @ self._center_mat
+
+    @property
     def _center_mat(self):
         cx, cy, cz = self._center
         return np.array([[1, 0, 0, -cx], [0, 1, 0, -cy], [0, 0, 1, -cz], [0, 0, 0, 1]])
@@ -112,12 +116,13 @@ class InputHandler:
         )
 
         view_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, -3], [0, 0, 0, 1]])
+        model_view = view_mat @ self.transform.mat
+        model_view_proj = proj_mat @ model_view
+        normal_mat = np.linalg.inv(model_view)
 
-        mat = proj_mat @ view_mat @ self.transform.mat
-        mat = mat.transpose()
-        mat = mat.flatten()
-        for i in range(16):
-            self.uniforms.mat[i] = mat[i]
+        self.uniforms.model_view[:] = model_view.transpose().flatten()
+        self.uniforms.model_view_projection[:] = model_view_proj.transpose().flatten()
+        self.uniforms.normal_mat[:] = normal_mat.flatten()
 
     def _render(self):
         self._update_uniforms()
