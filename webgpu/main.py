@@ -49,8 +49,8 @@ async def main():
         order = 1
         cf = cf or ngs.sin(10 * ngs.x) * ngs.sin(10 * ngs.y)
         data = MeshData(mesh, cf, order)
-        gpu.uniforms.colormap.min = -1
-        gpu.uniforms.colormap.max = 1
+        gpu.u_function.min = -1
+        gpu.u_function.max = 1
     else:
         # use compute shader to create a unit_square mesh
         # but has always P1 and 'x' hard-coded as function
@@ -79,8 +79,7 @@ async def main():
         print(f"frame time {dt:.2f} ms")
 
         # copy camera position etc. to GPU
-        gpu.uniforms.update_buffer()
-        gpu.mesh_uniforms.update_buffer()
+        gpu.update_uniforms()
 
         command_encoder = gpu.create_command_encoder()
 

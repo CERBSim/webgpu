@@ -1,3 +1,5 @@
+const VALUES_OFFSET: u32 = 2; // storing number of components and order of basis functions in first two entries
+
 fn evalSegP1Basis(x: f32) -> array<f32, 2> {
     let y = 1.0 - x;
     return array(x, y);

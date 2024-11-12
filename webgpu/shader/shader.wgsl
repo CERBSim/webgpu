@@ -1,40 +1,74 @@
-struct EdgeP1 { p: array<f32, 6> };
+// Uniforms are global variables that are constant for all invocations of a shader.
+// They are used to store configuration data (no mesh etc.)
 
-struct TrigP1 { p: array<f32, 9>, index: i32 }; // 3 vertices with 3 coordinates each, don't use vec3 due to 16 byte alignment
-struct TrigP2 { p: array<f32, 18>, index: i32 };
-
-struct Uniforms {
+struct ViewUniforms {
   model_view: mat4x4<f32>,
   model_view_projection: mat4x4<f32>,
   normal_mat: mat4x4<f32>,
-  clipping_plane: vec4<f32>,
-  colormap: vec2<f32>,
-  scaling: vec2<f32>,
   aspect: f32,
-  eval_mode: u32,
-  do_clipping: u32,
-  font_width: u32,
-  font_height: u32,
+
   padding0: u32,
   padding1: u32,
   padding2: u32,
 };
 
-const VALUES_OFFSET: u32 = 2; // storing number of components and order of basis functions in first two entries
+struct ClippingUniforms {
+  plane: vec4<f32>,
+  sphere: vec4<f32>,
+  mode: u32, // 0: disabled, 1: plane, 2: sphere, 3: both
 
-@group(0) @binding(0) var<uniform> uniforms : Uniforms;
-@group(0) @binding(1) var colormap : texture_1d<f32>;
-@group(0) @binding(2) var colormap_sampler : sampler;
+  padding0: u32,
+  padding1: u32,
+  padding2: u32,
+};
 
-@group(0) @binding(4) var<storage> edges_p1 : array<EdgeP1>;
-@group(0) @binding(5) var<storage> trigs_p1 : array<TrigP1>;
-@group(0) @binding(6) var<storage> trig_function_values : array<f32>;
-@group(0) @binding(7) var<storage> seg_function_values : array<f32>;
-@group(0) @binding(8) var<storage> vertices : array<f32>;
-@group(0) @binding(9) var<storage> trigs : array<u32>;
+struct FunctionUniforms {
+  colormap: vec2<f32>,
 
-@group(0) @binding(10) var gBufferLam : texture_2d<f32>;
-@group(0) @binding(11) var font : texture_2d<f32>;
+  padding0: f32,
+  padding1: f32,
+};
+
+struct FontUniforms {
+  width: u32,
+  height: u32,
+
+  padding0: u32,
+  padding1: u32,
+};
+
+struct MeshUniforms {
+  shrink: f32,
+
+  padding0: f32,
+  padding1: f32,
+  padding2: f32,
+};
+
+// Each uniform must have a unique binding group and number
+// They are used to pass data from the CPU to the GPU (variable names are only relevant within the shader code)
+@group(0) @binding(0) var<uniform> u_view : ViewUniforms;
+@group(0) @binding(1) var<uniform> u_clipping : ClippingUniforms;
+@group(0) @binding(2) var<uniform> u_font : FontUniforms;
+@group(0) @binding(3) var u_font_texture : texture_2d<f32>;
+@group(0) @binding(5) var<uniform> u_function : FunctionUniforms;
+@group(0) @binding(6) var u_colormap_texture : texture_1d<f32>;
+@group(0) @binding(7) var u_colormap_sampler : sampler;
+
+struct EdgeP1 { p: array<f32, 6> };
+
+struct TrigP1 { p: array<f32, 9>, index: i32 }; // 3 vertices with 3 coordinates each, don't use vec3 due to 16 byte alignment
+struct TrigP2 { p: array<f32, 18>, index: i32 };
+
+
+@group(0) @binding(8) var<storage> edges_p1 : array<EdgeP1>;
+@group(0) @binding(9) var<storage> trigs_p1 : array<TrigP1>;
+@group(0) @binding(10) var<storage> trig_function_values : array<f32>;
+@group(0) @binding(11) var<storage> seg_function_values : array<f32>;
+@group(0) @binding(12) var<storage> vertices : array<f32>;
+@group(0) @binding(13) var<storage> trigs : array<u32>;
+
+@group(0) @binding(14) var gBufferLam : texture_2d<f32>;
 
 struct VertexOutput1d {
   @builtin(position) fragPosition: vec4<f32>,
@@ -60,20 +94,34 @@ struct VertexOutput3d {
 };
 
 fn calcPosition(p: vec3<f32>) -> vec4<f32> {
-    return uniforms.model_view_projection * vec4<f32>(p, 1.0);
+    return u_view.model_view_projection * vec4<f32>(p, 1.0);
+}
+
+fn calcClipping(p: vec3<f32>) -> bool {
+    var result : bool = true;
+    if (u_clipping.mode & 0x01u) == 0x01u {
+        if dot(u_clipping.plane, vec4<f32>(p, 1.0)) < 0 {
+          result = false;
+        }
+    }
+    if (u_clipping.mode & 0x02) == 0x02 {
+        let d = distance(p, u_clipping.sphere.xyz);
+        if d > u_clipping.sphere.w {
+          result = false;
+        }
+    }
+    return result;
 }
 
 fn checkClipping(p: vec3<f32>) {
-    if uniforms.do_clipping != 0 {
-        if dot(uniforms.clipping_plane, vec4<f32>(p, 1.0)) < 0 {
-        discard;
-        }
-    }
+  if calcClipping(p) == false {
+    discard;
+  }
 }
 
 fn getColor(value: f32) -> vec4<f32> {
-    let v = (value - uniforms.colormap.x) / (uniforms.colormap.y - uniforms.colormap.x);
-    return textureSample(colormap, colormap_sampler, v);
+    let v = (value - u_function.colormap.x) / (u_function.colormap.y - u_function.colormap.x);
+    return textureSample(u_colormap_texture, u_colormap_sampler, v);
 }
 
 @vertex
@@ -144,7 +192,7 @@ fn mainFragmentTrigMesh(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, 
 }
 
 @fragment
-fn mainFragmentEdge(@location(0) p : vec3< f32>) -> @location(0) vec4<f32> {
+fn mainFragmentEdge(@location(0) p: vec3<f32>) -> @location(0) vec4<f32> {
     checkClipping(p);
     return vec4<f32>(0, 0, 0, 1.0);
 }
@@ -207,10 +255,8 @@ struct FragmentTextInput {
 @vertex
 fn mainVertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) pointId: u32) -> FragmentTextInput {
     var p = vec3<f32>(vertices[3 * pointId], vertices[3 * pointId + 1], vertices[3 * pointId + 2]);
-    if uniforms.do_clipping != 0 {
-        if dot(uniforms.clipping_plane, vec4<f32>(p, 1.0)) < 0 {
-            return FragmentTextInput(vec4<f32>(-1.0, -1.0, 0.0, 1.0), vec2<f32>(0.));
-        }
+    if calcClipping(p) == false {
+        return FragmentTextInput(vec4<f32>(-1.0, -1.0, 0.0, 1.0), vec2<f32>(0.));
     }
 
     var position = calcPosition(p);
@@ -234,12 +280,12 @@ fn mainVertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance
     }
     digit = digit % 10;
 
-    let w: f32 = 2 * f32(uniforms.font_width) / 1000.;
-    let h: f32 = 2 * f32(uniforms.font_height) / 800.;
+    let w: f32 = 2 * f32(u_font.width) / 1000.;
+    let h: f32 = 2 * f32(u_font.height) / 800.;
 
     var tex_coord = vec2<f32>(
-        f32((digit + 16) * uniforms.font_width),
-        f32(uniforms.font_height)
+        f32((digit + 16) * u_font.width),
+        f32(u_font.height)
     );
 
     if vi == 2 || vi == 4 || vi == 5 {
@@ -251,7 +297,7 @@ fn mainVertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance
 
     if vi == 1 || vi == 2 || vi == 4 {
         position.x += w * position.w;
-        tex_coord.x += f32(uniforms.font_width);
+        tex_coord.x += f32(u_font.width);
     }
 
     return FragmentTextInput(position, tex_coord);
@@ -260,7 +306,7 @@ fn mainVertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance
 @fragment
 fn mainFragmentText(@location(0) tex_coord: vec2<f32>) -> @location(0) vec4<f32> {
     let alpha: f32 = textureLoad(
-        font,
+        u_font_texture,
         vec2i(floor(tex_coord)),
         0
     ).x;

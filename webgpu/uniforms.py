@@ -5,28 +5,37 @@ from .utils import UniformBinding, to_js
 
 # These values must match the numbers defined in the shader
 class Binding:
-    UNIFORMS = 0
-    COLORMAP_TEXTURE = 1
-    COLORMAP_SAMPLER = 2
+    VIEW = 0
+    CLIPPING = 1
+    FONT = 2
+    FONT_TEXTURE = 3
+    FUNCTION = 5
+    COLORMAP_TEXTURE = 6
+    COLORMAP_SAMPLER = 7
 
-    EDGES = 4
-    TRIGS = 5
-    TRIG_FUNCTION_VALUES = 6
-    VERTICES = 8
-    TRIGS_INDEX = 9
-    GBUFFERLAM = 10
-    FONT_TEXTURE = 11
+    EDGES = 8
+    TRIGS = 9
+    TRIG_FUNCTION_VALUES = 10
+    SEG_FUNCTION_VALUES = 11
+    VERTICES = 12
+    TRIGS_INDEX = 13
+    GBUFFERLAM = 14
 
-    MESH_UNIFORMS = 20
-    TET = 21
-    PYRAMID = 22
-    PRISM = 23
-    HEX = 24
+    MESH = 20
+    EDGE = 21
+    SEG = 22
+    TRIG = 23
+    QUAD = 24
+    TET = 25
+    PYRAMID = 26
+    PRISM = 27
+    HEX = 28
 
 
 class UniformBase(ct.Structure):
 
-    def __init__(self, device):
+    def __init__(self, device, **kwargs):
+        super().__init__(**kwargs)
         import js
 
         self.device = device
@@ -51,54 +60,50 @@ class UniformBase(ct.Structure):
         self._buffer.destroy()
 
 
-class MeshUniforms(UniformBase):
-    _binding = Binding.MESH_UNIFORMS
-    _fields_ = [("shrink", ct.c_float), ("padding", ct.c_float * 3)]
-
-
-class Uniforms(UniformBase):
+class ViewUniforms(UniformBase):
     """Uniforms class, derived from ctypes.Structure to ensure correct memory layout"""
 
-    _binding = Binding.UNIFORMS
-
-    class ClippingPlaneUniform(ct.Structure):
-        _fields_ = [("normal", ct.c_float * 3), ("dist", ct.c_float)]
-
-    class ComplexUniform(ct.Structure):
-        _fields_ = [("re", ct.c_float), ("im", ct.c_float)]
-
-    class ColormapUniform(ct.Structure):
-        _fields_ = [("min", ct.c_float), ("max", ct.c_float)]
+    _binding = Binding.VIEW
 
     _fields_ = [
         ("model_view", ct.c_float * 16),
         ("model_view_projection", ct.c_float * 16),
         ("normal_mat", ct.c_float * 16),
-        ("clipping_plane", ClippingPlaneUniform),
-        ("colormap", ColormapUniform),
-        ("scaling", ComplexUniform),
         ("aspect", ct.c_float),
-        ("eval_mode", ct.c_uint32),
-        ("do_clipping", ct.c_uint32),
-        ("font_width", ct.c_uint32),
-        ("font_height", ct.c_uint32),
-        ("padding0", ct.c_uint32),
-        ("padding1", ct.c_uint32),
-        ("padding2", ct.c_uint32),
+        ("padding", ct.c_uint32 * 3),
     ]
 
-    def __init__(self, device):
-        super().__init__(device)
 
-        self.device = device
-        self.do_clipping = 1
-        self.clipping_plane.normal[0] = 1
-        self.clipping_plane.normal[1] = 0
-        self.clipping_plane.normal[2] = 0
-        self.clipping_plane.dist = 1
-        self.colormap.min = 0.0
-        self.colormap.max = 1.0
-        self.scaling.im = 0.0
-        self.scaling.re = 0.0
-        self.aspect = 0.0
-        self.eval_mode = 0
+class ClippingUniforms(UniformBase):
+    _binding = Binding.CLIPPING
+    _fields_ = [
+        ("plane", ct.c_float * 4),
+        ("sphere", ct.c_float * 4),
+        ("mode", ct.c_uint32),
+        ("padding", ct.c_uint32 * 3),
+    ]
+
+    def __init__(self, device, mode=0, **kwargs):
+        super().__init__(device, mode=mode, **kwargs)
+
+
+class FunctionUniforms(UniformBase):
+    _binding = Binding.FUNCTION
+    _fields_ = [("min", ct.c_float), ("max", ct.c_float), ("padding", ct.c_float * 2)]
+
+
+class FontUniforms(UniformBase):
+    _binding = Binding.FONT
+    _fields_ = [
+        ("width", ct.c_uint32),
+        ("height", ct.c_uint32),
+        ("padding", ct.c_uint32 * 2),
+    ]
+
+
+class MeshUniforms(UniformBase):
+    _binding = Binding.MESH
+    _fields_ = [("shrink", ct.c_float), ("padding", ct.c_float * 3)]
+
+    def __init__(self, device, shrink=1.0, **kwargs):
+        super().__init__(device, shrink=shrink, **kwargs)

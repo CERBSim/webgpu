@@ -4,7 +4,13 @@ import js
 
 from .colormap import Colormap
 from .input_handler import InputHandler
-from .uniforms import Uniforms, MeshUniforms
+from .uniforms import (
+    ViewUniforms,
+    MeshUniforms,
+    FunctionUniforms,
+    FontUniforms,
+    ClippingUniforms,
+)
 from .utils import to_js, Device
 
 
@@ -70,7 +76,10 @@ class WebGPU:
 
         print("canvas", canvas.width, canvas.height, canvas)
 
-        self.uniforms = Uniforms(self.device)
+        self.u_clipping = ClippingUniforms(self.device)
+        self.u_view = ViewUniforms(self.device)
+        self.u_font = FontUniforms(self.device)
+        self.u_function = FunctionUniforms(self.device)
         self.mesh_uniforms = MeshUniforms(self.device)
         self.mesh_uniforms.shrink = 0.5
 
@@ -101,7 +110,24 @@ class WebGPU:
                 }
             )
         )
-        self.input_handler = InputHandler(canvas, self.uniforms)
+        self.input_handler = InputHandler(canvas, self.u_view)
+
+    def update_uniforms(self):
+        self.u_view.update_buffer()
+        self.u_clipping.update_buffer()
+        self.u_font.update_buffer()
+        self.u_function.update_buffer()
+        self.mesh_uniforms.update_buffer()
+
+    def get_bindings(self):
+        return [
+            *self.u_view.get_bindings(),
+            *self.u_clipping.get_bindings(),
+            *self.u_font.get_bindings(),
+            *self.u_function.get_bindings(),
+            *self.mesh_uniforms.get_bindings(),
+            *self.colormap.get_bindings(),
+        ]
 
     def begin_render_pass(self, command_encoder, args={}):
         load_op = "clear" if self._is_first_render_pass else "load"

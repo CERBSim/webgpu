@@ -98,8 +98,7 @@ class MeshRenderObject(RenderObject):
 
     def get_bindings(self):
         return [
-            *self.gpu.uniforms.get_bindings(),
-            *self.gpu.colormap.get_bindings(),
+            *self.gpu.get_bindings(),
             BufferBinding(Binding.TRIGS, self._buffers["trigs"]),
             BufferBinding(
                 Binding.TRIG_FUNCTION_VALUES, self._buffers["trig_function_values"]
@@ -151,8 +150,7 @@ class MeshRenderObjectIndexed(RenderObject):
 
     def get_bindings(self):
         return [
-            *self.gpu.uniforms.get_bindings(),
-            *self.gpu.colormap.get_bindings(),
+            *self.gpu.get_bindings(),
             BufferBinding(
                 Binding.TRIG_FUNCTION_VALUES, self._buffers["trig_function_values"]
             ),
@@ -228,8 +226,7 @@ class MeshRenderObjectDeferred(RenderObject):
 
     def get_bindings_pass1(self):
         return [
-            *self.gpu.uniforms.get_bindings(),
-            *self.gpu.colormap.get_bindings(),
+            *self.gpu.get_bindings(),
             BufferBinding(
                 Binding.TRIG_FUNCTION_VALUES, self._buffers["trig_function_values"]
             ),
@@ -372,9 +369,7 @@ class MeshRenderObjectDeferred(RenderObject):
 class Mesh3dElementsRenderObject(RenderObject):
     def get_bindings(self):
         bindings = [
-            *self.gpu.uniforms.get_bindings(),
-            *self.gpu.colormap.get_bindings(),
-            *self.gpu.mesh_uniforms.get_bindings(),
+            *self.gpu.get_bindings(),
             BufferBinding(Binding.VERTICES, self._buffers["vertices"]),
         ]
 
@@ -731,7 +726,7 @@ class PointNumbersRenderObject:
 
     def get_bindings(self):
         return [
-            *self.gpu.uniforms.get_bindings(),
+            *self.gpu.get_bindings(),
             TextureBinding(Binding.FONT_TEXTURE, self._texture, dim=2),
             BufferBinding(Binding.VERTICES, self._buffers["vertices"]),
         ]
@@ -792,7 +787,7 @@ class PointNumbersRenderObject:
         self._texture = create_font_texture(self.gpu.device, font_size)
         char_width = self._texture.width // (127 - 32)
         char_height = self._texture.height
-        self.gpu.uniforms.font_width = char_width
-        self.gpu.uniforms.font_height = char_height
+        self.gpu.u_font.width = char_width
+        self.gpu.u_font.height = char_height
         if self._buffers:
             self._create_pipeline()
