@@ -125,7 +125,7 @@ fn getColor(value: f32) -> vec4<f32> {
 }
 
 @vertex
-fn mainVertexEdgeP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) edgeId: u32) -> VertexOutput1d {
+fn vertexEdgeP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) edgeId: u32) -> VertexOutput1d {
     let edge = edges_p1[edgeId];
     var p: vec3<f32> = vec3<f32>(edge.p[3 * vertexId], edge.p[3 * vertexId + 1], edge.p[3 * vertexId + 2]);
 
@@ -151,7 +151,7 @@ fn calcTrig(p: array<vec3<f32>, 3>, vertexId: u32, trigId: u32) -> VertexOutput2
 }
 
 @vertex
-fn mainVertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
+fn vertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
     let trig = trigs_p1[trigId];
     var p = array<vec3<f32>, 3>(
         vec3<f32>(trig.p[0], trig.p[1], trig.p[2]),
@@ -162,7 +162,7 @@ fn mainVertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_inde
 }
 
 @vertex
-fn mainVertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
+fn vertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
     let vid = array<u32, 3>(
         trigs[3 * trigId + 0],
         trigs[3 * trigId + 1],
@@ -178,21 +178,21 @@ fn mainVertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instan
 
 
 @fragment
-fn mainFragmentTrig(input: VertexOutput2d) -> @location(0) vec4<f32> {
+fn fragmentTrig(input: VertexOutput2d) -> @location(0) vec4<f32> {
     checkClipping(input.p);
     let value = evalTrig(input.id, 0u, input.lam);
     return getColor(value);
 }
 
 @fragment
-fn mainFragmentTrigMesh(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
+fn fragmentTrigMesh(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
     checkClipping(p);
     let value = id;
     return vec4<f32>(0., 1.0, 0.0, 1.0);
 }
 
 @fragment
-fn mainFragmentEdge(@location(0) p: vec3<f32>) -> @location(0) vec4<f32> {
+fn fragmentEdge(@location(0) p: vec3<f32>) -> @location(0) vec4<f32> {
     checkClipping(p);
     return vec4<f32>(0, 0, 0, 1.0);
 }
@@ -203,7 +203,7 @@ struct DeferredFragmentOutput {
 };
 
 @fragment
-fn mainFragmentDeferred(@builtin(position) coord: vec4<f32>) -> @location(0) vec4<f32> {
+fn fragmentDeferred(@builtin(position) coord: vec4<f32>) -> @location(0) vec4<f32> {
     let bufferSize = textureDimensions(gBufferLam);
     let coordUV = coord.xy / vec2f(bufferSize);
 
@@ -222,7 +222,7 @@ fn mainFragmentDeferred(@builtin(position) coord: vec4<f32>) -> @location(0) vec
 
 
 @fragment
-fn mainFragmentTrigToGBuffer(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
+fn fragmentTrigToGBuffer(@location(0) p: vec3<f32>, @location(1) lam: vec2<f32>, @location(2) @interpolate(flat) id: u32) -> @location(0) vec4<f32> {
     checkClipping(p);
     let value = evalTrig(id, 0u, lam);
     return vec4<f32>(bitcast<f32>(id), lam, 0.0);
@@ -234,7 +234,7 @@ struct VertexOutputDeferred {
 
 
 @vertex
-fn mainVertexDeferred(@builtin(vertex_index) vertexId: u32) -> VertexOutputDeferred {
+fn vertexDeferred(@builtin(vertex_index) vertexId: u32) -> VertexOutputDeferred {
     var position = vec4<f32>(-1., -1., 0., 1.);
     if vertexId == 1 || vertexId == 3 {
         position.x = 1.0;
@@ -253,7 +253,7 @@ struct FragmentTextInput {
 };
 
 @vertex
-fn mainVertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) pointId: u32) -> FragmentTextInput {
+fn vertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) pointId: u32) -> FragmentTextInput {
     var p = vec3<f32>(vertices[3 * pointId], vertices[3 * pointId + 1], vertices[3 * pointId + 2]);
     if calcClipping(p) == false {
         return FragmentTextInput(vec4<f32>(-1.0, -1.0, 0.0, 1.0), vec2<f32>(0.));
@@ -304,7 +304,7 @@ fn mainVertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance
 }
 
 @fragment
-fn mainFragmentText(@location(0) tex_coord: vec2<f32>) -> @location(0) vec4<f32> {
+fn fragmentText(@location(0) tex_coord: vec2<f32>) -> @location(0) vec4<f32> {
     let alpha: f32 = textureLoad(
         u_font_texture,
         vec2i(floor(tex_coord)),

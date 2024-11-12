@@ -116,11 +116,11 @@ class MeshRenderObject(RenderObject):
                 "label": "MeshRenderObject",
                 "vertex": {
                     "module": shader_module,
-                    "entryPoint": "mainVertexTrigP1",
+                    "entryPoint": "vertexTrigP1",
                 },
                 "fragment": {
                     "module": shader_module,
-                    "entryPoint": "mainFragmentTrig",
+                    "entryPoint": "fragmentTrig",
                     "targets": [{"format": self.gpu.format}],
                 },
                 "primitive": {
@@ -169,11 +169,11 @@ class MeshRenderObjectIndexed(RenderObject):
                 "label": "MeshRenderObjectIndexed",
                 "vertex": {
                     "module": shader,
-                    "entryPoint": "mainVertexTrigP1Indexed",
+                    "entryPoint": "vertexTrigP1Indexed",
                 },
                 "fragment": {
                     "module": shader,
-                    "entryPoint": "mainFragmentTrig",
+                    "entryPoint": "fragmentTrig",
                     "targets": [{"format": self.gpu.format}],
                 },
                 "primitive": {
@@ -256,11 +256,11 @@ class MeshRenderObjectDeferred(RenderObject):
                 "label": "MeshRenderObjectDeferredPass1",
                 "vertex": {
                     "module": shader_module,
-                    "entryPoint": "mainVertexTrigP1Indexed",
+                    "entryPoint": "vertexTrigP1Indexed",
                 },
                 "fragment": {
                     "module": shader_module,
-                    "entryPoint": "mainFragmentTrigToGBuffer",
+                    "entryPoint": "fragmentTrigToGBuffer",
                     "targets": [{"format": self._g_buffer_format}],
                 },
                 "targets": [{"format": self._g_buffer_format}],
@@ -289,11 +289,11 @@ class MeshRenderObjectDeferred(RenderObject):
                 "label": "trigs_deferred",
                 "vertex": {
                     "module": shader_module,
-                    "entryPoint": "mainVertexDeferred",
+                    "entryPoint": "vertexDeferred",
                 },
                 "fragment": {
                     "module": shader_module,
-                    "entryPoint": "mainFragmentDeferred",
+                    "entryPoint": "fragmentDeferred",
                     "targets": [{"format": self.gpu.format}],
                 },
                 "primitive": {
@@ -742,11 +742,11 @@ class PointNumbersRenderObject:
                 "label": "PointNumbersRenderObject",
                 "vertex": {
                     "module": shader_module,
-                    "entryPoint": "mainVertexPointNumber",
+                    "entryPoint": "vertexPointNumber",
                 },
                 "fragment": {
                     "module": shader_module,
-                    "entryPoint": "mainFragmentText",
+                    "entryPoint": "fragmentText",
                     "targets": [
                         {
                             "format": self.gpu.format,
