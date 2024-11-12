@@ -199,5 +199,8 @@ class Device:
         )
 
     def compile_files(self, *files):
+        files = list(files)
+        if "uniforms.wgsl" not in files:
+            files.append("uniforms.wgsl")
         code = get_shader_code(files)
         return self.device.createShaderModule(to_js({"code": code}))

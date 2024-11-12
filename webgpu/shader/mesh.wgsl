@@ -1,25 +1,3 @@
-// Mesh element types
-struct Seg { p: array<u32, 2>, nr: u32, index: u32 };
-struct Trig { p: array<u32, 3>, nr: u32, index: u32 };
-struct Quad { p: array<u32, 4>, nr: u32, index: u32 };
-struct Tet { p: array<u32, 4>, nr: u32, index: u32 };
-struct Pyramid { p: array<u32, 5>, nr: u32, index: u32 };
-struct Prism { p: array<u32, 6>, nr: u32, index: u32 };
-struct Hex { p: array<u32, 8>, nr: u32, index: u32 };
-
-// Inner edges, wireframe
-struct Edge { p: array<u32, 2> };
-
-@group(0) @binding(20) var<uniform> u_mesh : MeshUniforms;
-@group(0) @binding(21) var<storage> u_edges : array<Edge>;
-@group(0) @binding(22) var<storage> u_segs : array<Seg>;
-@group(0) @binding(23) var<storage> u_trigs : array<Trig>;
-@group(0) @binding(24) var<storage> u_quads : array<Quad>;
-@group(0) @binding(25) var<storage> u_tets : array<Tet>;
-@group(0) @binding(26) var<storage> u_pyramids : array<Pyramid>;
-@group(0) @binding(27) var<storage> u_prisms : array<Prism>;
-@group(0) @binding(28) var<storage> u_hexes : array<Hex>;
-
 struct MeshFragmentInput {
   @builtin(position) fragPosition: vec4<f32>,
   @location(0) color: vec4<f32>,

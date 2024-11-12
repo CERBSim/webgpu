@@ -103,7 +103,11 @@ class FontUniforms(UniformBase):
 
 class MeshUniforms(UniformBase):
     _binding = Binding.MESH
-    _fields_ = [("shrink", ct.c_float), ("padding", ct.c_float * 3)]
+    _fields_ = [
+        ("subdivision", ct.c_uint32),
+        ("shrink", ct.c_float),
+        ("padding", ct.c_float * 2),
+    ]
 
-    def __init__(self, device, shrink=1.0, **kwargs):
-        super().__init__(device, shrink=shrink, **kwargs)
+    def __init__(self, device, subdivision=1, shrink=1.0, **kwargs):
+        super().__init__(device, subdivision=subdivision, shrink=shrink, **kwargs)

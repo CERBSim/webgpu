@@ -26,4 +26,3 @@ For the hot-reload feature you need to have the python packages `websockets` and
 ```
 jupyter notebook webgpu.ipynb
 ```
-
