@@ -80,8 +80,8 @@ class WebGPU:
         self.u_view = ViewUniforms(self.device)
         self.u_font = FontUniforms(self.device)
         self.u_function = FunctionUniforms(self.device)
-        self.mesh_uniforms = MeshUniforms(self.device)
-        self.mesh_uniforms.shrink = 0.5
+        self.u_mesh = MeshUniforms(self.device)
+        self.u_mesh.shrink = 0.5
 
         self.context = canvas.getContext("webgpu")
         self.context.configure(
@@ -117,7 +117,7 @@ class WebGPU:
         self.u_clipping.update_buffer()
         self.u_font.update_buffer()
         self.u_function.update_buffer()
-        self.mesh_uniforms.update_buffer()
+        self.u_mesh.update_buffer()
 
     def get_bindings(self):
         return [
@@ -125,7 +125,7 @@ class WebGPU:
             *self.u_clipping.get_bindings(),
             *self.u_font.get_bindings(),
             *self.u_function.get_bindings(),
-            *self.mesh_uniforms.get_bindings(),
+            *self.u_mesh.get_bindings(),
             *self.colormap.get_bindings(),
         ]
 

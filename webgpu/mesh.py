@@ -109,7 +109,7 @@ class MeshRenderObject(RenderObject):
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "MeshRenderObject"
         )
-        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
+        shader_module = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
         self._pipeline = self.device.create_render_pipeline(
             bind_layout,
             {
@@ -162,7 +162,7 @@ class MeshRenderObjectIndexed(RenderObject):
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "MeshRenderObject"
         )
-        shader = self.device.compile_files("shader.wgsl", "eval.wgsl")
+        shader = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
         self._pipeline = self.device.create_render_pipeline(
             bind_layout,
             options={
@@ -249,7 +249,7 @@ class MeshRenderObjectDeferred(RenderObject):
         bind_layout_pass1, self._bind_group_pass1 = self.device.create_bind_group(
             self.get_bindings_pass1(), "MeshRenderObjectDeferredPass1"
         )
-        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
+        shader_module = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
         self._pipeline_pass1 = self.device.create_render_pipeline(
             bind_layout_pass1,
             {
@@ -389,7 +389,7 @@ class Mesh3dElementsRenderObject(RenderObject):
             self.get_bindings(), label
         )
         shader_module = self.device.compile_files(
-            "shader.wgsl", "mesh.wgsl", "eval.wgsl"
+            "uniforms.wgsl", "shader.wgsl", "mesh.wgsl", "eval.wgsl"
         )
 
         self._pipelines = {}
@@ -735,7 +735,7 @@ class PointNumbersRenderObject:
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "PointNumbersRenderObject"
         )
-        shader_module = self.device.compile_files("shader.wgsl", "eval.wgsl")
+        shader_module = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
         self._pipeline = self.device.create_render_pipeline(
             bind_layout,
             {

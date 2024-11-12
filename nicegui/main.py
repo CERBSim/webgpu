@@ -20,6 +20,11 @@ from nicegui.events import (
 app.add_static_files("/pyodide", "../pyodide")
 app.add_static_files("/webgpu", "../webgpu")
 
+def dump_function(func):
+    func = marshal.dumps(func.__code__)
+    func = base64.b64encode(func).decode("utf-8")
+    return func
+
 
 class WebGPUScene(
     Element,
@@ -123,19 +128,53 @@ class WebGPUScene(
         """Remove all objects from the scene."""
         super().clear()
 
-    def redraw(self, code):
+    def on_update(self, code):
         func = marshal.dumps(draw_function.__code__)
         func = base64.b64encode(func).decode("utf-8")
         data = [func, code]
         self.run_method("run_user_function", data)
 
+    def redraw(self):
+        self.run_method("run_user_function", [_redraw_scene_code, None])
+
+    def set_shrink(self, value):
+        def f(v):
+            import js
+            # gpu = globals()['gpu']
+            gpu.u_mesh.shrink = v
+            js.requestAnimationFrame(gpu.input_handler.render_function)
+
+        func = marshal.dumps(f.__code__)
+        func = base64.b64encode(func).decode("utf-8")
+        data = [func, value]
+        self.run_method("run_user_function", data)
+
+    def make_callback(self, func):
+        func = dump_function(func)
+        def callback(el):
+            self.run_method("run_user_function", [func, el.value])
+            self.redraw()
+
+        return callback
+
+def _redraw_scene(args):
+    import js
+    import webgpu.main
+    js.requestAnimationFrame(webgpu.main.gpu.input_handler.render_function)
+
+_redraw_scene_code = dump_function(_redraw_scene)
 
 ui.add_head_html('<script type="text/javascript" src="./pyodide/pyodide.js"></script>')
 
 inp = ui.input("function")
+shrink = ui.slider(min=0, max=1, step=1e-4, value=.5)
+show_point_numbers = ui.checkbox("Point numbers", value=False)
 button = ui.button("update")
 scene = WebGPUScene(width=1024, height=800)
-button.on_click(lambda _: scene.redraw(inp.value))
+button.on_click(lambda _: scene.on_update(inp.value))
+
+shrink.on_value_change(scene.make_callback(lambda value: setattr(gpu.u_mesh, 'shrink', value)))
+# shrink.on_value_change(scene.make_callback(on_shrink))
 
 
 def draw_function(expr):

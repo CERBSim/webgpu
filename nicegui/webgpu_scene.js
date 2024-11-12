@@ -77,6 +77,7 @@ const files = [
   "shader/eval.wgsl",
   "shader/shader.wgsl",
   "shader/compute.wgsl",
+  "shader/mesh.wgsl",
   "shader/uniforms.wgsl",
 ];
 

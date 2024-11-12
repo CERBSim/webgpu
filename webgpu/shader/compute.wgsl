@@ -1,8 +1,8 @@
 struct TrigP1 { p: array<f32, 9>, index: i32};
-@group(0) @binding(5) var<storage, read_write> trigs_p1 : array<TrigP1>;
-@group(0) @binding(6) var<storage, read_write> trig_function_values : array<f32>;
-@group(0) @binding(8) var<storage, read_write> vertex_buffer : array<f32>;
-@group(0) @binding(9) var<storage, read_write> index_buffer : array<u32>;
+@group(0) @binding(9) var<storage, read_write> trigs_p1 : array<TrigP1>;
+@group(0) @binding(10) var<storage, read_write> trig_function_values : array<f32>;
+@group(0) @binding(12) var<storage, read_write> vertex_buffer : array<f32>;
+@group(0) @binding(13) var<storage, read_write> index_buffer : array<u32>;
 
 @compute  @workgroup_size(16, 16, 1)
 fn create_mesh(@builtin(num_workgroups) n_groups: vec3<u32>, @builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
