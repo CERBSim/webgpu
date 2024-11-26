@@ -5,6 +5,7 @@ import urllib.parse
 import js
 import ngsolve as ngs
 from netgen.occ import unit_cube
+from netgen.geom2d import unit_square
 from pyodide.ffi import create_proxy
 
 from .gpu import WebGPU, init_webgpu
@@ -31,19 +32,21 @@ async def main():
         # mesh = ngs.Mesh(unit_cube.GenerateMesh(maxh=0.1))
         # mesh = MakeStructured3DMesh(True, 10, prism=True)
 
-        import netgen.occ as occ
-        from netgen.meshing import IdentificationType
+        # import netgen.occ as occ
+        # from netgen.meshing import IdentificationType
+        #
+        # idtype = IdentificationType.CLOSESURFACES
+        # inner = occ.Box((0, 0, 0), (1, 1, 1))
+        # trafo = occ.gp_Trsf().Scale(inner.center, 1.1)
+        # outer = trafo(inner)
+        #
+        # inner.Identify(outer, "", idtype, trafo)
+        # shape = occ.Glue([outer - inner, inner])
+        #
+        # geo = occ.OCCGeometry(shape)
+        # mesh = geo.GenerateMesh(maxh=0.3)
 
-        idtype = IdentificationType.CLOSESURFACES
-        inner = occ.Box((0, 0, 0), (1, 1, 1))
-        trafo = occ.gp_Trsf().Scale(inner.center, 1.1)
-        outer = trafo(inner)
-
-        inner.Identify(outer, "", idtype, trafo)
-        shape = occ.Glue([outer - inner, inner])
-
-        geo = occ.OCCGeometry(shape)
-        mesh = geo.GenerateMesh(maxh=0.3)
+        mesh = unit_square.GenerateMesh(maxh=0.1)
         mesh = ngs.Mesh(mesh)
 
         order = 1
@@ -61,9 +64,9 @@ async def main():
         gpu.u_function.min = 0 
         gpu.u_function.max = 1
 
-    mesh_object = MeshRenderObject(gpu, data)
+    # mesh_object = MeshRenderObject(gpu, data)
     # mesh_object = MeshRenderObjectIndexed(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
-    # mesh_object = MeshRenderObjectDeferred(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
+    mesh_object = MeshRenderObjectDeferred(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
     point_number_object = PointNumbersRenderObject(gpu, data, font_size=16)
     elements_object = Mesh3dElementsRenderObject(gpu, data)
 
@@ -85,11 +88,11 @@ async def main():
 
         command_encoder = gpu.create_command_encoder()
 
-        # mesh_object.render(command_encoder)
-        elements_object.render(command_encoder)
+        mesh_object.render(command_encoder)
+        # elements_object.render(command_encoder)
 
-        if point_number_object is not None:
-            point_number_object.render(command_encoder)
+        # if point_number_object is not None:
+        #     point_number_object.render(command_encoder)
 
         gpu.native_device.queue.submit([command_encoder.finish()])
         if frame_counter < 20:
