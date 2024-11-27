@@ -117,6 +117,7 @@ class Device:
 
     def __init__(self, device):
         self.device = device
+        self.shader_module = self.comple_shader()
 
     def create_bind_group(self, bindings: list, label=""):
         """creates bind group layout and bind group from a list of BaseBinding objects"""
@@ -198,6 +199,6 @@ class Device:
             size,
         )
 
-    def compile_files(self, *files):
-        code = get_shader_code(files)
+    def comple_shader(self):
+        code = get_shader_code()
         return self.device.createShaderModule(to_js({"code": code}))

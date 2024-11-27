@@ -1,17 +1,11 @@
-struct TrigP1 { p: array<f32, 9>, index: i32};
-@group(0) @binding(9) var<storage, read_write> trigs_p1 : array<TrigP1>;
-@group(0) @binding(10) var<storage, read_write> trig_function_values : array<f32>;
-@group(0) @binding(12) var<storage, read_write> vertex_buffer : array<f32>;
-@group(0) @binding(13) var<storage, read_write> index_buffer : array<u32>;
-
 @compute  @workgroup_size(16, 16, 1)
 fn create_mesh(@builtin(num_workgroups) n_groups: vec3<u32>, @builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
     let n: u32 = n_groups.x * 16;
     let h: f32 = 1.0 / (f32(n) + 1.);
 
     if lid.x == 0 && lid.y == 0 && wid.x == 0 {
-        trig_function_values[0] = 1.0;
-        trig_function_values[1] = 1.0;
+        create_mesh_trig_function_values[0] = 1.0;
+        create_mesh_trig_function_values[1] = 1.0;
     }
 
     let ix: u32 = wid.x * 16u + lid.x;
@@ -31,35 +25,35 @@ fn create_mesh(@builtin(num_workgroups) n_groups: vec3<u32>, @builtin(workgroup_
                     px = array<f32, 3>(x + h, x + h, x);
                     py = array<f32, 3>(y, y + h, y + h);
                 }
-                trigs_p1[i].index = 1;
+                create_mesh_trigs_p1[i].index = 1;
                 for (var pi: u32 = 0u; pi < 3u; pi++) {
-                    trigs_p1[i].p[3 * pi + 0] = px[pi];
-                    trigs_p1[i].p[3 * pi + 1] = py[pi];
-                    trigs_p1[i].p[3 * pi + 2] = 0.0;
-                    trig_function_values[2 + 3 * i + pi] = px[pi];
+                    create_mesh_trigs_p1[i].p[3 * pi + 0] = px[pi];
+                    create_mesh_trigs_p1[i].p[3 * pi + 1] = py[pi];
+                    create_mesh_trigs_p1[i].p[3 * pi + 2] = 0.0;
+                    create_mesh_trig_function_values[2 + 3 * i + pi] = px[pi];
                 }
 
                 if k == 0 {
-                    index_buffer[3 * i] = i1;
-                    index_buffer[3 * i + 1] = i1 + 1;
-                    index_buffer[3 * i + 2] = i1 + n + 1;
+                    create_mesh_index_buffer[3 * i] = i1;
+                    create_mesh_index_buffer[3 * i + 1] = i1 + 1;
+                    create_mesh_index_buffer[3 * i + 2] = i1 + n + 1;
                 } else {
-                    index_buffer[3 * i] = i1 + 1;
-                    index_buffer[3 * i + 1] = i1 + n + 1 + 1;
-                    index_buffer[3 * i + 2] = i1 + n + 1;
+                    create_mesh_index_buffer[3 * i] = i1 + 1;
+                    create_mesh_index_buffer[3 * i + 1] = i1 + n + 1 + 1;
+                    create_mesh_index_buffer[3 * i + 2] = i1 + n + 1;
                 }
             }
         }
 
         let iv = 3 * (ix + iy * (n + 1));
-        vertex_buffer[iv] = x;
-        vertex_buffer[iv + 1] = y;
-        vertex_buffer[iv + 2] = 0.0;
+        create_mesh_vertex_buffer[iv] = x;
+        create_mesh_vertex_buffer[iv + 1] = y;
+        create_mesh_vertex_buffer[iv + 2] = 0.0;
 
         if ix + 1 == n {
-            vertex_buffer[iv + 3] = x + h;
-            vertex_buffer[iv + 4] = y;
-            vertex_buffer[iv + 5] = 0.;
+            create_mesh_vertex_buffer[iv + 3] = x + h;
+            create_mesh_vertex_buffer[iv + 4] = y;
+            create_mesh_vertex_buffer[iv + 5] = 0.;
         }
     }
 }

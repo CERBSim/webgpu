@@ -109,7 +109,7 @@ class MeshRenderObject(RenderObject):
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "MeshRenderObject"
         )
-        shader_module = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
+        shader_module = self.device.shader_module
         self._pipeline = self.device.create_render_pipeline(
             bind_layout,
             {
@@ -162,7 +162,7 @@ class MeshRenderObjectIndexed(RenderObject):
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "MeshRenderObject"
         )
-        shader = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
+        shader = self.device.shader_module
         self._pipeline = self.device.create_render_pipeline(
             bind_layout,
             options={
@@ -249,7 +249,7 @@ class MeshRenderObjectDeferred(RenderObject):
         bind_layout_pass1, self._bind_group_pass1 = self.device.create_bind_group(
             self.get_bindings_pass1(), "MeshRenderObjectDeferredPass1"
         )
-        shader_module = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
+        shader_module = self.device.shader_module
         self._pipeline_pass1 = self.device.create_render_pipeline(
             bind_layout_pass1,
             {
@@ -388,9 +388,7 @@ class Mesh3dElementsRenderObject(RenderObject):
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), label
         )
-        shader_module = self.device.compile_files(
-            "uniforms.wgsl", "shader.wgsl", "mesh.wgsl", "eval.wgsl"
-        )
+        shader_module = self.device.shader_module
 
         self._pipelines = {}
         for eltype in ElType:
@@ -662,7 +660,7 @@ def create_testing_square_mesh(gpu, n):
         "trigs_index": index_buffer,
     }
 
-    shader_module = device.compile_files("compute.wgsl")
+    shader_module = device.shader_module
 
     bindings = []
     for name in ["trigs", "trig_function_values", "vertices", "trigs_index"]:
@@ -735,7 +733,7 @@ class PointNumbersRenderObject:
         bind_layout, self._bind_group = self.device.create_bind_group(
             self.get_bindings(), "PointNumbersRenderObject"
         )
-        shader_module = self.device.compile_files("uniforms.wgsl", "shader.wgsl", "eval.wgsl")
+        shader_module = self.device.shader_module
         self._pipeline = self.device.create_render_pipeline(
             bind_layout,
             {

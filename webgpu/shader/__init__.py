@@ -1,8 +1,12 @@
 from pathlib import Path
+import glob
 
 
-def get_shader_code(names):
+def get_shader_code(files=glob.glob(str(Path(__file__).parent / "*.wgsl"))):
     code = ""
-    for name in names:
-        code += (Path(__file__).parent / name).read_text()
+    for file in files:
+        file = Path(file)
+        if not file.is_absolute():
+            file = Path(__file__).parent / file
+        code += file.read_text()
     return code

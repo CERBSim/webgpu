@@ -61,12 +61,14 @@ async def main():
         N = 10
         N = int(query.get("n", [N])[0])
         data = create_testing_square_mesh(gpu, N)
-        gpu.u_function.min = 0 
+        gpu.u_function.min = 0
         gpu.u_function.max = 1
 
     # mesh_object = MeshRenderObject(gpu, data)
     # mesh_object = MeshRenderObjectIndexed(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
-    mesh_object = MeshRenderObjectDeferred(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
+    mesh_object = MeshRenderObjectDeferred(
+        gpu, data
+    )  # function values are wrong, due to ngsolve vertex numbering order
     point_number_object = PointNumbersRenderObject(gpu, data, font_size=16)
     elements_object = Mesh3dElementsRenderObject(gpu, data)
 

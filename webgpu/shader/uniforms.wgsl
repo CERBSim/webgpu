@@ -50,6 +50,17 @@
 @group(0) @binding(35) var<storage> u_prisms_function : array<f32>;
 @group(0) @binding(36) var<storage> u_hexes_function : array<f32>;
 
+// Line integral convolution
+@group(0) @binding(40) var<uniform> u_line_intergral_convolution : LineIntegralConvolutionUniforms;
+@group(0) @binding(41) var u_line_integral_convolution_input: texture_storage_2d<rgba32float, read>;
+@group(0) @binding(42) var u_line_integral_convolution_output: texture_storage_2d<r32float, write>;
+
+// Create mesh
+@group(0) @binding(50) var<storage, read_write> create_mesh_trigs_p1 : array<TrigP1>;
+@group(0) @binding(51) var<storage, read_write> create_mesh_trig_function_values : array<f32>;
+@group(0) @binding(52) var<storage, read_write> create_mesh_vertex_buffer : array<f32>;
+@group(0) @binding(53) var<storage, read_write> create_mesh_index_buffer : array<u32>;
+
 // general uniform structures
 struct ViewUniforms {
   model_view: mat4x4<f32>,
@@ -95,6 +106,17 @@ struct MeshUniforms {
   padding1: f32,
 };
 
+struct LineIntegralConvolutionUniforms {
+  width: u32,         // canvas width
+  height: u32,        // canvas height
+  kernel_length: u32,
+  oriented: u32,      // 0: not oriented, 1: oriented
+  thickness: u32,     // thickness of the lines (only used for oriented)
+
+  padding0: u32,
+  padding1: u32,
+  padding2: u32,
+};
 // Mesh element structures
 
 struct Edge { p: array<u32, 2> }; // Inner edge, for wireframe
