@@ -51,6 +51,7 @@ async def main():
 
         order = 1
         cf = cf or ngs.sin(10 * ngs.x) * ngs.sin(10 * ngs.y)
+        # cf = ngs.x
         data = MeshData(mesh, cf, order)
         gpu.u_function.min = -1
         gpu.u_function.max = 1
@@ -93,8 +94,8 @@ async def main():
         mesh_object.render(command_encoder)
         # elements_object.render(command_encoder)
 
-        # if point_number_object is not None:
-        #     point_number_object.render(command_encoder)
+        if point_number_object is not None:
+            point_number_object.render(command_encoder)
 
         gpu.native_device.queue.submit([command_encoder.finish()])
         if frame_counter < 20:

@@ -26,25 +26,25 @@ fn calcPosition(p: vec3<f32>) -> vec4<f32> {
 }
 
 fn calcClipping(p: vec3<f32>) -> bool {
-    var result : bool = true;
+    var result: bool = true;
     if (u_clipping.mode & 0x01u) == 0x01u {
         if dot(u_clipping.plane, vec4<f32>(p, 1.0)) < 0 {
-          result = false;
+            result = false;
         }
     }
     if (u_clipping.mode & 0x02) == 0x02 {
         let d = distance(p, u_clipping.sphere.xyz);
         if d > u_clipping.sphere.w {
-          result = false;
+            result = false;
         }
     }
     return result;
 }
 
 fn checkClipping(p: vec3<f32>) {
-  if calcClipping(p) == false {
+    if calcClipping(p) == false {
     discard;
-  }
+    }
 }
 
 fn getColor(value: f32) -> vec4<f32> {
@@ -66,16 +66,14 @@ fn vertexEdgeP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) e
     return VertexOutput1d(position, p, lam, edgeId);
 }
 
-fn calcTrig(p: array<vec3<f32>, 3>, vertexId: u32, trigId: u32) -> VertexOutput2d {
-    var lam: vec2<f32> = vec2<f32>(0.);
-    if vertexId < 2 {
-        lam[vertexId] = 1.0;
-    }
+fn calcTrig(p: array<vec3<f32>, 3>, vertexId: u32, trigId: u32, faceSort: vec3u) -> VertexOutput2d {
+    var lam: vec3<f32> = vec3<f32>(0.);
+    lam[faceSort[vertexId] ] = 1.0;
 
     let position = calcPosition(p[vertexId]);
     let normal = cross(p[1] - p[0], p[2] - p[0]);
 
-    return VertexOutput2d(position, p[vertexId], lam, trigId, normal);
+    return VertexOutput2d(position, p[vertexId], lam.xy, trigId, normal);
 }
 
 @vertex
@@ -86,22 +84,41 @@ fn vertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) t
         vec3<f32>(trig.p[3], trig.p[4], trig.p[5]),
         vec3<f32>(trig.p[6], trig.p[7], trig.p[8])
     );
-    return calcTrig(p, vertexId, trigId);
+    return calcTrig(p, vertexId, trigId, vec3u(0,1,2));
 }
 
 @vertex
 fn vertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
-    let vid = array<u32, 3>(
+    var vid = 3*vec3u(
         trigs[3 * trigId + 0],
         trigs[3 * trigId + 1],
         trigs[3 * trigId + 2]
     );
+
+    var f = vec3u(0, 1, 2);
+
+    if vid[f[0] ] > vid[f[1] ] {
+        let t = f[0];
+        f[0] = f[1];
+        f[1] = t;
+    }
+    if vid[ f[1] ] > vid[f[2] ] {
+        let t = f[1];
+        f[1] = f[2];
+        f[2] = t;
+    }
+    if vid[f[0] ] > vid[f[1] ] {
+        let t = f[0];
+        f[0] = f[1];
+        f[1] = t;
+    }
+
     var p = array<vec3<f32>, 3>(
-        vec3<f32>(vertices[3 * vid[0] ], vertices[3 * vid[0] + 1], vertices[3 * vid[0] + 2]),
-        vec3<f32>(vertices[3 * vid[1] ], vertices[3 * vid[1] + 1], vertices[3 * vid[1] + 2]),
-        vec3<f32>(vertices[3 * vid[2] ], vertices[3 * vid[2] + 1], vertices[3 * vid[2] + 2])
+        vec3<f32>(vertices[vid[0] ], vertices[vid[0] + 1], vertices[vid[0] + 2]),
+        vec3<f32>(vertices[vid[1] ], vertices[vid[1] + 1], vertices[vid[1] + 2]),
+        vec3<f32>(vertices[vid[2] ], vertices[vid[2] + 1], vertices[vid[2] + 2])
     );
-    return calcTrig(p, vertexId, trigId);
+    return calcTrig(p, vertexId, trigId, f);
 }
 
 
