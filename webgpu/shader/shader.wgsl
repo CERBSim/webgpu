@@ -84,12 +84,12 @@ fn vertexTrigP1(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) t
         vec3<f32>(trig.p[3], trig.p[4], trig.p[5]),
         vec3<f32>(trig.p[6], trig.p[7], trig.p[8])
     );
-    return calcTrig(p, vertexId, trigId, vec3u(0,1,2));
+    return calcTrig(p, vertexId, trigId, vec3u(0, 1, 2));
 }
 
 @vertex
 fn vertexTrigP1Indexed(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) trigId: u32) -> VertexOutput2d {
-    var vid = 3*vec3u(
+    var vid = 3 * vec3u(
         trigs[3 * trigId + 0],
         trigs[3 * trigId + 1],
         trigs[3 * trigId + 2]
@@ -239,7 +239,7 @@ fn vertexPointNumber(@builtin(vertex_index) vertexId: u32, @builtin(instance_ind
         tex_coord.y = 0.0;
     }
 
-    position.x += f32(length - i_digit -1) * w * position.w;
+    position.x += f32(length - i_digit - 1) * w * position.w;
 
     if vi == 1 || vi == 2 || vi == 4 {
         position.x += w * position.w;

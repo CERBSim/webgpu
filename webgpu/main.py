@@ -50,7 +50,7 @@ async def main():
         mesh = unit_square.GenerateMesh(maxh=0.3)
         mesh = ngs.Mesh(mesh)
 
-        order = 6
+        order = 3
         cf = cf or ngs.sin(10 * ngs.x) * ngs.sin(10 * ngs.y)
         # cf = ngs.x
         data = MeshData(mesh, cf, order)
