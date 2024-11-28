@@ -67,6 +67,29 @@ class UniformBinding(BaseBinding):
         )
 
 
+class StorageTextureBinding(BaseBinding):
+    def __init__(
+        self,
+        nr,
+        texture,
+        visibility=ShaderStage.COMPUTE,
+        dim=2,
+        access="write-only",
+    ):
+        super().__init__(
+            nr=nr,
+            visibility=visibility,
+            layout={
+                "storageTexture": {
+                    "access": access,
+                    "format": texture.format,
+                    "viewDimension": f"{dim}d",
+                }
+            },
+            resource=texture.createView(),
+        )
+
+
 class TextureBinding(BaseBinding):
     def __init__(
         self,

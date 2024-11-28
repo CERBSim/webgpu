@@ -51,8 +51,8 @@
 @group(0) @binding(36) var<storage> u_hexes_function : array<f32>;
 
 // Line integral convolution
-@group(0) @binding(40) var<uniform> u_line_intergral_convolution : LineIntegralConvolutionUniforms;
-@group(0) @binding(41) var u_line_integral_convolution_input: texture_storage_2d<rgba32float, read>;
+@group(0) @binding(40) var<uniform> u_line_integral_convolution : LineIntegralConvolutionUniforms;
+@group(0) @binding(41) var u_line_integral_convolution_input: texture_2d<f32>;
 @group(0) @binding(42) var u_line_integral_convolution_output: texture_storage_2d<r32float, write>;
 
 // Create mesh

@@ -7,7 +7,7 @@ fn random(seed: u32) -> u32 {
     return value;
 }
 
-fn randomFloat(seed: u32) -> u32 {
+fn randomFloat(seed: u32) -> f32 {
   return f32(random(seed)) / f32(0xFFFFFFFFu);
 }
 
@@ -57,8 +57,7 @@ fn lineIntegralConvolution(x: u32, y: u32) -> f32 {
         var p = vec2f(f32(x)+.5, f32(y)+.5);
 
         for (var k : u32 = 0; k < kernel_length; k++) {
-            let v = textureStore(u_line_integral_convolution_input, vec2i(p));
-            var v : vec2f = vector_field(p);
+            var v = textureLoad(u_line_integral_convolution_input, vec2i(p), 0).xy;
             v = normalize(v);
 
             p += f32(dir) * v;
@@ -90,9 +89,6 @@ fn lineIntegralConvolution(x: u32, y: u32) -> f32 {
 
 @compute  @workgroup_size(16, 16, 1)
 fn computeLineIntegralConvolution(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let x = gid.x;
-    let y = gid.y;
-
     let w = u_line_integral_convolution.width;
     let h = u_line_integral_convolution.height;
 
@@ -101,5 +97,5 @@ fn computeLineIntegralConvolution(@builtin(global_invocation_id) gid: vec3<u32>)
     }
 
     let value = lineIntegralConvolution(gid.x, gid.y);
-    textureStore(u_line_integral_convolution_output, gid.xy, value);
+    textureStore(u_line_integral_convolution_output, gid.xy, vec4f(value, .0, .0, .0));
 }

@@ -10,6 +10,7 @@ from pyodide.ffi import create_proxy
 
 from .gpu import WebGPU, init_webgpu
 from .mesh import *
+from .lic import LineIntegralConvolutionRenderObject
 
 gpu: WebGPU = None
 mesh_object: RenderObject = None
@@ -46,10 +47,10 @@ async def main():
         # geo = occ.OCCGeometry(shape)
         # mesh = geo.GenerateMesh(maxh=0.3)
 
-        mesh = unit_square.GenerateMesh(maxh=0.1)
+        mesh = unit_square.GenerateMesh(maxh=.3)
         mesh = ngs.Mesh(mesh)
 
-        order = 1
+        order = 6
         cf = cf or ngs.sin(10 * ngs.x) * ngs.sin(10 * ngs.y)
         # cf = ngs.x
         data = MeshData(mesh, cf, order)
@@ -65,11 +66,14 @@ async def main():
         gpu.u_function.min = 0
         gpu.u_function.max = 1
 
-    # mesh_object = MeshRenderObject(gpu, data)
+    lic = LineIntegralConvolutionRenderObject(gpu, 1000, 800)
+    print("LIC", lic)
+
+    mesh_object = MeshRenderObject(gpu, data)
     # mesh_object = MeshRenderObjectIndexed(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
-    mesh_object = MeshRenderObjectDeferred(
-        gpu, data
-    )  # function values are wrong, due to ngsolve vertex numbering order
+    # mesh_object = MeshRenderObjectDeferred(
+    #     gpu, data
+    # )  # function values are wrong, due to ngsolve vertex numbering order
     point_number_object = PointNumbersRenderObject(gpu, data, font_size=16)
     elements_object = Mesh3dElementsRenderObject(gpu, data)
 

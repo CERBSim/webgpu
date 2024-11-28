@@ -11,12 +11,14 @@ const files = [
   "mesh.py",
   "uniforms.py",
   "utils.py",
+  "lic.py",
   "shader/__init__.py",
   "shader/eval.wgsl",
   "shader/shader.wgsl",
   "shader/compute.wgsl",
   "shader/uniforms.wgsl",
   "shader/mesh.wgsl",
+  "shader/line_integral_convolution.wgsl",
 ];
 
 async function reload() {
