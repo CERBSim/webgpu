@@ -47,7 +47,7 @@ async def main():
         # geo = occ.OCCGeometry(shape)
         # mesh = geo.GenerateMesh(maxh=0.3)
 
-        mesh = unit_square.GenerateMesh(maxh=.3)
+        mesh = unit_square.GenerateMesh(maxh=0.3)
         mesh = ngs.Mesh(mesh)
 
         order = 6

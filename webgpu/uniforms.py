@@ -116,6 +116,7 @@ class MeshUniforms(UniformBase):
     def __init__(self, device, subdivision=1, shrink=1.0, **kwargs):
         super().__init__(device, subdivision=subdivision, shrink=shrink, **kwargs)
 
+
 class LineIntegralConvolutionUniforms(UniformBase):
     _binding = Binding.LINE_INTEGRAL_CONVOLUTION
     _fields_ = [
@@ -128,4 +129,10 @@ class LineIntegralConvolutionUniforms(UniformBase):
     ]
 
     def __init__(self, device, kernel_length=25, oriented=0, thickness=5, **kwargs):
-        super().__init__(device, kernel_length=kernel_length, oriented=oriented, thickness=thickness, **kwargs)
+        super().__init__(
+            device,
+            kernel_length=kernel_length,
+            oriented=oriented,
+            thickness=thickness,
+            **kwargs,
+        )
