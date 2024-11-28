@@ -56,3 +56,38 @@ fn evalTrig(id: u32, icomp: u32, lam: vec2<f32>) -> f32 {
 
     return v[0];
 }
+
+fn evalTet(id: u32, icomp: u32, lam: vec3<f32>) -> f32 {
+    // Untested (and probably wrong indexing in loop)
+    var order: i32 = i32(trig_function_values[1]);
+    let ncomp: u32 = u32(trig_function_values[0]);
+    var ndof: u32 = u32((order + 1) * (order + 2) * (order + 3) / 6);
+
+    let offset: u32 = ndof * id + VALUES_OFFSET;
+    let stride: u32 = ncomp;
+
+    var v: array<f32, 35>; // max order 4
+    for (var i: u32 = 0u; i < ndof; i++) {
+        v[i] = trig_function_values[offset + i * stride];
+    }
+
+    let dy = order + 1;
+    let dz = (order + 1) * (order + 2) / 2;
+    let b = vec4f(lam.x, lam.y, lam.z, 1.0 - lam.x - lam.y - lam.z);
+
+    for (var n = order; n > 0; n--) {
+        var iz0 = 0;
+        for (var iz = 0; iz < n; iz++) {
+            var iy0 = iz0;
+            for (var iy = 0; iy < n - iz; iy++) {
+                for (var ix = 0; ix < n - iz - iy; ix++) {
+                    v[iy0 + ix] = dot(b, vec4f(v[iy0 + ix], v[iy0 + ix + 1], v[iy0 + ix + dy - iy], v[iy0 + ix + dz - iz]));
+                }
+                iy0 += dy - iy - iz;
+            }
+            iz0 += dz - (n - 1 - iz);
+        }
+    }
+
+    return v[0];
+}
