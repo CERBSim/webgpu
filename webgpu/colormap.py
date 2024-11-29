@@ -1,4 +1,5 @@
 import js
+from webgpu.webgpu_api import TexelCopyBufferInfo, TexelCopyTextureInfo, TexelCopyBufferLayout
 
 from .uniforms import Binding
 from .utils import SamplerBinding, TextureBinding, to_js
@@ -18,25 +19,29 @@ class Colormap:
         data = [255 * x for x in data]
         data = js.Uint8Array.new(data)
 
+        print("create texture for colormap from device", device)
         self.texture = device.createTexture(
-            to_js(
-                {
-                    "dimension": "1d",
-                    "size": [n, 1, 1],
-                    "format": "rgba8unorm",
-                    "usage": js.GPUTextureUsage.TEXTURE_BINDING
-                    | js.GPUTextureUsage.COPY_DST,
-                }
-            )
+            size=[n, 1, 1],
+            usage=js.GPUTextureUsage.TEXTURE_BINDING | js.GPUTextureUsage.COPY_DST,
+            format="rgba8unorm",
+            dimension="1d",
         )
 
         device.queue.writeTexture(
-            to_js({"texture": self.texture}),
+            TexelCopyTextureInfo(self.texture),
             data,
-            to_js({"bytesPerRow": n * 4}),
+            TexelCopyBufferLayout(bytesPerRow=  n * 4),
             [n, 1, 1],
         )
 
+        # device.queue.writeTexture(
+        #     to_js({"texture": self.texture}),
+        #     data,
+        #     to_js({"bytesPerRow": n * 4}),
+        #     [n, 1, 1],
+        # )
+
+        todo: create sampler sipler interface
         self.sampler = device.createSampler(
             to_js(
                 {

@@ -3,7 +3,7 @@ import zlib
 
 from . import webgpu_api as wgpu
 from .shader import get_shader_code
-from .webgpu_api import ShaderStage
+from .webgpu_api import BufferUsage, ShaderStage
 from .webgpu_api import _to_js as to_js
 
 
@@ -187,7 +187,7 @@ class Device(wgpu.Device):
         else:
             size = len(size_or_data)
             data = size_or_data
-        buffer = self.handle.createBuffer(to_js({"size": size, "usage": usage}))
+        buffer = self.handle.createBuffer(size=size, usage= usage)
         if data is not None:
             self.handle.queue.writeBuffer(buffer, 0, js.Uint8Array.new(data))
         return buffer
@@ -230,10 +230,6 @@ class TimeQuery:
             to_js({"type": "timestamp", "count": 2})
         )
         self.buffer = self.device.createBuffer(
-            to_js(
-                {
-                    "size": 16,
-                    "usage": js.GPUBufferUsage.COPY_DST | js.GPUBufferUsage.MAP_READ,
-                }
-            )
+            size=16,
+            usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
         )

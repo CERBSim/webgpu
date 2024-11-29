@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
@@ -33,7 +34,9 @@ def _to_js(value):
 
 class BaseWebGPUObject:
     def _to_js(self):
-        return _to_js(self.__dict__)
+        return _to_js(
+            {key: value for (key, value) in self.__dict__.items() if value is not None}
+        )
 
 
 class Sampler(BaseWebGPUHandle):
@@ -683,37 +686,37 @@ class DepthStencilState(BaseWebGPUObject):
 
 @dataclass
 class Limits(BaseWebGPUObject):
-    maxTextureDimension1D: int = 0
-    maxTextureDimension2D: int = 0
-    maxTextureDimension3D: int = 0
-    maxTextureArrayLayers: int = 0
-    maxBindGroups: int = 0
-    maxBindGroupsPlusVertexBuffers: int = 0
-    maxBindingsPerBindGroup: int = 0
-    maxDynamicUniformBuffersPerPipelineLayout: int = 0
-    maxDynamicStorageBuffersPerPipelineLayout: int = 0
-    maxSampledTexturesPerShaderStage: int = 0
-    maxSamplersPerShaderStage: int = 0
-    maxStorageBuffersPerShaderStage: int = 0
-    maxStorageTexturesPerShaderStage: int = 0
-    maxUniformBuffersPerShaderStage: int = 0
-    maxUniformBufferBindingSize: int = 0
-    maxStorageBufferBindingSize: int = 0
-    minUniformBufferOffsetAlignment: int = 0
-    minStorageBufferOffsetAlignment: int = 0
-    maxVertexBuffers: int = 0
-    maxBufferSize: int = 0
-    maxVertexAttributes: int = 0
-    maxVertexBufferArrayStride: int = 0
-    maxInterStageShaderVariables: int = 0
-    maxColorAttachments: int = 0
-    maxColorAttachmentBytesPerSample: int = 0
-    maxComputeWorkgroupStorageSize: int = 0
-    maxComputeInvocationsPerWorkgroup: int = 0
-    maxComputeWorkgroupSizeX: int = 0
-    maxComputeWorkgroupSizeY: int = 0
-    maxComputeWorkgroupSizeZ: int = 0
-    maxComputeWorkgroupsPerDimension: int = 0
+    maxTextureDimension1D: int | None = None
+    maxTextureDimension2D: int | None = None
+    maxTextureDimension3D: int | None = None
+    maxTextureArrayLayers: int | None = None
+    maxBindGroups: int | None = None
+    maxBindGroupsPlusVertexBuffers: int | None = None
+    maxBindingsPerBindGroup: int | None = None
+    maxDynamicUniformBuffersPerPipelineLayout: int | None = None
+    maxDynamicStorageBuffersPerPipelineLayout: int | None = None
+    maxSampledTexturesPerShaderStage: int | None = None
+    maxSamplersPerShaderStage: int | None = None
+    maxStorageBuffersPerShaderStage: int | None = None
+    maxStorageTexturesPerShaderStage: int | None = None
+    maxUniformBuffersPerShaderStage: int | None = None
+    maxUniformBufferBindingSize: int | None = None
+    maxStorageBufferBindingSize: int | None = None
+    minUniformBufferOffsetAlignment: int | None = None
+    minStorageBufferOffsetAlignment: int | None = None
+    maxVertexBuffers: int | None = None
+    maxBufferSize: int | None = None
+    maxVertexAttributes: int | None = None
+    maxVertexBufferArrayStride: int | None = None
+    maxInterStageShaderVariables: int | None = None
+    maxColorAttachments: int | None = None
+    maxColorAttachmentBytesPerSample: int | None = None
+    maxComputeWorkgroupStorageSize: int | None = None
+    maxComputeInvocationsPerWorkgroup: int | None = None
+    maxComputeWorkgroupSizeX: int | None = None
+    maxComputeWorkgroupSizeY: int | None = None
+    maxComputeWorkgroupSizeZ: int | None = None
+    maxComputeWorkgroupsPerDimension: int | None = None
 
 
 @dataclass
@@ -723,10 +726,10 @@ class QueueDescriptor(BaseWebGPUObject):
 
 @dataclass
 class DeviceDescriptor(BaseWebGPUObject):
+    requiredFeatures: list["FeatureName"] | None = None
+    requiredLimits: Limits | None = None
+    defaultQueue: QueueDescriptor | None = None
     label: str = ""
-    requiredFeatures: list["FeatureName"] = field(default_factory=list)
-    requiredLimits: Limits = field(default_factory=Limits)
-    defaultQueue: QueueDescriptor = field(default_factory=QueueDescriptor)
 
 
 @dataclass
@@ -846,10 +849,34 @@ class RenderPipelineDescriptor(BaseWebGPUObject):
 
 @dataclass
 class RequestAdapterOptions(BaseWebGPUObject):
-    featureLevel: FeatureLevel = FeatureLevel.core
+    featureLevel: FeatureLevel | None = None
     powerPreference: "PowerPreference | None" = None
     forceFallbackAdapter: bool = False
     xrCompatible: bool = False
+
+
+async def requestAdapter(
+    featureLevel: FeatureLevel | None = None,
+    powerPreference: "PowerPreference | None" = None,
+    forceFallbackAdapter: bool = False,
+    xrCompatible: bool = False,
+) -> "Adapter":
+    if not js.navigator.gpu:
+        js.alert("WebGPU is not supported")
+        sys.exit(1)
+
+    handle = await js.navigator.gpu.requestAdapter(
+        RequestAdapterOptions(
+            featureLevel=featureLevel,
+            powerPreference=powerPreference,
+            forceFallbackAdapter=forceFallbackAdapter,
+            xrCompatible=xrCompatible,
+        )._to_js()
+    )
+    if not handle:
+        js.alert("WebGPU is not supported")
+        sys.exit(1)
+    return Adapter(handle)
 
 
 @dataclass
@@ -882,11 +909,6 @@ class StorageTextureBindingLayout(BaseWebGPUObject):
     format: TextureFormat
     access: StorageTextureAccess = StorageTextureAccess.write_only
     viewDimension: str = "2d"
-
-
-@dataclass
-class SupportedFeatures(BaseWebGPUObject):
-    features: list[FeatureName] = field(default_factory=list)
 
 
 @dataclass
@@ -970,7 +992,7 @@ class Adapter(BaseWebGPUHandle):
         return self.handle.limits
 
     @property
-    def features(self) -> SupportedFeatures:
+    def features(self) -> list[FeatureName]:
         return self.handle.features
 
     @property
@@ -981,8 +1003,23 @@ class Adapter(BaseWebGPUHandle):
     def isFallbackAdapter(self) -> bool:
         return self.handle.isFallbackAdapter
 
-    def requestDevice(self, descriptor: DeviceDescriptor) -> None:
-        return self.handle.requestDevice(descriptor._to_js())
+    async def requestDevice(
+        self,
+        requiredFeatures: list["FeatureName"] | None = None,
+        requiredLimits: Limits | None = None,
+        defaultQueue: QueueDescriptor | None = None,
+        label: str = "",
+    ) -> "Device":
+        return Device(
+            await self.handle.requestDevice(
+                DeviceDescriptor(
+                    requiredFeatures=requiredFeatures,
+                    requiredLimits=requiredLimits._to_js() if requiredLimits else None,
+                    defaultQueue=defaultQueue,
+                    label=label,
+                )._to_js()
+            )
+        )
 
 
 class Buffer(BaseWebGPUHandle):
@@ -1142,8 +1179,18 @@ class Device(BaseWebGPUHandle):
     ) -> "BindGroupLayout":
         return self.handle.createBindGroupLayout(descriptor._to_js())
 
-    def createBuffer(self, descriptor: BufferDescriptor) -> Buffer:
-        return self.handle.createBuffer(descriptor._to_js())
+    def createBuffer(
+        self,
+        size: int,
+        usage: BufferUsage,
+        mappedAtCreation: bool = False,
+        label: str = "",
+    ) -> Buffer:
+        return self.handle.createBuffer(
+            BufferDescriptor(
+                size=size, usage=usage, mappedAtCreation=mappedAtCreation, label=label
+            )._to_js()
+        )
 
     def createCommandEncoder(
         self, descriptor: CommandEncoderDescriptor
@@ -1198,19 +1245,17 @@ class Device(BaseWebGPUHandle):
         viewFormats: list["TextureFormat"] | None = None,
         label: str = "",
     ) -> "Texture":
-        return Texture(
-            self.handle.createTexture(
-                TextureDescriptor(
-                    size=size,
-                    usage=usage,
-                    format=format,
-                    sampleCount=sampleCount,
-                    dimension=dimension,
-                    mipLevelCount=mipLevelCount,
-                    viewFormats=viewFormats,
-                    label=label,
-                )._to_js()
-            )
+        return self.handle.createTexture(
+            TextureDescriptor(
+                size=size,
+                usage=usage,
+                format=format,
+                sampleCount=sampleCount,
+                dimension=dimension,
+                mipLevelCount=mipLevelCount,
+                viewFormats=viewFormats,
+                label=label,
+            )._to_js()
         )
 
     def destroy(self) -> None:
@@ -1221,7 +1266,7 @@ class Device(BaseWebGPUHandle):
         return self.handle.limits
 
     @property
-    def features(self) -> SupportedFeatures:
+    def features(self) -> list[FeatureName]:
         return self.handle.features
 
     @property

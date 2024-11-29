@@ -2,36 +2,23 @@ import sys
 
 import js
 
+from . import utils
 from .colormap import Colormap
 from .input_handler import InputHandler
 from .uniforms import (
-    ViewUniforms,
-    MeshUniforms,
-    FunctionUniforms,
-    FontUniforms,
     ClippingUniforms,
+    FontUniforms,
+    FunctionUniforms,
+    MeshUniforms,
+    ViewUniforms,
 )
-from .utils import to_js, Device
+from .utils import to_js
+from .webgpu_api import *
 
 
 async def init_webgpu(canvas):
     """Initialize WebGPU, create device and canvas"""
-    if not js.navigator.gpu:
-        js.alert("WebGPU is not supported")
-        sys.exit(1)
-
-    adapter = await js.navigator.gpu.requestAdapter(
-        to_js(
-            {
-                # "powerPreference": "high-performance",
-                "powerPreference": "low-power",
-            }
-        )
-    )
-
-    if not adapter:
-        js.alert("WebGPU is not supported")
-        sys.exit(1)
+    adapter = await requestAdapter(powerPreference=PowerPreference.low_power)
 
     required_features = []
     if adapter.features.has("timestamp-query"):
@@ -43,15 +30,9 @@ async def init_webgpu(canvas):
     one_meg = 1024**2
     one_gig = 1024**3
     device = await adapter.requestDevice(
-        to_js(
-            {
-                "powerPreference": "high-performance",
-                "requiredLimits": {
-                    "maxBufferSize": one_gig - 16,
-                    "maxStorageBufferBindingSize": one_gig - 16,
-                },
-                "requiredFeatures": required_features,
-            }
+        requiredLimits=Limits(
+            maxBufferSize=one_gig - 16,
+            maxStorageBufferBindingSize=one_gig - 16,
         )
     )
     js.console.log("device limits\n", device.limits)
@@ -63,7 +44,7 @@ async def init_webgpu(canvas):
     )
     print("max buffer size", device.limits.maxBufferSize / one_meg)
 
-    return WebGPU(device, canvas)
+    return WebGPU(utils.Device(device.handle), canvas)
 
 
 class WebGPU:
@@ -73,7 +54,7 @@ class WebGPU:
         self._is_first_render_pass = True
         self.render_function = None
         self.native_device = device
-        self.device = Device(device)
+        self.device = device
         self.format = js.navigator.gpu.getPreferredCanvasFormat()
         self.canvas = canvas
 
@@ -90,7 +71,7 @@ class WebGPU:
         self.context.configure(
             to_js(
                 {
-                    "device": device,
+                    "device": device.handle,
                     "format": self.format,
                     "alphaMode": "premultiplied",
                 }
@@ -105,13 +86,9 @@ class WebGPU:
         }
 
         self.depth_texture = device.createTexture(
-            to_js(
-                {
-                    "size": [canvas.width, canvas.height, 1],
-                    "format": self.depth_format,
-                    "usage": js.GPUTextureUsage.RENDER_ATTACHMENT,
-                }
-            )
+            size=[canvas.width, canvas.height, 1],
+            format=self.depth_format,
+            usage=js.GPUTextureUsage.RENDER_ATTACHMENT,
         )
         self.input_handler = InputHandler(canvas, self.u_view)
 
