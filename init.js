@@ -54,7 +54,7 @@ async function main() {
   pyodide.setDebug(true);
   console.log("loaded pyodide", performance.now());
   console.log(pyodide);
-  await pyodide.loadPackage(["netgen", "ngsolve", "packaging", "numpy", "pydantic"]);
+  await pyodide.loadPackage(["netgen", "ngsolve", "packaging", "numpy"]);
   console.log("loaded netgen", performance.now());
 
   try {
