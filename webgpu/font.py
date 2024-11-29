@@ -3,8 +3,11 @@ import json
 import os
 import zlib
 
+from .utils import Device
+from .webgpu_api import *
 
-def create_font_texture(device, size: int = 15):
+
+def create_font_texture(device: Device, size: int = 15):
     import js
 
     from .utils import to_js
@@ -32,22 +35,17 @@ def create_font_texture(device, size: int = 15):
     h = font["height"]
 
     tex_width = w * (127 - 32)
-    print("Font size:", tex_width, h)
-    print("data size:", len(data))
-    print("data / tex_width:", len(data) / tex_width)
-    print("Font texture size:", tex_width, h)
-    texture = device.create_texture(
-        {
-            "dimension": "2d",
-            "size": [tex_width, h, 1],
-            "format": "r8unorm",
-            "usage": js.GPUTextureUsage.TEXTURE_BINDING | js.GPUTextureUsage.COPY_DST,
-        }
+
+    texture = device.createTexture(
+        size=[tex_width, h, 1],
+        usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
+        format=TextureFormat.r8unorm,
+        label="font",
     )
-    device.write_texture(
-        texture,
+    device.queue.writeTexture(
+        TexelCopyTextureInfo(texture),
         data,
-        bytes_per_row=tex_width,
+        TexelCopyBufferLayout(bytesPerRow=tex_width),
         size=[tex_width, h, 1],
     )
 

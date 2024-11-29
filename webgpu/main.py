@@ -12,6 +12,15 @@ from .gpu import WebGPU, init_webgpu
 from .mesh import *
 from .lic import LineIntegralConvolutionRenderObject
 
+from .webgpu_api import BackendType, RenderPassEncoder, ColorTargetState
+
+# s = ColorTargetState()
+# print("BackendType", BackendType)
+# print("ColorTargetState", s)
+
+def f(encoder: RenderPassEncoder):
+    return
+
 gpu: WebGPU = None
 mesh_object: RenderObject = None
 
@@ -23,6 +32,7 @@ async def main():
     global gpu, mesh_object, cf, render_function
 
     gpu = await init_webgpu(js.document.getElementById("canvas"))
+    print("DEVICE", dir(gpu.native_device))
 
     point_number_object = None
 
@@ -50,7 +60,7 @@ async def main():
         mesh = unit_square.GenerateMesh(maxh=0.3)
         mesh = ngs.Mesh(mesh)
 
-        order = 3
+        order = 6
         cf = cf or ngs.sin(10 * ngs.x) * ngs.sin(10 * ngs.y)
         # cf = ngs.x
         data = MeshData(mesh, cf, order)
@@ -66,8 +76,8 @@ async def main():
         gpu.u_function.min = 0
         gpu.u_function.max = 1
 
-    lic = LineIntegralConvolutionRenderObject(gpu, 1000, 800)
-    print("LIC", lic)
+    # lic = LineIntegralConvolutionRenderObject(gpu, 1000, 800)
+    # print("LIC", lic)
 
     mesh_object = MeshRenderObject(gpu, data)
     # mesh_object = MeshRenderObjectIndexed(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
@@ -75,7 +85,7 @@ async def main():
     #     gpu, data
     # )  # function values are wrong, due to ngsolve vertex numbering order
     point_number_object = PointNumbersRenderObject(gpu, data, font_size=16)
-    elements_object = Mesh3dElementsRenderObject(gpu, data)
+    # elements_object = Mesh3dElementsRenderObject(gpu, data)
 
     t_last = 0
     fps = 0

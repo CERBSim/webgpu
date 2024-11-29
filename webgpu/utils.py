@@ -1,8 +1,10 @@
 import base64
 import zlib
-from pathlib import Path
 
+from . import webgpu_api as wgpu
 from .shader import get_shader_code
+from .webgpu_api import ShaderStage
+from .webgpu_api import _to_js as to_js
 
 
 def encode_bytes(data: bytes) -> str:
@@ -17,24 +19,16 @@ def decode_bytes(data: str) -> bytes:
     return zlib.decompress(base64.b64decode(data.encode()))
 
 
-class ShaderStage:
-    VERTEX = 0x1
-    FRAGMENT = 0x2
-    COMPUTE = 0x4
-    ALL = VERTEX | FRAGMENT | COMPUTE
-
-
-def to_js(value):
-    import js
-    from pyodide.ffi import to_js as _to_js
-
-    return _to_js(value, dict_converter=js.Object.fromEntries)
-
-
-# any object that has a binding number (uniform, storage buffer, texture etc.)
 class BaseBinding:
+    """Base class for any object that has a binding number (uniform, storage buffer, texture etc.)"""
+
     def __init__(
-        self, nr, visibility=ShaderStage.ALL, resource=None, layout=None, binding=None
+        self,
+        nr,
+        visibility=ShaderStage.ALL,
+        resource=None,
+        layout=None,
+        binding=None,
     ):
         self.nr = nr
         self.visibility = visibility
@@ -135,12 +129,12 @@ class BufferBinding(BaseBinding):
         )
 
 
-class Device:
+class Device(wgpu.Device):
     """Helper class to wrap device functions"""
 
-    def __init__(self, device):
-        self.device = device
-        self.shader_module = self.comple_shader()
+    @property
+    def shader_module(self):
+        return self.compile_shader()
 
     def create_bind_group(self, bindings: list, label=""):
         """creates bind group layout and bind group from a list of BaseBinding objects"""
@@ -150,8 +144,8 @@ class Device:
             layouts.append(binding.layout)
             resources.append(binding.binding)
 
-        layout = self.device.createBindGroupLayout(to_js({"entries": layouts}))
-        group = self.device.createBindGroup(
+        layout = self.handle.createBindGroupLayout(to_js({"entries": layouts}))
+        group = self.handle.createBindGroup(
             to_js(
                 {
                     "label": label,
@@ -163,7 +157,7 @@ class Device:
         return layout, group
 
     def create_pipeline_layout(self, binding_layout, label=""):
-        return self.device.createPipelineLayout(
+        return self.handle.createPipelineLayout(
             to_js({"label": label, "bindGroupLayouts": [binding_layout]})
         )
 
@@ -171,13 +165,13 @@ class Device:
         options["layout"] = self.create_pipeline_layout(
             binding_layout, label=options.get("label", "")
         )
-        return self.device.createRenderPipeline(to_js(options))
+        return self.handle.createRenderPipeline(to_js(options))
 
     def create_compute_pipeline(self, binding_layout, options: dict):
         options["layout"] = self.create_pipeline_layout(
             binding_layout, label=options.get("label", "")
         )
-        return self.device.createComputePipeline(to_js(options))
+        return self.handle.createComputePipeline(to_js(options))
 
     def create_buffer(self, size_or_data: int | bytes, usage=None):
         import js
@@ -193,15 +187,15 @@ class Device:
         else:
             size = len(size_or_data)
             data = size_or_data
-        buffer = self.device.createBuffer(to_js({"size": size, "usage": usage}))
+        buffer = self.handle.createBuffer(to_js({"size": size, "usage": usage}))
         if data is not None:
-            self.device.queue.writeBuffer(buffer, 0, js.Uint8Array.new(data))
+            self.handle.queue.writeBuffer(buffer, 0, js.Uint8Array.new(data))
         return buffer
 
     def write_buffer(self, buffer, data: bytes, offset=0):
         import js
 
-        self.device.queue.writeBuffer(buffer, offset, js.Uint8Array.new(data))
+        self.handle.queue.writeBuffer(buffer, offset, js.Uint8Array.new(data))
 
     def data_to_buffers(self, data: dict):
         buffers = {}
@@ -210,18 +204,36 @@ class Device:
         return buffers
 
     def create_texture(self, options: dict):
-        return self.device.createTexture(to_js(options))
+        return self.handle.createTexture(to_js(options))
 
     def write_texture(self, texture, data: bytes, bytes_per_row: int, size: list):
         import js
 
-        return self.device.queue.writeTexture(
+        return self.handle.queue.writeTexture(
             to_js({"texture": texture}),
             js.Uint8Array.new(data),
             to_js({"bytesPerRow": bytes_per_row}),
             size,
         )
 
-    def comple_shader(self):
+    def compile_shader(self):
         code = get_shader_code()
-        return self.device.createShaderModule(to_js({"code": code}))
+        return self.handle.createShaderModule(to_js({"code": code}))
+
+
+class TimeQuery:
+    def __init__(self, device):
+        import js
+
+        self.device = device
+        self.query_set = self.device.createQuerySet(
+            to_js({"type": "timestamp", "count": 2})
+        )
+        self.buffer = self.device.createBuffer(
+            to_js(
+                {
+                    "size": 16,
+                    "usage": js.GPUBufferUsage.COPY_DST | js.GPUBufferUsage.MAP_READ,
+                }
+            )
+        )

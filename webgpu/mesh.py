@@ -16,6 +16,7 @@ from .utils import (
     encode_bytes,
     to_js,
 )
+from .webgpu_api import TextureDescriptor, TextureFormat, TextureUsage
 
 
 class _eltype:
@@ -207,21 +208,18 @@ class MeshRenderObjectDeferred(RenderObject):
     because the function values are only evaluated for the pixels that are visible.
     """
 
-    _g_buffer_format = "rgba32float"
+    _g_buffer_format = (TextureFormat.rgba32float,)
     _g_buffer = None
 
     def on_resize(self):
         # texture to store g-buffer (trig index and barycentric coordinates)
         import js
 
-        self._g_buffer = self.device.create_texture(
-            {
-                "label": "gBufferLam",
-                "size": [self.gpu.canvas.width, self.gpu.canvas.height],
-                "usage": js.GPUTextureUsage.RENDER_ATTACHMENT
-                | js.GPUTextureUsage.TEXTURE_BINDING,
-                "format": self._g_buffer_format,
-            }
+        self.g_buffer = self.device.createTexture(
+            size=[self.gpu.canvas.width, self.gpu.canvas.height, 1],
+            usage=TextureUsage.TEXTURE_BINDING | TextureUsage.RENDER_ATTACHMENT,
+            format=self._g_buffer_format,
+            label="gBufferLam",
         )
 
     def get_bindings_pass1(self):

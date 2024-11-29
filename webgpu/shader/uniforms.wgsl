@@ -61,6 +61,10 @@
 @group(0) @binding(52) var<storage, read_write> create_mesh_vertex_buffer : array<f32>;
 @group(0) @binding(53) var<storage, read_write> create_mesh_index_buffer : array<u32>;
 
+// 3d mesh clipping
+@group(0) @binding(60) var<storage,read_write> clipping_trig_counter: atomic<u32>;
+@group(0) @binding(61) var<storage,read_write> clpping_triangles: array<ClippingTrig>;
+
 // general uniform structures
 struct ViewUniforms {
   model_view: mat4x4<f32>,
@@ -134,3 +138,7 @@ struct EdgeP1 { p: array<f32, 6> };
 struct TrigP1 { p: array<f32, 9>, index: i32 }; // 3 vertices with 3 coordinates each, don't use vec3 due to 16 byte alignment
 struct TrigP2 { p: array<f32, 18>, index: i32 };
 
+struct ClippingTrig {
+  nr: u32,            // volume element number
+  lam: array<f32, 9>, // 3 vertices with 3 barycentric coordinates each
+};

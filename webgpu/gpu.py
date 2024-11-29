@@ -23,7 +23,8 @@ async def init_webgpu(canvas):
     adapter = await js.navigator.gpu.requestAdapter(
         to_js(
             {
-                "powerPreference": "high-performance",
+                # "powerPreference": "high-performance",
+                "powerPreference": "low-power",
             }
         )
     )
@@ -36,6 +37,8 @@ async def init_webgpu(canvas):
     if adapter.features.has("timestamp-query"):
         print("have timestamp query")
         required_features.append("timestamp-query")
+    else:
+        print("no timestamp query")
 
     one_meg = 1024**2
     one_gig = 1024**3
@@ -163,7 +166,11 @@ class WebGPU:
 
     def __del__(self):
         self.depth_texture.destroy()
-        del self.uniforms
+        del self.u_view
+        del self.u_clipping
+        del self.u_font
+        del self.u_function
+        del self.u_mesh
         del self.colormap
 
         # unregister is needed to remove circular references

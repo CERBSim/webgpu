@@ -24,11 +24,20 @@ class NoCacheHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 
 def run_http_server():
+    running = False
     PORT = 8000
-    Handler = NoCacheHTTPRequestHandler
-    httpd = socketserver.TCPServer(("", PORT), Handler)
-    print(f"Serving HTTP on port {PORT}")
-    httpd.serve_forever()
+    while not running:
+        try:
+            Handler = NoCacheHTTPRequestHandler
+            httpd = socketserver.TCPServer(("", PORT), Handler)
+            print(f"Serving HTTP on port {PORT}")
+            httpd.serve_forever()
+            running = True
+        except OSError as e:
+            if e.errno == 98:
+                PORT += 1
+            else:
+                raise
 
 
 clients = set()

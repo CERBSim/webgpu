@@ -61,6 +61,7 @@ class UniformBase(ct.Structure):
         return [UniformBinding(self._binding, self._buffer)]
 
     def __del__(self):
+        print("delete uniform", type(self).__name__)
         self._buffer.destroy()
 
 

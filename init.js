@@ -12,6 +12,7 @@ const files = [
   "uniforms.py",
   "utils.py",
   "lic.py",
+  "webgpu_api.py",
   "shader/__init__.py",
   "shader/eval.wgsl",
   "shader/shader.wgsl",
@@ -53,7 +54,7 @@ async function main() {
   pyodide.setDebug(true);
   console.log("loaded pyodide", performance.now());
   console.log(pyodide);
-  await pyodide.loadPackage(["netgen", "ngsolve", "packaging", "numpy"]);
+  await pyodide.loadPackage(["netgen", "ngsolve", "packaging", "numpy", "pydantic"]);
   console.log("loaded netgen", performance.now());
 
   try {
