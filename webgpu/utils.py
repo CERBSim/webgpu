@@ -3,8 +3,8 @@ import zlib
 
 from . import webgpu_api as wgpu
 from .shader import get_shader_code
-from .webgpu_api import BufferUsage, ShaderStage
-from .webgpu_api import _to_js as to_js
+from .webgpu_api import *
+from .webgpu_api import toJS as to_js
 
 
 def encode_bytes(data: bytes) -> str:
@@ -128,33 +128,29 @@ class BufferBinding(BaseBinding):
             resource={"buffer": buffer},
         )
 
+def create_bind_group(device, bindings: list, label=""):
+    """creates bind group layout and bind group from a list of BaseBinding objects"""
+    layouts = []
+    resources = []
+    for binding in bindings:
+        layouts.append(BindGroupLayoutEntry(**binding.layout))
+        resources.append(BindGroupEntry(**binding.binding))
+
+    layout = device.createBindGroupLayout(entries=layouts, label=label)
+    group = device.createBindGroup(
+        label=label,
+        layout=layout,
+        entries=resources,
+    )
+    return layout, group
 
 class Device(wgpu.Device):
     """Helper class to wrap device functions"""
 
     @property
     def shader_module(self):
-        return self.compile_shader()
-
-    def create_bind_group(self, bindings: list, label=""):
-        """creates bind group layout and bind group from a list of BaseBinding objects"""
-        layouts = []
-        resources = []
-        for binding in bindings:
-            layouts.append(binding.layout)
-            resources.append(binding.binding)
-
-        layout = self.handle.createBindGroupLayout(to_js({"entries": layouts}))
-        group = self.handle.createBindGroup(
-            to_js(
-                {
-                    "label": label,
-                    "layout": layout,
-                    "entries": resources,
-                }
-            )
-        )
-        return layout, group
+        code = get_shader_code()
+        return self.createShaderModule(code)
 
     def create_pipeline_layout(self, binding_layout, label=""):
         return self.handle.createPipelineLayout(
@@ -187,38 +183,10 @@ class Device(wgpu.Device):
         else:
             size = len(size_or_data)
             data = size_or_data
-        buffer = self.handle.createBuffer(size=size, usage= usage)
+        buffer = self.handle.createBuffer(size=size, usage=usage)
         if data is not None:
             self.handle.queue.writeBuffer(buffer, 0, js.Uint8Array.new(data))
         return buffer
-
-    def write_buffer(self, buffer, data: bytes, offset=0):
-        import js
-
-        self.handle.queue.writeBuffer(buffer, offset, js.Uint8Array.new(data))
-
-    def data_to_buffers(self, data: dict):
-        buffers = {}
-        for name, value in data.items():
-            buffers[name] = self.create_buffer(value)
-        return buffers
-
-    def create_texture(self, options: dict):
-        return self.handle.createTexture(to_js(options))
-
-    def write_texture(self, texture, data: bytes, bytes_per_row: int, size: list):
-        import js
-
-        return self.handle.queue.writeTexture(
-            to_js({"texture": texture}),
-            js.Uint8Array.new(data),
-            to_js({"bytesPerRow": bytes_per_row}),
-            size,
-        )
-
-    def compile_shader(self):
-        code = get_shader_code()
-        return self.handle.createShaderModule(to_js({"code": code}))
 
 
 class TimeQuery:

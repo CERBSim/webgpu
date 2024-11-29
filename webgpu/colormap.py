@@ -1,8 +1,8 @@
-import js
-from webgpu.webgpu_api import TexelCopyBufferInfo, TexelCopyTextureInfo, TexelCopyBufferLayout
+
+from webgpu.webgpu_api import TexelCopyBufferLayout, TexelCopyTextureInfo, TextureUsage, TextureFormat
 
 from .uniforms import Binding
-from .utils import SamplerBinding, TextureBinding, to_js
+from .utils import SamplerBinding, TextureBinding
 
 
 class Colormap:
@@ -17,40 +17,24 @@ class Colormap:
         data[3 * 4 : 4 * 4 - 1] = [1, 1, 0]
         data[4 * 4 : 5 * 4 - 1] = [1, 0, 0]
         data = [255 * x for x in data]
-        data = js.Uint8Array.new(data)
 
-        print("create texture for colormap from device", device)
         self.texture = device.createTexture(
             size=[n, 1, 1],
-            usage=js.GPUTextureUsage.TEXTURE_BINDING | js.GPUTextureUsage.COPY_DST,
-            format="rgba8unorm",
+            usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
+            format=TextureFormat.rgba8unorm,
             dimension="1d",
         )
 
         device.queue.writeTexture(
             TexelCopyTextureInfo(self.texture),
             data,
-            TexelCopyBufferLayout(bytesPerRow=  n * 4),
+            TexelCopyBufferLayout(bytesPerRow=n * 4),
             [n, 1, 1],
         )
 
-        # device.queue.writeTexture(
-        #     to_js({"texture": self.texture}),
-        #     data,
-        #     to_js({"bytesPerRow": n * 4}),
-        #     [n, 1, 1],
-        # )
-
-        todo: create sampler sipler interface
         self.sampler = device.createSampler(
-            to_js(
-                {
-                    "magFilter": "linear",
-                    "minFilter": "linear",
-                    "addressModeU": "clamp-to-edge",
-                    "addressModeV": "clamp-to-edge",
-                }
-            )
+            magFilter="linear",
+            minFilter="linear",
         )
 
     def get_bindings(self):
@@ -60,4 +44,4 @@ class Colormap:
         ]
 
     def __del__(self):
-        self.texture.destroy()
+        del self.texture

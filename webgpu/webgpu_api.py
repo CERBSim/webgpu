@@ -1,9 +1,36 @@
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
-import js
-import pyodide.ffi
+try:
+    import js
+    import pyodide.ffi
+
+except ImportError:
+    # Mocks for linting
+    class js:
+        class Object:
+            @staticmethod
+            def fromEntries(**kwargs):
+                return dict(**kwargs)
+
+    class pyodide:
+        class ffi:
+            class JsProxy:
+                pass
+
+            class JsPromise:
+                pass
+
+            @staticmethod
+            def to_js(
+                value,
+                dict_converter=None,
+                default_converter=None,
+                create_pyproxies=True,
+            ):
+                return value
 
 
 class BaseWebGPUHandle:
@@ -12,31 +39,68 @@ class BaseWebGPUHandle:
     def __init__(self, handle):
         self.handle = handle
 
+    def destroy(self):
+        pass
+
+    def __del__(self):
+        self.destroy()
 
 def _default_converter(value, a, b):
     if isinstance(value, BaseWebGPUHandle):
-        return value.handle
+        return pyodide.ffi.to_js(value.handle)
     if isinstance(value, BaseWebGPUObject):
         return value.__dict__
 
 
-def _to_js(value):
-    print("convert", value)
+def _convert(d):
+    if d is None:
+        return None
+    if isinstance(d, BaseWebGPUHandle):
+        return d.handle
+    if isinstance(d, BaseWebGPUObject):
+        return _convert(d.__dict__) if d.__dict__ else None
+    if isinstance(d, Mapping):
+        if not d:
+            return None
+        ret = {}
+        for key in d:
+            value = _convert(d[key])
+            if value is not None:
+                ret[key] = value
+        return ret
+
+    if isinstance(d, list):
+        return [_convert(value) for value in d]
+    return d
+
+
+def toJS(value):
+    # print("convert", value)
+    value = _convert(value)
     ret = pyodide.ffi.to_js(
         value,
         dict_converter=js.Object.fromEntries,
         default_converter=_default_converter,
         create_pyproxies=False,
     )
-    js.console.log("ret", ret)
+    # js.console.log("ret", ret)
     return ret
 
+def fromJS(obj):
+    if type(obj) in [str, int, float, bool]:
+        return obj
+    print("fromJS", obj)
+    print("dir", dir(obj))
+    print("object_keys", obj.object_keys())
+    print("object_keys", obj.object_values())
+    print("object_map", obj.as_object_map())
+    return dict(obj)
+
+    return {key: obj[key] for key in obj.object_keys()}
 
 class BaseWebGPUObject:
-    def _to_js(self):
-        return _to_js(
-            {key: value for (key, value) in self.__dict__.items() if value is not None}
-        )
+    def toJS(self):
+        return toJS(self.__dict__)
 
 
 class Sampler(BaseWebGPUHandle):
@@ -65,6 +129,10 @@ class RenderBundle(BaseWebGPUHandle):
 
 class TextureView(BaseWebGPUHandle):
     pass
+
+
+class AutoLayoutMode(str, Enum):
+    auto = "auto"
 
 
 class AdapterType(str, Enum):
@@ -199,10 +267,10 @@ class FeatureLevel(str, Enum):
     core = "core"
 
 
-class FeatureName(str, Enum):
+class FeatureName(str):
     undefined = "undefined"
     depth_clip_control = "depth-clip-control"
-    depth32_float_stencil8 = "depth32-float-stencil8"
+    depth32_float_stencil8 = "depth32float-stencil8"
     timestamp_query = "timestamp-query"
     texture_compression_BC = "texture-compression-BC"
     texture_compression_BC_sliced_3D = "texture-compression-BC-sliced-3D"
@@ -211,8 +279,8 @@ class FeatureName(str, Enum):
     texture_compression_ASTC_sliced_3D = "texture-compression-ASTC-sliced-3D"
     indirect_first_instance = "indirect-first-instance"
     shader_f16 = "shader-f16"
-    RG11B10_ufloat_renderable = "RG11B10-ufloat-renderable"
-    BGRA8_unorm_storage = "BGRA8-unorm-storage"
+    rg11b10ufloat_renderable = "rg11b10ufloat-renderable"
+    bgra8unorm_storage = "bgra8unorm-storage"
     float32_filterable = "float32-filterable"
     float32_blendable = "float32-blendable"
     clip_distances = "clip-distances"
@@ -269,6 +337,18 @@ class QueryType(str, Enum):
     occlusion = "occlusion"
     timestamp = "timestamp"
 
+
+class QuerySet(BaseWebGPUHandle):
+    @property
+    def type(self) -> QueryType:
+        return self.handle.type()
+
+    @property
+    def count(self) -> int:
+        return self.handle.count()
+
+    def destroy(self) -> None:
+        return self.handle.destroy()
 
 class SamplerBindingType(str, Enum):
     filtering = "filtering"
@@ -494,16 +574,16 @@ class VertexStepMode(str, Enum):
 
 class BufferUsage(IntFlag):
     NONE = 0
-    MAP_READ = 1
-    MAP_WRITE = 2
-    COPY_SRC = 4
-    COPY_DST = 8
-    INDEX = 16
-    VERTEX = 32
-    UNIFORM = 64
-    STORAGE = 128
-    INDIRECT = 256
-    QUERY_RESOLVE = 512
+    MAP_READ = 0x01
+    MAP_WRITE = 0x02
+    COPY_SRC = 0x04
+    COPY_DST = 0x08
+    INDEX = 0x10
+    VERTEX = 0x20
+    UNIFORM = 0x40
+    STORAGE = 0x80
+    INDIRECT = 0x100
+    QUERY_RESOLVE = 0x200
 
 
 class ColorWriteMask(IntFlag):
@@ -512,7 +592,7 @@ class ColorWriteMask(IntFlag):
     GREEN = 2
     BLUE = 4
     ALPHA = 8
-    ALL = 16
+    ALL = 15
 
 
 class MapMode(IntFlag):
@@ -547,16 +627,16 @@ class AdapterInfo(BaseWebGPUObject):
 
 
 @dataclass
-class BindGroupDescriptor(BaseWebGPUObject):
-    layout: "BindGroupLayout"
-    entries: list["BindGroupEntry"] = field(default_factory=list)
-    label: str = ""
-
-
-@dataclass
 class BindGroupEntry(BaseWebGPUObject):
     binding: int
     resource: "Sampler | TextureView | Buffer"
+
+
+@dataclass
+class BindGroupDescriptor(BaseWebGPUObject):
+    layout: BindGroupLayout
+    entries: list[BindGroupEntry] = field(default_factory=list)
+    label: str = ""
 
 
 @dataclass
@@ -614,7 +694,7 @@ class Color(BaseWebGPUObject):
 @dataclass
 class ColorTargetState(BaseWebGPUObject):
     format: TextureFormat
-    blend: BlendState
+    blend: BlendState | None = None
     writeMask: ColorWriteMask = ColorWriteMask.ALL
 
 
@@ -743,7 +823,7 @@ class Extent3d(BaseWebGPUObject):
 class FragmentState(BaseWebGPUObject):
     module: "ShaderModule | None" = None
     entryPoint: str = ""
-    targets: list["ColorTargetState"] = field(default_factory=list)
+    targets: list[ColorTargetState] = field(default_factory=list)
 
 
 @dataclass
@@ -796,7 +876,7 @@ class RenderBundleDescriptor(BaseWebGPUObject):
 
 @dataclass
 class RenderBundleEncoderDescriptor(BaseWebGPUObject):
-    colorFormats: list["TextureFormat"]
+    colorFormats: list[TextureFormat]
     depthStencilFormat: TextureFormat
     sampleCount: int = 1
     depthReadOnly: bool = False
@@ -806,24 +886,24 @@ class RenderBundleEncoderDescriptor(BaseWebGPUObject):
 
 @dataclass
 class RenderPassColorAttachment(BaseWebGPUObject):
-    view: "TextureView"
-    resolveTarget: "TextureView"
-    loadOp: LoadOp = LoadOp.clear
+    view: TextureView
+    resolveTarget: TextureView | None = None
+    loadOp: LoadOp = LoadOp.load
     storeOp: StoreOp = StoreOp.store
     clearValue: Color = field(default_factory=Color)
-    depthSlice: int = 0
+    depthSlice: int | None = None
 
 
 @dataclass
 class RenderPassDepthStencilAttachment(BaseWebGPUObject):
-    view: "TextureView"
+    view: TextureView
     depthLoadOp: LoadOp = LoadOp.load
     depthStoreOp: StoreOp = StoreOp.store
     depthClearValue: float = 0.0
     depthReadOnly: bool = False
     stencilClearValue: int = 0
-    stencilLoadOp: LoadOp = LoadOp.load
-    stencilStoreOp: StoreOp = StoreOp.store
+    stencilLoadOp: LoadOp | None = None
+    stencilStoreOp: StoreOp | None = None
     stencilReadOnly: bool = False
 
 
@@ -838,12 +918,12 @@ class RenderPassDescriptor(BaseWebGPUObject):
 
 @dataclass
 class RenderPipelineDescriptor(BaseWebGPUObject):
-    layout: "PipelineLayout"
+    layout: PipelineLayout | AutoLayoutMode
     vertex: "VertexState"
     fragment: "FragmentState"
     depthStencil: "DepthStencilState"
-    primitive: "PrimitiveState" = field(default_factory=PrimitiveState)
-    multisample: "MultisampleState" = field(default_factory=MultisampleState)
+    primitive: PrimitiveState = field(default_factory=PrimitiveState)
+    multisample: MultisampleState = field(default_factory=MultisampleState)
     label: str = ""
 
 
@@ -871,7 +951,7 @@ async def requestAdapter(
             powerPreference=powerPreference,
             forceFallbackAdapter=forceFallbackAdapter,
             xrCompatible=xrCompatible,
-        )._to_js()
+        ).toJS()
     )
     if not handle:
         js.alert("WebGPU is not supported")
@@ -900,7 +980,15 @@ class SamplerDescriptor(BaseWebGPUObject):
 
 
 @dataclass
+class ShaderModuleCompilationHint(BaseWebGPUObject):
+    entryPoint: str
+    layout: PipelineLayout | AutoLayoutMode
+
+
+@dataclass
 class ShaderModuleDescriptor(BaseWebGPUObject):
+    code: str
+    compilationHints: list["ShaderModuleCompilationHint"] = field(default_factory=list)
     label: str = ""
 
 
@@ -993,7 +1081,7 @@ class Adapter(BaseWebGPUHandle):
 
     @property
     def features(self) -> list[FeatureName]:
-        return self.handle.features
+        return [FeatureName(f) for f in self.handle.features]
 
     @property
     def info(self) -> AdapterInfo:
@@ -1014,10 +1102,10 @@ class Adapter(BaseWebGPUHandle):
             await self.handle.requestDevice(
                 DeviceDescriptor(
                     requiredFeatures=requiredFeatures,
-                    requiredLimits=requiredLimits._to_js() if requiredLimits else None,
+                    requiredLimits=requiredLimits.toJS() if requiredLimits else None,
                     defaultQueue=defaultQueue,
                     label=label,
-                )._to_js()
+                ).toJS()
             )
         )
 
@@ -1033,7 +1121,7 @@ class Buffer(BaseWebGPUHandle):
         return self.handle.getConstMappedRange(offset, size)
 
     @property
-    def usage(self) -> "BufferUsage":
+    def usage(self) -> BufferUsage:
         return self.handle.usage
 
     @property
@@ -1041,27 +1129,56 @@ class Buffer(BaseWebGPUHandle):
         return self.handle.size
 
     @property
-    def mapState(self) -> "BufferMapState":
+    def mapState(self) -> BufferMapState:
         return self.handle.mapState
 
     def unmap(self) -> None:
-        return self.handle.unmap()
+        self.handle.unmap()
 
     def destroy(self) -> None:
-        return self.handle.destroy()
-
+        self.handle.destroy()
 
 class CommandEncoder(BaseWebGPUHandle):
-    def finish(self, descriptor: CommandBufferDescriptor) -> "CommandBuffer":
-        return self.handle.finish(descriptor._to_js())
+    _first_render_pass: bool = True
+
+    def __init__(self, handle):
+        super().__init__(handle)
+        self._first_render_pass = True
+
+    def getLoadOp(self) -> LoadOp:
+        if self._first_render_pass:
+            self._first_render_pass = False
+            return LoadOp.clear
+        return LoadOp.load
+
+    def finish(self, label: str = "") -> "CommandBuffer":
+        return self.handle.finish(CommandBufferDescriptor(label=label).toJS())
 
     def beginComputePass(
-        self, descriptor: ComputePassDescriptor
+        self, timestampWrites: PassTimestampWrites | None = None, label: str = ""
     ) -> "ComputePassEncoder":
-        return self.handle.beginComputePass(descriptor._to_js())
+        return self.handle.beginComputePass(
+            ComputePassDescriptor(timestampWrites=timestampWrites, label=label).toJS()
+        )
 
-    def beginRenderPass(self, descriptor: RenderPassDescriptor) -> "RenderPassEncoder":
-        return self.handle.beginRenderPass(descriptor._to_js())
+    def beginRenderPass(
+        self,
+        colorAttachments: list[RenderPassColorAttachment],
+        depthStencilAttachment: RenderPassDepthStencilAttachment,
+        occlusionQuerySet: "QuerySet | None" = None,
+        timestampWrites: PassTimestampWrites | None = None,
+        label: str = "",
+    ) -> "RenderPassEncoder":
+
+        return self.handle.beginRenderPass(
+            RenderPassDescriptor(
+                colorAttachments=colorAttachments,
+                depthStencilAttachment=depthStencilAttachment,
+                occlusionQuerySet=occlusionQuerySet,
+                timestampWrites=timestampWrites,
+                label=label,
+            ).toJS()
+        )
 
     def copyBufferToBuffer(
         self, source: Buffer, sourceOffset, destination: Buffer, destinationOffset, size
@@ -1077,7 +1194,7 @@ class CommandEncoder(BaseWebGPUHandle):
         copySize: list,
     ) -> None:
         return self.handle.copyBufferToTexture(
-            source._to_js(), destination._to_js(), copySize
+            source.toJS(), destination.toJS(), copySize
         )
 
     def copyTextureToBuffer(
@@ -1087,7 +1204,7 @@ class CommandEncoder(BaseWebGPUHandle):
         copySize: list,
     ) -> None:
         return self.handle.copyTextureToBuffer(
-            source._to_js(), destination._to_js(), copySize
+            source.toJS(), destination.toJS(), copySize
         )
 
     def copyTextureToTexture(
@@ -1097,7 +1214,7 @@ class CommandEncoder(BaseWebGPUHandle):
         copySize: list,
     ) -> None:
         return self.handle.copyTextureToTexture(
-            source._to_js(), destination._to_js(), copySize
+            source.toJS(), destination.toJS(), copySize
         )
 
     def clearBuffer(self, buffer: Buffer, offset: int = 0, size: int = 0) -> None:
@@ -1171,13 +1288,29 @@ class ComputePipeline(BaseWebGPUHandle):
 
 
 class Device(BaseWebGPUHandle):
-    def createBindGroup(self, descriptor: BindGroupDescriptor) -> BindGroup:
-        return self.handle.createBindGroup(descriptor._to_js())
+    def createBindGroup(
+        self,
+        layout: "BindGroupLayout",
+        entries: list["BindGroupEntry"] = field(default_factory=list),
+        label: str = "",
+    ) -> BindGroup:
+
+        return self.handle.createBindGroup(
+            BindGroupDescriptor(
+                layout=layout,
+                entries=entries,
+                label=label,
+            ).toJS()
+        )
 
     def createBindGroupLayout(
-        self, descriptor: BindGroupLayoutDescriptor
+        self,
+        entries: list["BindGroupLayoutEntry"] = field(default_factory=list),
+        label: str = "",
     ) -> "BindGroupLayout":
-        return self.handle.createBindGroupLayout(descriptor._to_js())
+        return self.handle.createBindGroupLayout(
+            BindGroupLayoutDescriptor(entries=entries, label=label).toJS()
+        )
 
     def createBuffer(
         self,
@@ -1189,50 +1322,157 @@ class Device(BaseWebGPUHandle):
         return self.handle.createBuffer(
             BufferDescriptor(
                 size=size, usage=usage, mappedAtCreation=mappedAtCreation, label=label
-            )._to_js()
+            ).toJS()
         )
 
     def createCommandEncoder(
-        self, descriptor: CommandEncoderDescriptor
+        self,
+        label: str = "",
     ) -> CommandEncoder:
-        return self.handle.createCommandEncoder(descriptor._to_js())
-
-    def createComputePipeline(
-        self, descriptor: ComputePipelineDescriptor
-    ) -> ComputePipeline:
-        return self.handle.createComputePipeline(descriptor._to_js())
+        return CommandEncoder(
+            self.handle.createCommandEncoder(
+                CommandEncoderDescriptor(label=label).toJS()
+            )
+        )
 
     async def createComputePipelineAsync(
-        self, descriptor: ComputePipelineDescriptor
+        self,
+        layout: "PipelineLayout",
+        compute: ComputeState,
+        label: str = "",
     ) -> ComputePipeline:
-        return self.handle.createComputePipelineAsync(descriptor._to_js())
+        return await self.handle.createComputePipelineAsync(
+            ComputePipelineDescriptor(
+                layout=layout,
+                compute=compute,
+                label=label,
+            ).toJS()
+        )
+
+    def createComputePipeline(
+        self,
+        layout: "PipelineLayout",
+        compute: ComputeState,
+        label: str = "",
+    ) -> ComputePipeline:
+        return self.handle.createComputePipeline(
+            ComputePipelineDescriptor(
+                layout=layout,
+                compute=compute,
+                label=label,
+            ).toJS()
+        )
 
     def createPipelineLayout(
-        self, descriptor: PipelineLayoutDescriptor
-    ) -> "PipelineLayout":
-        return self.handle.createPipelineLayout(descriptor._to_js())
+        self,
+        bindGroupLayouts: list[BindGroupLayout] = [],
+        label: str = "",
+    ) -> PipelineLayout:
+        return self.handle.createPipelineLayout(
+            PipelineLayoutDescriptor(
+                bindGroupLayouts=bindGroupLayouts, label=label
+            ).toJS()
+        )
 
-    def createQuerySet(self, descriptor: QuerySetDescriptor) -> "QuerySet":
-        return self.handle.createQuerySet(descriptor._to_js())
-
-    def createRenderPipelineAsync(self, descriptor: RenderPipelineDescriptor) -> None:
-        return self.handle.createRenderPipelineAsync(descriptor._to_js())
-
-    def createRenderBundleEncoder(
-        self, descriptor: RenderBundleEncoderDescriptor
-    ) -> "RenderBundleEncoder":
-        return self.handle.createRenderBundleEncoder(descriptor._to_js())
+    def createQuerySet(self, count: int, label: str = "") -> "QuerySet":
+        return self.handle.createQuerySet(
+            QuerySetDescriptor(
+                type=QueryType.occlusion, count=count, label=label
+            ).toJS()
+        )
 
     def createRenderPipeline(
-        self, descriptor: RenderPipelineDescriptor
-    ) -> "RenderPipeline":
-        return self.handle.createRenderPipeline(descriptor._to_js())
+        self,
+        layout: PipelineLayout | AutoLayoutMode,
+        vertex: VertexState,
+        fragment: FragmentState,
+        depthStencil: DepthStencilState,
+        primitive: PrimitiveState = field(default_factory=PrimitiveState),
+        multisample: MultisampleState = field(default_factory=MultisampleState),
+        label: str = "",
+    ) -> None:
+        return self.handle.createRenderPipeline(
+            RenderPipelineDescriptor(
+                layout=layout,
+                vertex=vertex,
+                fragment=fragment,
+                depthStencil=depthStencil,
+                primitive=primitive,
+                multisample=multisample,
+                label=label,
+            ).toJS()
+        )
 
-    def createSampler(self, descriptor: SamplerDescriptor) -> "Sampler":
-        return self.handle.createSampler(descriptor._to_js())
+    async def createRenderPipelineAsync(
+        self,
+        layout: "PipelineLayout",
+        vertex: "VertexState",
+        fragment: "FragmentState",
+        depthStencil: "DepthStencilState",
+        primitive: "PrimitiveState" = field(default_factory=PrimitiveState),
+        multisample: "MultisampleState" = field(default_factory=MultisampleState),
+        label: str = "",
+    ) -> None:
+        return await self.handle.createRenderPipelineAsync(
+            RenderPipelineDescriptor(
+                layout=layout,
+                vertex=vertex,
+                fragment=fragment,
+                depthStencil=depthStencil,
+                primitive=primitive,
+                multisample=multisample,
+                label=label,
+            ).toJS()
+        )
 
-    def createShaderModule(self, descriptor: ShaderModuleDescriptor) -> "ShaderModule":
-        return self.handle.createShaderModule(descriptor._to_js())
+    def createRenderBundleEncoder(self, label: str = "") -> "RenderBundleEncoder":
+        return self.handle.createRenderBundleEncoder(
+            RenderBundleDescriptor(label=label).toJS()
+        )
+
+    def createSampler(
+        self,
+        addressModeU: AddressMode = AddressMode.clamp_to_edge,
+        addressModeV: AddressMode = AddressMode.clamp_to_edge,
+        addressModeW: AddressMode = AddressMode.clamp_to_edge,
+        magFilter: FilterMode = FilterMode.nearest,
+        minFilter: FilterMode = FilterMode.nearest,
+        mipmapFilter: MipmapFilterMode = MipmapFilterMode.nearest,
+        lodMinClamp: float = 0.0,
+        lodMaxClamp: float = 32,
+        compare: "CompareFunction | None" = None,
+        maxAnisotropy: int = 1,
+        label: str = "",
+    ):
+        return self.handle.createSampler(
+            SamplerDescriptor(
+                addressModeU=addressModeU,
+                addressModeV=addressModeV,
+                addressModeW=addressModeW,
+                magFilter=magFilter,
+                minFilter=minFilter,
+                mipmapFilter=mipmapFilter,
+                lodMinClamp=lodMinClamp,
+                lodMaxClamp=lodMaxClamp,
+                compare=compare,
+                maxAnisotropy=maxAnisotropy,
+                label=label,
+            ).toJS()
+        )
+
+    def createShaderModule(
+        self,
+        code: str,
+        compilationHints: list[ShaderModuleCompilationHint] = [],
+        label: str = "",
+    ) -> "ShaderModule":
+        return self.handle.createShaderModule(
+            ShaderModuleDescriptor(
+                code=code,
+                compilationHints=compilationHints,
+                label=label,
+            ).toJS()
+        )
 
     def createTexture(
         self,
@@ -1255,7 +1495,7 @@ class Device(BaseWebGPUHandle):
                 mipLevelCount=mipLevelCount,
                 viewFormats=viewFormats,
                 label=label,
-            )._to_js()
+            ).toJS()
         )
 
     def destroy(self) -> None:
@@ -1267,7 +1507,7 @@ class Device(BaseWebGPUHandle):
 
     @property
     def features(self) -> list[FeatureName]:
-        return self.handle.features
+        return [FeatureName(f) for f in self.handle.features]
 
     @property
     def adapterInfo(self) -> AdapterInfo:
@@ -1284,19 +1524,6 @@ class Device(BaseWebGPUHandle):
         return self.handle.popErrorScope()
 
 
-class QuerySet(BaseWebGPUHandle):
-    @property
-    def type(self) -> QueryType:
-        return self.handle.type()
-
-    @property
-    def count(self) -> int:
-        return self.handle.count()
-
-    def destroy(self) -> None:
-        return self.handle.destroy()
-
-
 class Queue(BaseWebGPUHandle):
     def submit(self, commands: list[CommandBuffer] = []) -> None:
         return self.handle.submit(commands)
@@ -1307,12 +1534,14 @@ class Queue(BaseWebGPUHandle):
     def writeBuffer(
         self,
         buffer: Buffer,
-        bufferOffset: int = 0,
-        data: int = 0,
+        bufferOffset: int,
+        data: bytes,
         dataOffset: int = 0,
-        size: int = 0,
-    ) -> None:
-        return self.handle.writeBuffer(buffer, bufferOffset, data, dataOffset, size)
+        size: int | None = None,
+    ):
+        self.handle.writeBuffer(
+            buffer, bufferOffset, js.Uint8Array.new(data), dataOffset, size
+        )
 
     def writeTexture(
         self,
@@ -1322,13 +1551,13 @@ class Queue(BaseWebGPUHandle):
         size: list,
     ) -> None:
         return self.handle.writeTexture(
-            destination._to_js(), js.Uint8Array.new(data), dataLayout._to_js(), size
+            destination.toJS(), js.Uint8Array.new(data), dataLayout.toJS(), size
         )
 
 
 class RenderBundleEncoder(BaseWebGPUHandle):
     def setPipeline(self, pipeline: "RenderPipeline | None" = None) -> None:
-        return self.handle.setPipeline(pipeline)
+        self.handle.setPipeline(pipeline)
 
     def setBindGroup(
         self,
@@ -1397,9 +1626,10 @@ class RenderBundleEncoder(BaseWebGPUHandle):
         return self.handle.setIndexBuffer(buffer, format, offset, size)
 
     def finish(
-        self, descriptor: "RenderBundleDescriptor | None" = None
+        self,
+        label: str = "",
     ) -> "RenderBundle":
-        return self.handle.finish(descriptor._to_js())
+        return self.handle.finish(RenderBundleDescriptor(label=label).toJS())
 
 
 class RenderPassEncoder(BaseWebGPUHandle):
@@ -1519,11 +1749,11 @@ class ShaderModule(BaseWebGPUHandle):
 
 class Texture(BaseWebGPUHandle):
     def createView(
-        self, descriptor: "TextureViewDescriptor | None" = None
+        self, descriptor: TextureViewDescriptor | None = None
     ) -> "TextureView":
         if descriptor is None:
-            return self.handle.createView()
-        return self.handle.createView(descriptor._to_js())
+            return TextureView(self.handle.createView())
+        return TextureView(self.handle.createView(descriptor.toJS()))
 
     @property
     def width(self) -> int:
@@ -1551,11 +1781,11 @@ class Texture(BaseWebGPUHandle):
 
     @property
     def format(self) -> "TextureFormat":
-        return self.handle.format()
+        return TextureFormat(self.handle.format())
 
     @property
     def usage(self) -> "TextureUsage":
-        return self.handle.usage()
+        return TextureUsage(self.handle.usage())
 
     def destroy(self) -> None:
         return self.handle.destroy()

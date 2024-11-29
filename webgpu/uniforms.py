@@ -1,10 +1,22 @@
+"""Python equivalents to all uniforms defined in shader code
+
+The UniformBase class are derived from ctypes.Structure to ensure correct memory layout.
+
+CAUTION: 
+- The Binding numbers must match the numbers defined in the shader code. 
+- Uniforms structs must match exactly the memory layout defined in the shader code.
+- The size of each struct must be a multiple of 16 bytes.
+"""
+
 import ctypes as ct
 
-from .utils import UniformBinding, to_js
+from .utils import UniformBinding
+from .webgpu_api import BufferUsage, Device
 
 
-# These values must match the numbers defined in the shader
 class Binding:
+    """Binding numbers for uniforms in shader code in uniforms.wgsl"""
+
     VIEW = 0
     CLIPPING = 1
     FONT = 2
@@ -38,14 +50,13 @@ class Binding:
 
 class UniformBase(ct.Structure):
 
-    def __init__(self, device, **kwargs):
+    def __init__(self, device: Device, **kwargs):
         super().__init__(**kwargs)
-        import js
 
         self.device = device
-        self._buffer = device.create_buffer(
-            len(bytes(self)),
-            js.GPUBufferUsage.UNIFORM | js.GPUBufferUsage.COPY_DST,
+        self._buffer = device.createBuffer(
+            size=len(bytes(self)),
+            usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST,
         )
 
         size = len(bytes(self))
@@ -55,13 +66,12 @@ class UniformBase(ct.Structure):
             )
 
     def update_buffer(self):
-        self.device.write_buffer(self._buffer, bytes(self))
+        self.device.queue.writeBuffer(self._buffer, 0, bytes(self))
 
     def get_bindings(self):
         return [UniformBinding(self._binding, self._buffer)]
 
     def __del__(self):
-        print("delete uniform", type(self).__name__)
         self._buffer.destroy()
 
 

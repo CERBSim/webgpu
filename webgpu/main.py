@@ -23,6 +23,8 @@ def f(encoder: RenderPassEncoder):
 
 gpu: WebGPU = None
 mesh_object: RenderObject = None
+elements_object = None
+point_number_object = None
 
 cf = None
 render_function = None
@@ -32,7 +34,7 @@ async def main():
     global gpu, mesh_object, cf, render_function
 
     gpu = await init_webgpu(js.document.getElementById("canvas"))
-    print("DEVICE", dir(gpu.native_device))
+    # print("DEVICE", dir(gpu.native_device))
 
     point_number_object = None
 
@@ -40,27 +42,27 @@ async def main():
         from ngsolve.meshes import MakeStructured3DMesh
 
         # create new ngsolve mesh and evaluate arbitrary function on it
-        # mesh = ngs.Mesh(unit_cube.GenerateMesh(maxh=0.1))
+        # mesh = ngs.Mesh(unit_cube.GenerateMesh(maxh=0.2))
         # mesh = MakeStructured3DMesh(True, 10, prism=True)
 
-        # import netgen.occ as occ
-        # from netgen.meshing import IdentificationType
-        #
-        # idtype = IdentificationType.CLOSESURFACES
-        # inner = occ.Box((0, 0, 0), (1, 1, 1))
-        # trafo = occ.gp_Trsf().Scale(inner.center, 1.1)
-        # outer = trafo(inner)
-        #
-        # inner.Identify(outer, "", idtype, trafo)
-        # shape = occ.Glue([outer - inner, inner])
-        #
-        # geo = occ.OCCGeometry(shape)
-        # mesh = geo.GenerateMesh(maxh=0.3)
+        import netgen.occ as occ
+        from netgen.meshing import IdentificationType
 
-        mesh = unit_square.GenerateMesh(maxh=0.3)
+        idtype = IdentificationType.CLOSESURFACES
+        inner = occ.Box((0, 0, 0), (1, 1, 1))
+        trafo = occ.gp_Trsf().Scale(inner.center, 1.1)
+        outer = trafo(inner)
+
+        inner.Identify(outer, "", idtype, trafo)
+        shape = occ.Glue([outer - inner, inner])
+
+        geo = occ.OCCGeometry(shape)
+        mesh = geo.GenerateMesh(maxh=0.3)
+
+        # mesh = unit_square.GenerateMesh(maxh=0.3)
         mesh = ngs.Mesh(mesh)
 
-        order = 6
+        order = 3
         cf = cf or ngs.sin(10 * ngs.x) * ngs.sin(10 * ngs.y)
         # cf = ngs.x
         data = MeshData(mesh, cf, order)
@@ -79,13 +81,13 @@ async def main():
     # lic = LineIntegralConvolutionRenderObject(gpu, 1000, 800)
     # print("LIC", lic)
 
-    mesh_object = MeshRenderObject(gpu, data)
+    # mesh_object = MeshRenderObject(gpu, data)
     # mesh_object = MeshRenderObjectIndexed(gpu, data) # function values are wrong, due to ngsolve vertex numbering order
     # mesh_object = MeshRenderObjectDeferred(
     #     gpu, data
     # )  # function values are wrong, due to ngsolve vertex numbering order
     point_number_object = PointNumbersRenderObject(gpu, data, font_size=16)
-    # elements_object = Mesh3dElementsRenderObject(gpu, data)
+    elements_object = Mesh3dElementsRenderObject(gpu, data)
 
     t_last = 0
     fps = 0
@@ -103,15 +105,18 @@ async def main():
         # copy camera position etc. to GPU
         gpu.update_uniforms()
 
-        command_encoder = gpu.create_command_encoder()
+        command_encoder = gpu.device.createCommandEncoder()
 
-        mesh_object.render(command_encoder)
-        # elements_object.render(command_encoder)
+        if mesh_object is not None:
+            mesh_object.render(command_encoder)
+
+        if elements_object is not None:
+            elements_object.render(command_encoder)
 
         if point_number_object is not None:
             point_number_object.render(command_encoder)
 
-        gpu.native_device.queue.submit([command_encoder.finish()])
+        gpu.device.queue.submit([command_encoder.finish()])
         if frame_counter < 20:
             js.requestAnimationFrame(render_function)
 

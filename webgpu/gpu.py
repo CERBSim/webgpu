@@ -12,7 +12,7 @@ from .uniforms import (
     MeshUniforms,
     ViewUniforms,
 )
-from .utils import to_js
+from .utils import to_js, get_shader_code
 from .webgpu_api import *
 
 
@@ -21,7 +21,7 @@ async def init_webgpu(canvas):
     adapter = await requestAdapter(powerPreference=PowerPreference.low_power)
 
     required_features = []
-    if adapter.features.has("timestamp-query"):
+    if "timestamp-query" in adapter.features:
         print("have timestamp query")
         required_features.append("timestamp-query")
     else:
@@ -30,35 +30,36 @@ async def init_webgpu(canvas):
     one_meg = 1024**2
     one_gig = 1024**3
     device = await adapter.requestDevice(
+        label="WebGPU device",
         requiredLimits=Limits(
             maxBufferSize=one_gig - 16,
             maxStorageBufferBindingSize=one_gig - 16,
         )
     )
-    js.console.log("device limits\n", device.limits)
+    limits = device.limits
+    js.console.log("device limits\n", limits)
     js.console.log("adapter info\n", adapter.info)
 
-    print(
-        "max storage buffer binding size",
-        device.limits.maxStorageBufferBindingSize / one_meg,
-    )
-    print("max buffer size", device.limits.maxBufferSize / one_meg)
 
-    return WebGPU(utils.Device(device.handle), canvas)
+    print(
+        f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB"
+    )
+    print(f"max buffer size {limits.maxBufferSize / one_meg:.2f} MB")
+
+    return WebGPU(device, canvas)
 
 
 class WebGPU:
     """WebGPU management class, handles "global" state, like device, canvas, frame/depth buffer, colormap and uniforms"""
 
     def __init__(self, device, canvas):
-        self._is_first_render_pass = True
         self.render_function = None
-        self.native_device = device
         self.device = device
         self.format = js.navigator.gpu.getPreferredCanvasFormat()
         self.canvas = canvas
 
         print("canvas", canvas.width, canvas.height, canvas)
+        self.shader_module = device.createShaderModule(get_shader_code())
 
         self.u_clipping = ClippingUniforms(self.device)
         self.u_view = ViewUniforms(self.device)
@@ -78,7 +79,7 @@ class WebGPU:
             )
         )
         self.colormap = Colormap(device)
-        self.depth_format = "depth24plus"
+        self.depth_format = TextureFormat.depth24plus
         self.depth_stencil = {
             "format": self.depth_format,
             "depthWriteEnabled": True,
@@ -89,8 +90,25 @@ class WebGPU:
             size=[canvas.width, canvas.height, 1],
             format=self.depth_format,
             usage=js.GPUTextureUsage.RENDER_ATTACHMENT,
+            label="depth_texture",
         )
         self.input_handler = InputHandler(canvas, self.u_view)
+
+    def color_attachments(self, loadOp: LoadOp):
+        return [
+            RenderPassColorAttachment(
+                self.context.getCurrentTexture().createView(),
+                clearValue=Color(1, 1, 1, 1),
+                loadOp=loadOp,
+            )
+        ]
+
+    def depth_stencil_attachment(self, loadOp: LoadOp):
+        return RenderPassDepthStencilAttachment(
+            self.depth_texture.createView(),
+            depthClearValue=1.0,
+            depthLoadOp=loadOp,
+        )
 
     def update_uniforms(self):
         self.u_view.update_buffer()
@@ -109,40 +127,21 @@ class WebGPU:
             *self.colormap.get_bindings(),
         ]
 
-    def begin_render_pass(self, command_encoder, args={}):
-        load_op = "clear" if self._is_first_render_pass else "load"
-        options = {
-            "colorAttachments": [
-                {
-                    "view": self.context.getCurrentTexture().createView(),
-                    "clearValue": {"r": 1, "g": 1, "b": 1, "a": 1},
-                    "loadOp": load_op,
-                    "storeOp": "store",
-                }
-            ],
-            "depthStencilAttachment": {
-                "view": self.depth_texture.createView(
-                    to_js({"format": self.depth_format, "aspect": "all"})
-                ),
-                "depthLoadOp": load_op,
-                "depthStoreOp": "store",
-                "depthClearValue": 1.0,
-            },
-        } | args
+    def begin_render_pass(self, command_encoder: CommandEncoder, **kwargs):
+        load_op = command_encoder.getLoadOp()
 
-        render_pass_encoder = command_encoder.beginRenderPass(to_js(options))
+        render_pass_encoder = command_encoder.beginRenderPass(
+            self.color_attachments(load_op), self.depth_stencil_attachment(load_op), **kwargs
+        )
+
         render_pass_encoder.setViewport(
             0, 0, self.canvas.width, self.canvas.height, 0.0, 1.0
         )
-        self._is_first_render_pass = False
+
         return render_pass_encoder
 
-    def create_command_encoder(self):
-        self._is_first_render_pass = True
-        return self.native_device.createCommandEncoder()
-
     def __del__(self):
-        self.depth_texture.destroy()
+        print("destroy WebGPU")
         del self.u_view
         del self.u_clipping
         del self.u_font
@@ -152,4 +151,6 @@ class WebGPU:
 
         # unregister is needed to remove circular references
         self.input_handler.unregister_callbacks()
-        del self.input_handler
+        # del self.input_handler
+        # del self.depth_texture
+        # del self.device

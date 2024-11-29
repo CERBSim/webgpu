@@ -9,19 +9,20 @@ import numpy as np
 from .gpu import WebGPU
 from .uniforms import Binding
 from .utils import (
+    BaseBinding,
     BufferBinding,
     ShaderStage,
     TextureBinding,
+    create_bind_group,
     decode_bytes,
     encode_bytes,
-    to_js,
 )
-from .webgpu_api import TextureDescriptor, TextureFormat, TextureUsage
+from .webgpu_api import *
 
 
 class _eltype:
     dim: int
-    primitive_topology: str
+    primitive_topology: PrimitiveTopology
     num_vertices_per_primitive: int
 
     def __init__(self, dim, primitive_topology, num_vertices_per_primitive):
@@ -31,14 +32,14 @@ class _eltype:
 
 
 class ElType(Enum):
-    POINT = _eltype(0, "point-list", 1)
-    SEG = _eltype(1, "line-list", 2)
-    TRIG = _eltype(2, "triangle-list", 3)
-    QUAD = _eltype(2, "triangle-list", 2 * 3)
-    TET = _eltype(3, "triangle-list", 4 * 3)
-    HEX = _eltype(3, "triangle-list", 6 * 2 * 3)
-    PRISM = _eltype(3, "triangle-list", 2 * 3 + 3 * 2 * 3)
-    PYRAMID = _eltype(3, "triangle-list", 4 + 2 * 3)
+    POINT = _eltype(0, PrimitiveTopology.point_list, 1)
+    SEG = _eltype(1, PrimitiveTopology.line_list, 2)
+    TRIG = _eltype(2, PrimitiveTopology.triangle_list, 3)
+    QUAD = _eltype(2, PrimitiveTopology.triangle_list, 2 * 3)
+    TET = _eltype(3, PrimitiveTopology.triangle_list, 4 * 3)
+    HEX = _eltype(3, PrimitiveTopology.triangle_list, 6 * 2 * 3)
+    PRISM = _eltype(3, PrimitiveTopology.triangle_list, 2 * 3 + 3 * 2 * 3)
+    PYRAMID = _eltype(3, PrimitiveTopology.triangle_list, 4 + 2 * 3)
 
     @staticmethod
     def from_dim_np(dim: int, np: int):
@@ -68,33 +69,56 @@ class RenderObject:
 
     data: typing.Any
     gpu: WebGPU
+    label: str = ""
+
+    def __init__(self, gpu, label=None):
+        self.gpu = gpu
+
+        if label is None:
+            self.label = self.__class__.__name__
+        else:
+            self.label = label
+
+        self.on_resize()
+
+    def render(self, encoder: CommandEncoder):
+        raise NotImplementedError
+
+    def on_resize(self):
+        pass
+
+    def get_bindings(self) -> list[BaseBinding]:
+        raise NotImplementedError
+
+    def create_bind_group(self):
+        return create_bind_group(self.device, self.get_bindings(), self.label)
+
+    @property
+    def device(self) -> Device:
+        return self.gpu.device
+
+
+class DataRenderObject(RenderObject):
+    """Base class for render objects that use a "data" object, like MeshData"""
+
     _buffers: dict = {}
 
-    def __init__(self, gpu, data):
-        self.gpu = gpu
-        self.on_resize()
+    def __init__(self, gpu, data, label=None):
+        super().__init__(gpu, label=label)
         self.update_data(data)
+        print("init", self.label)
 
     def update_data(self, data):
+        print("update", self.label)
         self.data = data
         self._buffers = data.get_buffers(self.device)
         self._create_pipelines()
 
     def _create_pipelines(self):
-        pass
-
-    def render(self, encoder):
-        pass
-
-    def on_resize(self):
-        pass
-
-    @property
-    def device(self):
-        return self.gpu.device
+        raise NotImplementedError
 
 
-class MeshRenderObject(RenderObject):
+class MeshRenderObject(DataRenderObject):
     """Use "trigs" and "trig_function_values" buffers to render a function on a mesh"""
 
     def get_bindings(self):
@@ -107,46 +131,42 @@ class MeshRenderObject(RenderObject):
         ]
 
     def _create_pipelines(self):
-        bind_layout, self._bind_group = self.device.create_bind_group(
-            self.get_bindings(), "MeshRenderObject"
-        )
-        shader_module = self.device.shader_module
-        self._pipeline = self.device.create_render_pipeline(
-            bind_layout,
-            {
-                "label": "MeshRenderObject",
-                "vertex": {
-                    "module": shader_module,
-                    "entryPoint": "vertexTrigP1",
-                },
-                "fragment": {
-                    "module": shader_module,
-                    "entryPoint": "fragmentTrig",
-                    "targets": [{"format": self.gpu.format}],
-                },
-                "primitive": {
-                    "topology": "triangle-list",
-                    "cullMode": "none",
-                    "frontFace": "ccw",
-                },
-                "depthStencil": {
-                    **self.gpu.depth_stencil,
-                    # shift trigs behind to ensure that edges are rendered properly
-                    "depthBias": 1.0,
-                    "depthBiasSlopeScale": 1,
-                },
-            },
+        bind_layout, self._bind_group = self.create_bind_group()
+        shader_module = self.gpu.shader_module
+
+        self._pipeline = self.device.createRenderPipeline(
+            self.device.createPipelineLayout([bind_layout], self.label),
+            vertex=VertexState(
+                module=shader_module,
+                entryPoint="vertexTrigP1",
+            ),
+            fragment=FragmentState(
+                module=shader_module,
+                entryPoint="fragmentTrig",
+                targets=[ColorTargetState(format=self.gpu.format)],
+            ),
+            primitive=PrimitiveState(
+                topology=PrimitiveTopology.triangle_list,
+            ),
+            depthStencil=DepthStencilState(
+                format=TextureFormat.depth24plus,
+                depthWriteEnabled=True,
+                depthCompare=CompareFunction.less,
+                # shift trigs behind to ensure that edges are rendered properly
+                depthBias=1,
+                depthBiasSlopeScale=1.0,
+            ),
         )
 
-    def render(self, encoder):
-        render_pass = self.gpu.begin_render_pass(encoder)
+    def render(self, encoder: CommandEncoder):
+        render_pass = self.gpu.begin_render_pass(encoder, label=self.label)
         render_pass.setBindGroup(0, self._bind_group)
         render_pass.setPipeline(self._pipeline)
-        render_pass.draw(3, self.data.num_trigs, 0, 0)
+        render_pass.draw(3, self.data.num_trigs)
         render_pass.end()
 
 
-class MeshRenderObjectIndexed(RenderObject):
+class MeshRenderObjectIndexed(MeshRenderObject):
     """Use "vertices", "index" and "trig_function_values" buffers to render a mesh"""
 
     def get_bindings(self):
@@ -160,46 +180,35 @@ class MeshRenderObjectIndexed(RenderObject):
         ]
 
     def _create_pipelines(self):
-        bind_layout, self._bind_group = self.device.create_bind_group(
-            self.get_bindings(), "MeshRenderObject"
-        )
-        shader = self.device.shader_module
-        self._pipeline = self.device.create_render_pipeline(
-            bind_layout,
-            options={
-                "label": "MeshRenderObjectIndexed",
-                "vertex": {
-                    "module": shader,
-                    "entryPoint": "vertexTrigP1Indexed",
-                },
-                "fragment": {
-                    "module": shader,
-                    "entryPoint": "fragmentTrig",
-                    "targets": [{"format": self.gpu.format}],
-                },
-                "primitive": {
-                    "topology": "triangle-list",
-                    "cullMode": "none",
-                    "frontFace": "ccw",
-                },
-                "depthStencil": {
-                    **self.gpu.depth_stencil,
-                    # shift trigs behind to ensure that edges are rendered properly
-                    "depthBias": 1.0,
-                    "depthBiasSlopeScale": 1,
-                },
-            },
+        bind_layout, self._bind_group = self.create_bind_group()
+        shader_module = self.gpu.shader_module
+
+        self._pipeline = self.device.createRenderPipeline(
+            self.device.createPipelineLayout([bind_layout], self.label),
+            vertex=VertexState(
+                module=shader_module,
+                entryPoint="vertexTrigP1Indexed",
+            ),
+            fragment=FragmentState(
+                module=shader_module,
+                entryPoint="fragmentTrig",
+                targets=[ColorTargetState(format=self.gpu.format)],
+            ),
+            primitive=PrimitiveState(
+                topology=PrimitiveTopology.triangle_list,
+            ),
+            depthStencil=DepthStencilState(
+                format=TextureFormat.depth24plus,
+                depthWriteEnabled=True,
+                depthCompare=CompareFunction.less,
+                # shift trigs behind to ensure that edges are rendered properly
+                depthBias=1,
+                depthBiasSlopeScale=1.0,
+            ),
         )
 
-    def render(self, encoder):
-        render_pass = self.gpu.begin_render_pass(encoder)
-        render_pass.setBindGroup(0, self._bind_group)
-        render_pass.setPipeline(self._pipeline)
-        render_pass.draw(3, self.data.num_trigs)
-        render_pass.end()
 
-
-class MeshRenderObjectDeferred(RenderObject):
+class MeshRenderObjectDeferred(DataRenderObject):
     """Use "vertices", "index" and "trig_function_values" buffers to render a mesh in two render passes
     The first pass renders the trig indices and barycentric coordinates to a g-buffer texture.
     The second pass renders the trigs using the g-buffer texture to evaluate the function value in each pixel of the frame buffer.
@@ -208,14 +217,13 @@ class MeshRenderObjectDeferred(RenderObject):
     because the function values are only evaluated for the pixels that are visible.
     """
 
-    _g_buffer_format = (TextureFormat.rgba32float,)
-    _g_buffer = None
+    _g_buffer_format: TextureFormat = TextureFormat.rgba32float
+    _g_buffer: Texture
 
     def on_resize(self):
         # texture to store g-buffer (trig index and barycentric coordinates)
-        import js
 
-        self.g_buffer = self.device.createTexture(
+        self._g_buffer = self.device.createTexture(
             size=[self.gpu.canvas.width, self.gpu.canvas.height, 1],
             usage=TextureUsage.TEXTURE_BINDING | TextureUsage.RENDER_ATTACHMENT,
             format=self._g_buffer_format,
@@ -244,119 +252,91 @@ class MeshRenderObjectDeferred(RenderObject):
         ]
 
     def _create_pipelines(self):
-        bind_layout_pass1, self._bind_group_pass1 = self.device.create_bind_group(
-            self.get_bindings_pass1(), "MeshRenderObjectDeferredPass1"
+        device = self.device
+        label1 = self.label + " pass 1"
+        bind_layout_pass1, self._bind_group_pass1 = create_bind_group(
+            device, self.get_bindings_pass1(), label1
         )
-        shader_module = self.device.shader_module
-        self._pipeline_pass1 = self.device.create_render_pipeline(
-            bind_layout_pass1,
-            {
-                "label": "MeshRenderObjectDeferredPass1",
-                "vertex": {
-                    "module": shader_module,
-                    "entryPoint": "vertexTrigP1Indexed",
-                },
-                "fragment": {
-                    "module": shader_module,
-                    "entryPoint": "fragmentTrigToGBuffer",
-                    "targets": [{"format": self._g_buffer_format}],
-                },
-                "targets": [{"format": self._g_buffer_format}],
-                "primitive": {
-                    "topology": "triangle-list",
-                    "cullMode": "none",
-                    "frontFace": "ccw",
-                },
-                "depthStencil": {
-                    **self.gpu.depth_stencil,
-                    # shift trigs behind to ensure that edges are rendered properly
-                    "depthBias": 1.0,
-                    "depthBiasSlopeScale": 1,
-                },
-            },
+        shader_module = self.gpu.shader_module
+
+        self._pipeline_pass1 = self.device.createRenderPipeline(
+            label=label1,
+            layout=self.device.createPipelineLayout([bind_layout_pass1]),
+            vertex=VertexState(
+                module=shader_module,
+                entryPoint="vertexTrigP1Indexed",
+            ),
+            fragment=FragmentState(
+                module=shader_module,
+                entryPoint="fragmentTrigToGBuffer",
+                targets=[ColorTargetState(format=self._g_buffer_format)],
+            ),
+            primitive=PrimitiveState(
+                topology=PrimitiveTopology.triangle_list,
+            ),
+            depthStencil=DepthStencilState(
+                format=TextureFormat.depth24plus,
+                depthWriteEnabled=True,
+                depthCompare=CompareFunction.less,
+                # shift trigs behind to ensure that edges are rendered properly
+                depthBias=1,
+                depthBiasSlopeScale=1.0,
+            ),
         )
 
-        bind_layout_pass2, self._bind_group_pass2 = self.device.create_bind_group(
-            self.get_bindings_pass2(),
-            "mesh_object_deferred_pass2",
+        label2 = self.label + " pass 2"
+
+        bind_layout_pass2, self._bind_group_pass2 = create_bind_group(
+            device, self.get_bindings_pass2(), label2
         )
 
-        self._pipeline_pass2 = self.device.create_render_pipeline(
-            bind_layout_pass2,
-            {
-                "label": "trigs_deferred",
-                "vertex": {
-                    "module": shader_module,
-                    "entryPoint": "vertexDeferred",
-                },
-                "fragment": {
-                    "module": shader_module,
-                    "entryPoint": "fragmentDeferred",
-                    "targets": [{"format": self.gpu.format}],
-                },
-                "primitive": {
-                    "topology": "triangle-strip",
-                    "cullMode": "none",
-                    "frontFace": "ccw",
-                },
-                "depthStencil": {
-                    **self.gpu.depth_stencil,
-                    "depthWriteEnabled": False,
-                    "depthCompare": "always",
-                    # shift trigs behind to ensure that edges are rendered properly
-                    # "depthBias": 1.0,
-                    # "depthBiasSlopeScale": 1,
-                },
-            },
+        self._pipeline_pass2 = self.device.createRenderPipeline(
+            label=label2,
+            layout=self.device.createPipelineLayout([bind_layout_pass2]),
+            vertex=VertexState(
+                module=shader_module,
+                entryPoint="vertexDeferred",
+            ),
+            fragment=FragmentState(
+                module=shader_module,
+                entryPoint="fragmentDeferred",
+                targets=[ColorTargetState(format=self.gpu.format)],
+            ),
+            primitive=PrimitiveState(
+                topology=PrimitiveTopology.triangle_strip,
+            ),
+            depthStencil=DepthStencilState(
+                format=TextureFormat.depth24plus,
+                depthWriteEnabled=False,
+                depthCompare=CompareFunction.always,
+            ),
         )
 
-    def render(self, encoder):
-        load_op = "clear" if self.gpu._is_first_render_pass else "load"
-        pass1_options = {
-            "colorAttachments": [
-                {
-                    "view": self._g_buffer.createView(),
-                    "clearValue": {"r": 0, "g": -1, "b": -1, "a": -1},
-                    "loadOp": "clear",
-                    "storeOp": "store",
-                }
+    def render(self, encoder: CommandEncoder):
+        loadOp = encoder.getLoadOp()
+        pass1 = encoder.beginRenderPass(
+            colorAttachments=[
+                RenderPassColorAttachment(
+                    self._g_buffer.createView(),
+                    clearValue=Color(0, -1, -1, -1),
+                    loadOp=loadOp,
+                )
             ],
-            "depthStencilAttachment": {
-                "view": self.gpu.depth_texture.createView(
-                    to_js({"format": self.gpu.depth_format, "aspect": "all"})
-                ),
-                "depthLoadOp": "clear",
-                "depthStoreOp": "store",
-                "depthClearValue": 1.0,
-            },
-        }
-        pass1 = self.gpu.begin_render_pass(encoder, pass1_options)
+            depthStencilAttachment=RenderPassDepthStencilAttachment(
+                self.gpu.depth_texture.createView(),
+                depthClearValue=1.0,
+                depthLoadOp=loadOp,
+            ),
+            label=self.label + " pass 1",
+        )
+
         pass1.setViewport(0, 0, self.gpu.canvas.width, self.gpu.canvas.height, 0.0, 1.0)
         pass1.setBindGroup(0, self._bind_group_pass1)
         pass1.setPipeline(self._pipeline_pass1)
         pass1.draw(3, self.data.num_trigs)
         pass1.end()
 
-        pass2_options = {
-            "colorAttachments": [
-                {
-                    "view": self.gpu.context.getCurrentTexture().createView(),
-                    "clearValue": {"r": 1, "g": 1, "b": 1, "a": 1},
-                    "loadOp": load_op,
-                    "storeOp": "store",
-                }
-            ],
-            "depthStencilAttachment": {
-                "view": self.gpu.depth_texture.createView(
-                    to_js({"format": self.gpu.depth_format, "aspect": "all"})
-                ),
-                # "depthReadOnly": True,
-                "depthLoadOp": load_op,
-                "depthStoreOp": "store",
-                "depthClearValue": 1.0,
-            },
-        }
-        pass2 = self.gpu.begin_render_pass(encoder, pass2_options)
+        pass2 = self.gpu.begin_render_pass(encoder, label=self.label + " pass 2")
         pass2.setBindGroup(0, self._bind_group_pass2)
         pass2.setViewport(0, 0, self.gpu.canvas.width, self.gpu.canvas.height, 0.0, 1.0)
         pass2.setPipeline(self._pipeline_pass2)
@@ -364,7 +344,7 @@ class MeshRenderObjectDeferred(RenderObject):
         pass2.end()
 
 
-class Mesh3dElementsRenderObject(RenderObject):
+class Mesh3dElementsRenderObject(DataRenderObject):
     def get_bindings(self):
         bindings = [
             *self.gpu.get_bindings(),
@@ -382,11 +362,8 @@ class Mesh3dElementsRenderObject(RenderObject):
         return bindings
 
     def _create_pipelines(self):
-        label = "Mesh3dElementsRenderObject"
-        bind_layout, self._bind_group = self.device.create_bind_group(
-            self.get_bindings(), label
-        )
-        shader_module = self.device.shader_module
+        bind_layout, self._bind_group = self.create_bind_group()
+        shader_module = self.gpu.shader_module
 
         self._pipelines = {}
         for eltype in ElType:
@@ -395,32 +372,30 @@ class Mesh3dElementsRenderObject(RenderObject):
                 continue
             el_name = eltype.name.capitalize()
 
-            self._pipelines[eltype.name] = self.device.create_render_pipeline(
-                bind_layout,
-                {
-                    "label": f"{label}:{el_name}",
-                    "vertex": {
-                        "module": shader_module,
-                        "entryPoint": f"vertexMesh{el_name}",
-                    },
-                    "fragment": {
-                        "module": shader_module,
-                        "entryPoint": "fragmentMesh",
-                        "targets": [{"format": self.gpu.format}],
-                    },
-                    "primitive": {
-                        "topology": eltype.value.primitive_topology,
-                        "cullMode": "none",
-                        "frontFace": "ccw",
-                    },
-                    "depthStencil": {
+            self._pipelines[el_name.upper()] = self.device.createRenderPipeline(
+                    label=f"{self.label}:{el_name}",
+                    layout=self.device.createPipelineLayout([bind_layout]),
+                    vertex=VertexState(
+                        module=shader_module,
+                        entryPoint=f"vertexMesh{el_name}",
+                    ),
+                    fragment=FragmentState(
+                        module=shader_module,
+                        entryPoint="fragmentMesh",
+                        targets=[ColorTargetState(format=self.gpu.format)],
+                    ),
+                    primitive=PrimitiveState(
+                        topology=eltype.value.primitive_topology,
+                    ),
+                    depthStencil=DepthStencilState(
                         **self.gpu.depth_stencil,
                         # shift trigs behind to ensure that edges are rendered properly
-                        "depthBias": 1.0,
-                        "depthBiasSlopeScale": 1,
-                    },
-                },
-            )
+                        depthBias=1.0,
+                        depthBiasSlopeScale=1,
+                    ),
+
+
+                )
 
     def render(self, encoder):
         render_pass = self.gpu.begin_render_pass(encoder)
@@ -576,7 +551,7 @@ class MeshData:
                 self.elements[eltype], dtype=np.uint32
             ).tobytes()
 
-    def get_buffers(self, device):
+    def get_buffers(self, device: Device):
         if not self._buffers:
             data = {}
             for name in self.__BUFFER_NAMES:
@@ -587,7 +562,16 @@ class MeshData:
             for eltype in self.elements:
                 data[eltype] = self.elements[eltype]
 
-            self._buffers = device.data_to_buffers(data)
+            buffers = {}
+            for key in data:
+                d = data[key]
+                buffer = device.createBuffer(
+                    size=len(d), usage=BufferUsage.STORAGE | BufferUsage.COPY_DST
+                )
+                device.queue.writeBuffer(buffer, 0, d)
+                buffers[key] = buffer
+
+            self._buffers = buffers
         return self._buffers
 
     def __del__(self):
@@ -658,7 +642,7 @@ def create_testing_square_mesh(gpu, n):
         "trigs_index": index_buffer,
     }
 
-    shader_module = device.shader_module
+    shader_module = gpu.shader_module
 
     bindings = []
     for name in ["trigs", "trig_function_values", "vertices", "trigs_index"]:
@@ -672,7 +656,7 @@ def create_testing_square_mesh(gpu, n):
             )
         )
 
-    layout, group = device.create_bind_group(bindings, "create_test_mesh")
+    layout, group = create_bind_group(device, bindings, "create_test_mesh")
 
     pipeline = device.create_compute_pipeline(
         layout,
@@ -700,25 +684,16 @@ def create_testing_square_mesh(gpu, n):
     return data
 
 
-class PointNumbersRenderObject:
+class PointNumbersRenderObject(DataRenderObject):
     """Render a point numbers of a mesh"""
 
     _buffers: dict = {}
 
-    def __init__(self, gpu, data, font_size=20):
-        self._buffers = {}
-        self._texture = None
-
-        self.gpu = gpu
-        self.device = gpu.device
+    def __init__(self, gpu, data, font_size=20, label=None):
         self.n_digits = 6
+        self.gpu = gpu
         self.set_font_size(font_size)
-        self.update_data(data)
-
-    def update_data(self, data):
-        self.data = data
-        self._buffers = self.data.get_buffers(self.device)
-        self._create_pipeline()
+        super().__init__(gpu, data, label=label)
 
     def get_bindings(self):
         return [
@@ -727,47 +702,47 @@ class PointNumbersRenderObject:
             BufferBinding(Binding.VERTICES, self._buffers["vertices"]),
         ]
 
-    def _create_pipeline(self):
-        bind_layout, self._bind_group = self.device.create_bind_group(
-            self.get_bindings(), "PointNumbersRenderObject"
+    def _create_pipelines(self):
+        bind_layout, self._bind_group = create_bind_group(
+            self.device, self.get_bindings(), "PointNumbersRenderObject"
         )
-        shader_module = self.device.shader_module
-        self._pipeline = self.device.create_render_pipeline(
-            bind_layout,
-            {
-                "label": "PointNumbersRenderObject",
-                "vertex": {
-                    "module": shader_module,
-                    "entryPoint": "vertexPointNumber",
-                },
-                "fragment": {
-                    "module": shader_module,
-                    "entryPoint": "fragmentText",
-                    "targets": [
-                        {
-                            "format": self.gpu.format,
-                            "blend": {
-                                "color": {
-                                    "operation": "add",
-                                    "srcFactor": "one",
-                                    "dstFactor": "one-minus-src-alpha",
-                                },
-                                "alpha": {
-                                    "operation": "add",
-                                    "srcFactor": "one",
-                                    "dstFactor": "one-minus-src-alpha",
-                                },
-                            },
-                        }
-                    ],
-                },
-                "primitive": {
-                    "topology": "triangle-list",
-                    "cullMode": "none",
-                    "frontFace": "ccw",
-                },
-                "depthStencil": self.gpu.depth_stencil,
-            },
+        shader_module = self.gpu.shader_module
+
+        self._pipeline = self.device.createRenderPipeline(
+            layout=self.device.createPipelineLayout([bind_layout]),
+            vertex=VertexState(
+                module=shader_module,
+                entryPoint="vertexPointNumber",
+            ),
+            fragment=FragmentState(
+                module=shader_module,
+                entryPoint="fragmentText",
+                targets=[
+                    ColorTargetState(
+                        format=self.gpu.format,
+                        blend=BlendState(
+                            color=BlendComponent(
+                                srcFactor=BlendFactor.one,
+                                dstFactor=BlendFactor.one_minus_src_alpha,
+                                operation=BlendOperation.add,
+                            ),
+                            alpha=BlendComponent(
+                                srcFactor=BlendFactor.one,
+                                dstFactor=BlendFactor.one_minus_src_alpha,
+                                operation=BlendOperation.add,
+                            ),
+                        ),
+                    )
+                ],
+            ),
+            primitive=PrimitiveState(
+                topology=PrimitiveTopology.triangle_list,
+            ),
+            depthStencil=DepthStencilState(
+                format=TextureFormat.depth24plus,
+                depthWriteEnabled=True,
+                depthCompare=CompareFunction.less,
+            ),
         )
 
     def render(self, encoder):
