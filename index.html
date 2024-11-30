@@ -1,6 +1,13 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.20"></script>
+    <script type="module">
+      var GUI = lil.GUI;
+      window.gui = new GUI();
+      window.folder = gui.addFolder("Mesh");
+    </script>
+
     <script src="./pyodide/pyodide.js"></script>
   </head>
   <body>
