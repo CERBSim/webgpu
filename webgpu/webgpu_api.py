@@ -45,6 +45,7 @@ class BaseWebGPUHandle:
     def __del__(self):
         self.destroy()
 
+
 def _default_converter(value, a, b):
     if isinstance(value, BaseWebGPUHandle):
         return pyodide.ffi.to_js(value.handle)
@@ -86,6 +87,7 @@ def toJS(value):
     # js.console.log("ret", ret)
     return ret
 
+
 def fromJS(obj):
     if type(obj) in [str, int, float, bool]:
         return obj
@@ -97,6 +99,7 @@ def fromJS(obj):
     return dict(obj)
 
     return {key: obj[key] for key in obj.object_keys()}
+
 
 class BaseWebGPUObject:
     def toJS(self):
@@ -349,6 +352,7 @@ class QuerySet(BaseWebGPUHandle):
 
     def destroy(self) -> None:
         return self.handle.destroy()
+
 
 class SamplerBindingType(str, Enum):
     filtering = "filtering"
@@ -1137,6 +1141,7 @@ class Buffer(BaseWebGPUHandle):
 
     def destroy(self) -> None:
         self.handle.destroy()
+
 
 class CommandEncoder(BaseWebGPUHandle):
     _first_render_pass: bool = True

@@ -128,6 +128,7 @@ class BufferBinding(BaseBinding):
             resource={"buffer": buffer},
         )
 
+
 def create_bind_group(device, bindings: list, label=""):
     """creates bind group layout and bind group from a list of BaseBinding objects"""
     layouts = []
@@ -143,6 +144,7 @@ def create_bind_group(device, bindings: list, label=""):
         entries=resources,
     )
     return layout, group
+
 
 class Device(wgpu.Device):
     """Helper class to wrap device functions"""

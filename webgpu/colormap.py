@@ -1,5 +1,9 @@
-
-from webgpu.webgpu_api import TexelCopyBufferLayout, TexelCopyTextureInfo, TextureUsage, TextureFormat
+from webgpu.webgpu_api import (
+    TexelCopyBufferLayout,
+    TexelCopyTextureInfo,
+    TextureUsage,
+    TextureFormat,
+)
 
 from .uniforms import Binding
 from .utils import SamplerBinding, TextureBinding

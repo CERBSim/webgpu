@@ -18,8 +18,10 @@ from .webgpu_api import BackendType, RenderPassEncoder, ColorTargetState
 # print("BackendType", BackendType)
 # print("ColorTargetState", s)
 
+
 def f(encoder: RenderPassEncoder):
     return
+
 
 gpu: WebGPU = None
 mesh_object: RenderObject = None
@@ -28,6 +30,7 @@ point_number_object = None
 
 cf = None
 render_function = None
+
 
 async def main():
     global gpu, mesh_object, cf, render_function
@@ -91,9 +94,7 @@ async def main():
     t_last = 0
     fps = 0
     frame_counter = 0
-    params = pyodide.ffi.to_js({
-        "shrink": 0.5
-        })
+    params = pyodide.ffi.to_js({"shrink": 0.5})
 
     def render(time):
         # this is the render function, it's called for every frame
@@ -144,7 +145,6 @@ async def main():
         gui.onChange(render_function)
     except Exception as e:
         print(e)
-
 
 
 def cleanup():

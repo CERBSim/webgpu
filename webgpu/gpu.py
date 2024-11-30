@@ -34,12 +34,11 @@ async def init_webgpu(canvas):
         requiredLimits=Limits(
             maxBufferSize=one_gig - 16,
             maxStorageBufferBindingSize=one_gig - 16,
-        )
+        ),
     )
     limits = device.limits
     js.console.log("device limits\n", limits)
     js.console.log("adapter info\n", adapter.info)
-
 
     print(
         f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB"
@@ -131,7 +130,9 @@ class WebGPU:
         load_op = command_encoder.getLoadOp()
 
         render_pass_encoder = command_encoder.beginRenderPass(
-            self.color_attachments(load_op), self.depth_stencil_attachment(load_op), **kwargs
+            self.color_attachments(load_op),
+            self.depth_stencil_attachment(load_op),
+            **kwargs,
         )
 
         render_pass_encoder.setViewport(

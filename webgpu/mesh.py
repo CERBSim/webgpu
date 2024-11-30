@@ -373,29 +373,27 @@ class Mesh3dElementsRenderObject(DataRenderObject):
             el_name = eltype.name.capitalize()
 
             self._pipelines[el_name.upper()] = self.device.createRenderPipeline(
-                    label=f"{self.label}:{el_name}",
-                    layout=self.device.createPipelineLayout([bind_layout]),
-                    vertex=VertexState(
-                        module=shader_module,
-                        entryPoint=f"vertexMesh{el_name}",
-                    ),
-                    fragment=FragmentState(
-                        module=shader_module,
-                        entryPoint="fragmentMesh",
-                        targets=[ColorTargetState(format=self.gpu.format)],
-                    ),
-                    primitive=PrimitiveState(
-                        topology=eltype.value.primitive_topology,
-                    ),
-                    depthStencil=DepthStencilState(
-                        **self.gpu.depth_stencil,
-                        # shift trigs behind to ensure that edges are rendered properly
-                        depthBias=1.0,
-                        depthBiasSlopeScale=1,
-                    ),
-
-
-                )
+                label=f"{self.label}:{el_name}",
+                layout=self.device.createPipelineLayout([bind_layout]),
+                vertex=VertexState(
+                    module=shader_module,
+                    entryPoint=f"vertexMesh{el_name}",
+                ),
+                fragment=FragmentState(
+                    module=shader_module,
+                    entryPoint="fragmentMesh",
+                    targets=[ColorTargetState(format=self.gpu.format)],
+                ),
+                primitive=PrimitiveState(
+                    topology=eltype.value.primitive_topology,
+                ),
+                depthStencil=DepthStencilState(
+                    **self.gpu.depth_stencil,
+                    # shift trigs behind to ensure that edges are rendered properly
+                    depthBias=1.0,
+                    depthBiasSlopeScale=1,
+                ),
+            )
 
     def render(self, encoder):
         render_pass = self.gpu.begin_render_pass(encoder)
