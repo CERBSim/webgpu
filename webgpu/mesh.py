@@ -707,6 +707,7 @@ class PointNumbersRenderObject(DataRenderObject):
         shader_module = self.gpu.shader_module
 
         self._pipeline = self.device.createRenderPipeline(
+            label=self.label,
             layout=self.device.createPipelineLayout([bind_layout]),
             vertex=VertexState(
                 module=shader_module,
