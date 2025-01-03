@@ -156,34 +156,6 @@ def cleanup():
         del mesh_object
 
 
-def reload_package(package_name):
-    """Reload python package and all submodules (searches in modules for references to other submodules)"""
-    import importlib
-    import os
-    import types
-
-    package = importlib.import_module(package_name)
-    assert hasattr(package, "__package__")
-    file_name = package.__file__
-    package_dir = os.path.dirname(file_name) + os.sep
-    reloaded_modules = {file_name: package}
-
-    def reload_recursive(module):
-        module = importlib.reload(module)
-
-        for var in vars(module).values():
-            if isinstance(var, types.ModuleType):
-                file_name = getattr(var, "__file__", None)
-                if file_name is not None and file_name.startswith(package_dir):
-                    if file_name not in reloaded_modules:
-                        reloaded_modules[file_name] = reload_recursive(var)
-
-        return module
-
-    reload_recursive(package)
-    return reloaded_modules
-
-
 async def user_function(data):
     code, expr = data
     import base64

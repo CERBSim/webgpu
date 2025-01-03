@@ -7,7 +7,7 @@ from .uniforms import (
     MeshUniforms,
     ViewUniforms,
 )
-from .utils import to_js, get_shader_code
+from .utils import to_js, BaseBinding, create_bind_group
 from .webgpu_api import *
 
 
@@ -55,7 +55,6 @@ class WebGPU:
         self.canvas = canvas
 
         print("canvas", canvas.width, canvas.height, canvas)
-        self.shader_module = device.createShaderModule(get_shader_code())
 
         self.u_clipping = ClippingUniforms(self.device)
         self.u_view = ViewUniforms(self.device)
@@ -152,3 +151,35 @@ class WebGPU:
         # del self.input_handler
         # del self.depth_texture
         # del self.device
+
+class RenderObject:
+    """Base class for render objects"""
+
+    gpu: WebGPU
+    label: str = ""
+
+    def __init__(self, gpu, label=None):
+        self.gpu = gpu
+
+        if label is None:
+            self.label = self.__class__.__name__
+        else:
+            self.label = label
+
+        self.on_resize()
+
+    def render(self, encoder: CommandEncoder):
+        raise NotImplementedError
+
+    def on_resize(self):
+        pass
+
+    def get_bindings(self) -> list[BaseBinding]:
+        raise NotImplementedError
+
+    def create_bind_group(self):
+        return create_bind_group(self.device, self.get_bindings(), self.label)
+
+    @property
+    def device(self) -> Device:
+        return self.gpu.device

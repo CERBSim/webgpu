@@ -1,5 +1,6 @@
 import base64
 import pickle
+from .utils import reload_package
 
 try:
     import js
@@ -11,27 +12,23 @@ except:
 import base64
 
 
-def create_package_zip():
+def create_package_zip(module_name="webgpu"):
     """
     Creates a zip file containing all files in the specified Python package.
-
-    Parameters:
-    - package_name (str): Name of the Python package.
-    - output_filename (str): Name of the output zip file.
     """
     import importlib.util
     import os
     import tempfile
     import zipfile
 
-    spec = importlib.util.find_spec("webgpu")
+    spec = importlib.util.find_spec(module_name)
     if spec is None or spec.origin is None:
-        raise ValueError(f"Package webgpu not found.")
+        raise ValueError(f"Package {module_name} not found.")
 
     package_dir = os.path.dirname(spec.origin)
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        output_filename = os.path.join(temp_dir, "webgpu.zip")
+        output_filename = os.path.join(temp_dir, f"{module_name}.zip")
         with zipfile.ZipFile(output_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
             for root, _, files in os.walk(package_dir):
                 for file in files:
@@ -108,22 +105,37 @@ def _draw_client(data):
     import js
     import pyodide.ffi
 
-    import webgpu.mesh
     from webgpu.jupyter import _decode_data, _decode_function, gpu
 
     data = _decode_data(data)
+
+    from pathlib import Path
+
+    for module_data in data.get('modules', {}).values():
+        # extract zipfile from binary chunk
+        import zipfile
+        import io
+
+        zipf = zipfile.ZipFile(io.BytesIO(module_data))
+        zipf.extractall()
+
+    for module_name in data.get('modules', {}):
+        reload_package(module_name)
+
+
     if "_init_function" in data:
         func = _decode_function(data["_init_function"])
         func(data)
     else:
+        # from ngsolve_webgpu import *
         import ngsolve as ngs
 
         mesh = data["mesh"]
         cf = data["cf"]
         order = data.get("order", 1)
 
-        mesh_data = webgpu.mesh.MeshData(mesh, cf, order)
-        mesh_object = webgpu.mesh.MeshRenderObject(gpu, mesh_data)
+        mesh_data = MeshData(mesh, cf, order)
+        mesh_object = MeshRenderObject(gpu, mesh_data)
 
         def render_function(t):
             gpu.update_uniforms()
@@ -196,6 +208,7 @@ if not _is_pyodide:
         data = {"cf": cf, "mesh": mesh}
         _run_js_code(data)
 
-    def DrawCustom(data, client_function):
+    def DrawCustom(data, client_function, modules: list[str]=[]):
         data["_init_function"] = _encode_function(client_function)
+        data['modules'] = {module: create_package_zip(module) for module in modules}
         _run_js_code(data)

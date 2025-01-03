@@ -2,7 +2,6 @@ import base64
 import zlib
 
 from . import webgpu_api as wgpu
-from .shader import get_shader_code
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
 
@@ -146,55 +145,8 @@ def create_bind_group(device, bindings: list, label=""):
     return layout, group
 
 
-class Device(wgpu.Device):
-    """Helper class to wrap device functions"""
-
-    @property
-    def shader_module(self):
-        code = get_shader_code()
-        return self.createShaderModule(code)
-
-    def create_pipeline_layout(self, binding_layout, label=""):
-        return self.handle.createPipelineLayout(
-            to_js({"label": label, "bindGroupLayouts": [binding_layout]})
-        )
-
-    def create_render_pipeline(self, binding_layout, options: dict):
-        options["layout"] = self.create_pipeline_layout(
-            binding_layout, label=options.get("label", "")
-        )
-        return self.handle.createRenderPipeline(to_js(options))
-
-    def create_compute_pipeline(self, binding_layout, options: dict):
-        options["layout"] = self.create_pipeline_layout(
-            binding_layout, label=options.get("label", "")
-        )
-        return self.handle.createComputePipeline(to_js(options))
-
-    def create_buffer(self, size_or_data: int | bytes, usage=None):
-        import js
-
-        usage = (
-            js.GPUBufferUsage.STORAGE | js.GPUBufferUsage.COPY_DST
-            if usage is None
-            else usage
-        )
-        if isinstance(size_or_data, int):
-            size = size_or_data
-            data = None
-        else:
-            size = len(size_or_data)
-            data = size_or_data
-        buffer = self.handle.createBuffer(size=size, usage=usage)
-        if data is not None:
-            self.handle.queue.writeBuffer(buffer, 0, js.Uint8Array.new(data))
-        return buffer
-
-
 class TimeQuery:
     def __init__(self, device):
-        import js
-
         self.device = device
         self.query_set = self.device.createQuerySet(
             to_js({"type": "timestamp", "count": 2})
@@ -203,3 +155,33 @@ class TimeQuery:
             size=16,
             usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
         )
+
+
+def reload_package(package_name):
+    """Reload python package and all submodules (searches in modules for references to other submodules)"""
+    import importlib
+    import os
+    import types
+
+    package = importlib.import_module(package_name)
+    assert hasattr(package, "__package__")
+    file_name = package.__file__
+    package_dir = os.path.dirname(file_name) + os.sep
+    reloaded_modules = {file_name: package}
+
+    def reload_recursive(module):
+        module = importlib.reload(module)
+
+        for var in vars(module).values():
+            if isinstance(var, types.ModuleType):
+                file_name = getattr(var, "__file__", None)
+                if file_name is not None and file_name.startswith(package_dir):
+                    if file_name not in reloaded_modules:
+                        reloaded_modules[file_name] = reload_recursive(var)
+
+        return module
+
+    reload_recursive(package)
+    return reloaded_modules
+
+
