@@ -1,2 +1,2 @@
 
-var<storage> counter: atomic<i32>;
+// var<storage> counter: atomic<i32>;

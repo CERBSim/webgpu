@@ -55,7 +55,7 @@ async def main():
         trafo = occ.gp_Trsf().Scale(inner.center, 1.1)
         outer = trafo(inner)
 
-        inner.Identify(outer, "", idtype, trafo)
+        # inner.Identify(outer, "", idtype, trafo)
         shape = occ.Glue([outer - inner, inner])
 
         geo = occ.OCCGeometry(shape)
@@ -94,7 +94,7 @@ async def main():
     t_last = 0
     fps = 0
     frame_counter = 0
-    params = pyodide.ffi.to_js({"shrink": 0.5})
+    params = pyodide.ffi.to_js({"shrink": 0.3})
 
     def render(time):
         # this is the render function, it's called for every frame

@@ -1,4 +1,3 @@
-import js
 import numpy as np
 
 from .utils import to_js
@@ -127,6 +126,7 @@ class InputHandler:
     def _render(self):
         self._update_uniforms()
         if self.render_function:
+            import js
             js.requestAnimationFrame(self.render_function)
 
     def on_mousedown(self, ev):
@@ -156,6 +156,7 @@ class InputHandler:
             self._render()
 
             if self.render_function:
+                import js
                 js.requestAnimationFrame(self.render_function)
 
     def unregister_callbacks(self):
@@ -184,6 +185,7 @@ class InputHandler:
     def __del__(self):
         self.unregister_callbacks()
         if self.render_function:
+            import js
             js.cancelAnimationFrame(self.render_function)
             self.render_function.destroy()
             self.render_function = None

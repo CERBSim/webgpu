@@ -1,8 +1,3 @@
-import sys
-
-import js
-
-from . import utils
 from .colormap import Colormap
 from .input_handler import InputHandler
 from .uniforms import (
@@ -18,6 +13,7 @@ from .webgpu_api import *
 
 async def init_webgpu(canvas):
     """Initialize WebGPU, create device and canvas"""
+    import js
     adapter = await requestAdapter(powerPreference=PowerPreference.low_power)
 
     required_features = []
@@ -52,6 +48,7 @@ class WebGPU:
     """WebGPU management class, handles "global" state, like device, canvas, frame/depth buffer, colormap and uniforms"""
 
     def __init__(self, device, canvas):
+        import js
         self.render_function = None
         self.device = device
         self.format = js.navigator.gpu.getPreferredCanvasFormat()

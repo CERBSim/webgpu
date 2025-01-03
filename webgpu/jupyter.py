@@ -1,5 +1,4 @@
 import base64
-import marshal
 import pickle
 
 try:
@@ -93,14 +92,16 @@ def _decode_data(data):
 
 
 def _encode_function(func):
-    return base64.b64encode(marshal.dumps(func.__code__)).decode("utf-8")
+    import inspect
+
+    return inspect.getsource(func)
 
 
 def _decode_function(func_str):
-    import types
-
-    code = marshal.loads(base64.b64decode(func_str.encode("utf-8")))
-    return types.FunctionType(code, globals(), "_decoded_function")
+    d = {}
+    exec(func_str, d, d)
+    func_name = sorted(d.keys())[-1]
+    return d[func_name]
 
 
 def _draw_client(data):
@@ -112,7 +113,6 @@ def _draw_client(data):
 
     data = _decode_data(data)
     if "_init_function" in data:
-        print("have init function")
         func = _decode_function(data["_init_function"])
         func(data)
     else:
@@ -126,9 +126,9 @@ def _draw_client(data):
         mesh_object = webgpu.mesh.MeshRenderObject(gpu, mesh_data)
 
         def render_function(t):
-            gpu.uniforms.update_buffer()
+            gpu.update_uniforms()
 
-            encoder = gpu.create_command_encoder()
+            encoder = gpu.device.createCommandEncoder()
             mesh_object.render(encoder)
             gpu.device.queue.submit([encoder.finish()])
 
@@ -149,14 +149,7 @@ async def _init(canvas_id="canvas"):
     print("canvas", canvas)
 
     gpu = await init_webgpu(canvas)
-
-    for i in [0, 5, 10]:
-        gpu.uniforms.mat[i] = 1.8
-
-    gpu.uniforms.mat[15] = 1.0
-
-    gpu.uniforms.mat[12] = -0.5 * 1.8
-    gpu.uniforms.mat[13] = -0.5 * 1.8
+    gpu.update_uniforms()
 
 
 _draw_js_code_template = r"""
