@@ -43,7 +43,7 @@ def run_http_server():
 clients = set()
 
 
-async def websocket_handler(websocket, path):
+async def websocket_handler(websocket, path=None):
     clients.add(websocket)
     try:
         async for message in websocket:
