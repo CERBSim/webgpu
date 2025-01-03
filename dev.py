@@ -80,15 +80,12 @@ class FileChangeHandler(FileSystemEventHandler):
         self.debounce_timer.start()
 
 
-def main():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+async def main():
+    loop = asyncio.get_running_loop()
+    from threading import Thread
 
     if _have_dev_dependencies:
-        websocket_server = websockets.serve(websocket_handler, "localhost", 6789)
-        loop.run_until_complete(websocket_server)
-
-    from threading import Thread
+        await websockets.serve(websocket_handler, "localhost", 6789)
 
     http_thread = Thread(target=run_http_server)
     http_thread.start()
@@ -100,7 +97,8 @@ def main():
         observer.start()
 
     try:
-        loop.run_forever()
+        while True:
+            await asyncio.sleep(1)
     except KeyboardInterrupt:
         if _have_dev_dependencies:
             observer.stop()
@@ -110,4 +108,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
