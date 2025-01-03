@@ -6,7 +6,7 @@ from webgpu.webgpu_api import (
 )
 
 from .uniforms import Binding
-from .utils import SamplerBinding, TextureBinding
+from .utils import SamplerBinding, TextureBinding, read_shader_file
 
 
 class Colormap:
@@ -46,6 +46,10 @@ class Colormap:
             TextureBinding(Binding.COLORMAP_TEXTURE, self.texture),
             SamplerBinding(Binding.COLORMAP_SAMPLER, self.sampler),
         ]
+
+    def get_shader_code(self):
+        return read_shader_file("colormap.wgsl", __file__)
+
 
     def __del__(self):
         del self.texture

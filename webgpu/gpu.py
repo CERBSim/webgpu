@@ -166,19 +166,14 @@ class RenderObject:
         else:
             self.label = label
 
-        self.on_resize()
-
-    def render(self, encoder: CommandEncoder):
+    def render(self, encoder: CommandEncoder) -> None:
         raise NotImplementedError
-
-    def on_resize(self):
-        pass
 
     def get_bindings(self) -> list[BaseBinding]:
         raise NotImplementedError
 
-    def create_bind_group(self):
-        return create_bind_group(self.device, self.get_bindings(), self.label)
+    def get_shader_code(self) -> str:
+        raise NotImplementedError
 
     @property
     def device(self) -> Device:

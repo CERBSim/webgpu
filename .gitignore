@@ -1,3 +1,4 @@
+dist
 pyodide
 *.tar.bz2
 .ipynb_checkpoints
