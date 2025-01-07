@@ -1324,10 +1324,15 @@ class Device(BaseWebGPUHandle):
         mappedAtCreation: bool = False,
         label: str = "",
     ) -> Buffer:
-        return self.handle.createBuffer(
-            BufferDescriptor(
-                size=size, usage=usage, mappedAtCreation=mappedAtCreation, label=label
-            ).toJS()
+        return Buffer(
+            self.handle.createBuffer(
+                BufferDescriptor(
+                    size=size,
+                    usage=usage,
+                    mappedAtCreation=mappedAtCreation,
+                    label=label,
+                ).toJS()
+            )
         )
 
     def createCommandEncoder(
