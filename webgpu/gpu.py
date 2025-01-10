@@ -7,7 +7,7 @@ from .uniforms import (
     MeshUniforms,
     ViewUniforms,
 )
-from .utils import to_js, BaseBinding, create_bind_group
+from .utils import to_js, BaseBinding
 from .webgpu_api import *
 
 
@@ -15,7 +15,7 @@ async def init_webgpu(canvas):
     """Initialize WebGPU, create device and canvas"""
     import js
 
-    adapter = await requestAdapter(powerPreference=PowerPreference.low_power)
+    adapter = await requestAdapter(powerPreference=PowerPreference.high_performance)
 
     required_features = []
     if "timestamp-query" in adapter.features:

@@ -45,6 +45,8 @@ _package_b64 = base64.b64encode(create_package_zip()).decode("utf-8")
 
 _init_js_code = (
     r"""
+const SNAPSHOT_URL = 'https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@webgpu1/snapshot.bin.gz';
+
 function decodeB64(base64String) {
     const binaryString = atob(base64String);
     const len = binaryString.length;
@@ -55,10 +57,23 @@ function decodeB64(base64String) {
     return bytes;
 }
 
+async function fetchSnapshot() {
+  const blob = await (await fetch(SNAPSHOT_URL)).blob();
+  const decompressor = new DecompressionStream('gzip');
+  const stream = blob.stream().pipeThrough(decompressor);
+  const response = new Response(stream);
+  return await response.arrayBuffer();
+};
+
 async function main() {
   if(window.webgpu_ready === undefined) {
-      const pyodide_module = await import("../../files/pyodide/pyodide.mjs");
-      window.pyodide = await pyodide_module.loadPyodide();
+      const pyodide_module = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
+      window.pyodide = await pyodide_module.loadPyodide( {
+        // _loadSnapshot: await fetchSnapshot(),
+        lockFileURL: 'https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@webgpu2/pyodide-lock.json',
+        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
+        }
+      );
       pyodide.setDebug(true);
       await pyodide.loadPackage(['netgen', 'ngsolve', 'numpy', 'packaging']);
   }
