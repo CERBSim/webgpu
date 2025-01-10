@@ -1,11 +1,11 @@
 from .colormap import Colormap
+from .camera import Camera
 from .input_handler import InputHandler
 from .uniforms import (
     ClippingUniforms,
     FontUniforms,
     FunctionUniforms,
     MeshUniforms,
-    ViewUniforms,
 )
 from .utils import BaseBinding, to_js
 from .webgpu_api import *
@@ -65,7 +65,6 @@ class WebGPU:
         print("canvas", canvas.width, canvas.height, canvas)
 
         self.u_clipping = ClippingUniforms(self.device)
-        self.u_view = ViewUniforms(self.device)
         self.u_font = FontUniforms(self.device)
         self.u_function = FunctionUniforms(self.device)
         self.u_mesh = MeshUniforms(self.device)
@@ -92,6 +91,7 @@ class WebGPU:
         self.multisample = MultisampleState(count=multisample_count)
 
         self.colormap = Colormap(device)
+        self.camera = Camera(device)
         self.depth_format = TextureFormat.depth24plus
 
         self.depth_texture = device.createTexture(
@@ -101,7 +101,7 @@ class WebGPU:
             label="depth_texture",
             sampleCount=4,
         )
-        self.input_handler = InputHandler(canvas, self.u_view)
+        self.input_handler = InputHandler(canvas, self.camera.uniforms)
 
     def color_attachments(self, loadOp: LoadOp):
         return [
@@ -121,7 +121,7 @@ class WebGPU:
         )
 
     def update_uniforms(self):
-        self.u_view.update_buffer()
+        self.camera.uniforms.update_buffer()
         self.u_clipping.update_buffer()
         self.u_font.update_buffer()
         self.u_function.update_buffer()
@@ -129,11 +129,11 @@ class WebGPU:
 
     def get_bindings(self):
         return [
-            *self.u_view.get_bindings(),
             *self.u_clipping.get_bindings(),
             *self.u_font.get_bindings(),
             *self.u_function.get_bindings(),
             *self.u_mesh.get_bindings(),
+            *self.camera.get_bindings(),
             *self.colormap.get_bindings(),
         ]
 
@@ -154,12 +154,12 @@ class WebGPU:
 
     def __del__(self):
         print("destroy WebGPU")
-        del self.u_view
         del self.u_clipping
         del self.u_font
         del self.u_function
         del self.u_mesh
         del self.colormap
+        del self.camera
 
         # unregister is needed to remove circular references
         self.input_handler.unregister_callbacks()

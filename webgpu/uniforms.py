@@ -17,7 +17,7 @@ from .webgpu_api import BufferUsage, Device
 class Binding:
     """Binding numbers for uniforms in shader code in uniforms.wgsl"""
 
-    VIEW = 0
+    CAMERA = 0
     CLIPPING = 1
     FONT = 2
     FONT_TEXTURE = 3
@@ -68,17 +68,17 @@ class UniformBase(ct.Structure):
     def update_buffer(self):
         self.device.queue.writeBuffer(self._buffer, 0, bytes(self))
 
-    def get_bindings(self):
+    def get_bindings(self) -> list[UniformBinding]:
         return [UniformBinding(self._binding, self._buffer)]
 
     def __del__(self):
         self._buffer.destroy()
 
 
-class ViewUniforms(UniformBase):
+class CameraUniforms(UniformBase):
     """Uniforms class, derived from ctypes.Structure to ensure correct memory layout"""
 
-    _binding = Binding.VIEW
+    _binding = Binding.CAMERA
 
     _fields_ = [
         ("model_view", ct.c_float * 16),
