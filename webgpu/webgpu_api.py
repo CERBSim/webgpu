@@ -1281,7 +1281,9 @@ class ComputePassEncoder(BaseWebGPUHandle):
     def dispatchWorkgroupsIndirect(
         self, indirectBuffer: Buffer, indirectOffset: int = 0
     ) -> None:
-        return self.handle.dispatchWorkgroupsIndirect(indirectBuffer.handle, indirectOffset)
+        return self.handle.dispatchWorkgroupsIndirect(
+            indirectBuffer.handle, indirectOffset
+        )
 
     def end(self) -> None:
         return self.handle.end()
@@ -1598,15 +1600,13 @@ class RenderBundleEncoder(BaseWebGPUHandle):
             indexCount, instanceCount, firstIndex, baseVertex, firstInstance
         )
 
-    def drawIndirect(
-        self, indirectBuffer: "Buffer | None" = None, indirectOffset: int = 0
-    ) -> None:
-        return self.handle.drawIndirect(None if indirectBuffer is None else indirectBuffer.handle, indirectOffset)
+    def drawIndirect(self, indirectBuffer: Buffer, indirectOffset: int = 0) -> None:
+        return self.handle.drawIndirect(indirectBuffer.handle, indirectOffset)
 
     def drawIndexedIndirect(
-        self, indirectBuffer: "Buffer | None" = None, indirectOffset: int = 0
+        self, indirectBuffer: Buffer, indirectOffset: int = 0
     ) -> None:
-        return self.handle.drawIndexedIndirect(None if indirectBuffer is None else indirectBuffer.handle, indirectOffset)
+        return self.handle.drawIndexedIndirect(indirectBuffer.handle, indirectOffset)
 
     def insertDebugMarker(self, markerLabel: str = "") -> None:
         return self.handle.insertDebugMarker(markerLabel)
@@ -1624,7 +1624,9 @@ class RenderBundleEncoder(BaseWebGPUHandle):
         offset: int = 0,
         size: int = 0,
     ) -> None:
-        return self.handle.setVertexBuffer(slot, None if buffer is None else buffer.handle, offset, size)
+        return self.handle.setVertexBuffer(
+            slot, None if buffer is None else buffer.handle, offset, size
+        )
 
     def setIndexBuffer(
         self,
@@ -1633,7 +1635,9 @@ class RenderBundleEncoder(BaseWebGPUHandle):
         offset: int = 0,
         size: int = 0,
     ) -> None:
-        return self.handle.setIndexBuffer(None if buffer is None else buffer.handle, format, offset, size)
+        return self.handle.setIndexBuffer(
+            None if buffer is None else buffer.handle, format, offset, size
+        )
 
     def finish(
         self,
@@ -1675,15 +1679,13 @@ class RenderPassEncoder(BaseWebGPUHandle):
             indexCount, instanceCount, firstIndex, baseVertex, firstInstance
         )
 
-    def drawIndirect(
-        self, indirectBuffer: "Buffer | None" = None, indirectOffset: int = 0
-    ) -> None:
-        return self.handle.drawIndirect(None if indirectBuffer is None else indirectBuffer.handle, indirectOffset)
+    def drawIndirect(self, indirectBuffer: Buffer, indirectOffset: int = 0) -> None:
+        return self.handle.drawIndirect(indirectBuffer.handle, indirectOffset)
 
     def drawIndexedIndirect(
-        self, indirectBuffer: "Buffer | None" = None, indirectOffset: int = 0
+        self, indirectBuffer: Buffer, indirectOffset: int = 0
     ) -> None:
-        return self.handle.drawIndexedIndirect(None if indirectBuffer is None else indirectBuffer.handle, indirectOffset)
+        return self.handle.drawIndexedIndirect(indirectBuffer.handle, indirectOffset)
 
     def executeBundles(self, bundles: list["RenderBundle"] = []) -> None:
         return self.handle.executeBundles(bundles)
@@ -1726,7 +1728,9 @@ class RenderPassEncoder(BaseWebGPUHandle):
         offset: int = 0,
         size: int = 0,
     ) -> None:
-        return self.handle.setVertexBuffer(slot, None if buffer is None else buffer.handle, offset, size)
+        return self.handle.setVertexBuffer(
+            slot, None if buffer is None else buffer.handle, offset, size
+        )
 
     def setIndexBuffer(
         self,
@@ -1735,7 +1739,9 @@ class RenderPassEncoder(BaseWebGPUHandle):
         offset: int = 0,
         size: int = 0,
     ) -> None:
-        return self.handle.setIndexBuffer(None if buffer is None else buffer.handle, format, offset, size)
+        return self.handle.setIndexBuffer(
+            None if buffer is None else buffer.handle, format, offset, size
+        )
 
     def beginOcclusionQuery(self, queryIndex: int = 0) -> None:
         return self.handle.beginOcclusionQuery(queryIndex)

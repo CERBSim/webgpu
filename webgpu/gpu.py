@@ -14,6 +14,7 @@ from .webgpu_api import *
 async def init_webgpu(canvas):
     """Initialize WebGPU, create device and canvas"""
     import js
+
     adapter = await requestAdapter(powerPreference=PowerPreference.low_power)
 
     required_features = []
@@ -49,6 +50,7 @@ class WebGPU:
 
     def __init__(self, device, canvas):
         import js
+
         self.render_function = None
         self.device = device
         self.format = js.navigator.gpu.getPreferredCanvasFormat()
@@ -151,6 +153,7 @@ class WebGPU:
         # del self.input_handler
         # del self.depth_texture
         # del self.device
+
 
 class RenderObject:
     """Base class for render objects"""

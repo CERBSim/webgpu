@@ -50,6 +50,5 @@ class Colormap:
     def get_shader_code(self):
         return read_shader_file("colormap.wgsl", __file__)
 
-
     def __del__(self):
         del self.texture

@@ -6,9 +6,11 @@ from . import webgpu_api as wgpu
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
 
+
 def read_shader_file(file_name, module_file) -> str:
     shader_dir = Path(module_file).parent / "shaders"
     return (shader_dir / file_name).read_text()
+
 
 def encode_bytes(data: bytes) -> str:
     if data == b"":
@@ -187,5 +189,3 @@ def reload_package(package_name):
 
     reload_recursive(package)
     return reloaded_modules
-
-

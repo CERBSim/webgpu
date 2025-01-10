@@ -111,7 +111,7 @@ def _draw_client(data):
 
     from pathlib import Path
 
-    for module_data in data.get('modules', {}).values():
+    for module_data in data.get("modules", {}).values():
         # extract zipfile from binary chunk
         import zipfile
         import io
@@ -119,9 +119,8 @@ def _draw_client(data):
         zipf = zipfile.ZipFile(io.BytesIO(module_data))
         zipf.extractall()
 
-    for module_name in data.get('modules', {}):
+    for module_name in data.get("modules", {}):
         reload_package(module_name)
-
 
     if "_init_function" in data:
         func = _decode_function(data["_init_function"])
@@ -208,7 +207,7 @@ if not _is_pyodide:
         data = {"cf": cf, "mesh": mesh}
         _run_js_code(data)
 
-    def DrawCustom(data, client_function, modules: list[str]=[]):
+    def DrawCustom(data, client_function, modules: list[str] = []):
         data["_init_function"] = _encode_function(client_function)
-        data['modules'] = {module: create_package_zip(module) for module in modules}
+        data["modules"] = {module: create_package_zip(module) for module in modules}
         _run_js_code(data)
