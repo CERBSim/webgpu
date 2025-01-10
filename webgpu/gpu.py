@@ -7,7 +7,7 @@ from .uniforms import (
     MeshUniforms,
     ViewUniforms,
 )
-from .utils import to_js, BaseBinding
+from .utils import BaseBinding, to_js
 from .webgpu_api import *
 
 
@@ -48,7 +48,13 @@ async def init_webgpu(canvas):
 class WebGPU:
     """WebGPU management class, handles "global" state, like device, canvas, frame/depth buffer, colormap and uniforms"""
 
-    def __init__(self, device, canvas):
+    device: Device
+    depth_format: TextureFormat
+    depth_texture: Texture
+    multisample_texture: Texture
+    multisample: MultisampleState
+
+    def __init__(self, device, canvas, multisample_count=4):
         import js
 
         self.render_function = None
@@ -72,29 +78,36 @@ class WebGPU:
                     "device": device.handle,
                     "format": self.format,
                     "alphaMode": "premultiplied",
+                    "sampleCount": multisample_count,
                 }
             )
         )
+
+        self.multisample_texture = device.createTexture(
+            size=[canvas.width, canvas.height, 1],
+            sampleCount=multisample_count,
+            format=self.format,
+            usage=TextureUsage.RENDER_ATTACHMENT,
+        )
+        self.multisample = MultisampleState(count=multisample_count)
+
         self.colormap = Colormap(device)
         self.depth_format = TextureFormat.depth24plus
-        self.depth_stencil = {
-            "format": self.depth_format,
-            "depthWriteEnabled": True,
-            "depthCompare": "less",
-        }
 
         self.depth_texture = device.createTexture(
             size=[canvas.width, canvas.height, 1],
             format=self.depth_format,
             usage=js.GPUTextureUsage.RENDER_ATTACHMENT,
             label="depth_texture",
+            sampleCount=4,
         )
         self.input_handler = InputHandler(canvas, self.u_view)
 
     def color_attachments(self, loadOp: LoadOp):
         return [
             RenderPassColorAttachment(
-                self.context.getCurrentTexture().createView(),
+                view=self.multisample_texture.createView(),
+                resolveTarget=self.context.getCurrentTexture().createView(),
                 clearValue=Color(1, 1, 1, 1),
                 loadOp=loadOp,
             )
