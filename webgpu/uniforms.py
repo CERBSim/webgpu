@@ -10,7 +10,7 @@ CAUTION:
 
 import ctypes as ct
 
-from .utils import UniformBinding
+from .utils import UniformBinding, BaseBinding
 from .webgpu_api import BufferUsage, Device
 
 
@@ -68,7 +68,7 @@ class UniformBase(ct.Structure):
     def update_buffer(self):
         self.device.queue.writeBuffer(self._buffer, 0, bytes(self))
 
-    def get_bindings(self) -> list[UniformBinding]:
+    def get_bindings(self) -> list[BaseBinding]:
         return [UniformBinding(self._binding, self._buffer)]
 
     def __del__(self):
@@ -105,15 +105,6 @@ class ClippingUniforms(UniformBase):
 class FunctionUniforms(UniformBase):
     _binding = Binding.FUNCTION
     _fields_ = [("min", ct.c_float), ("max", ct.c_float), ("padding", ct.c_float * 2)]
-
-
-class FontUniforms(UniformBase):
-    _binding = Binding.FONT
-    _fields_ = [
-        ("width", ct.c_uint32),
-        ("height", ct.c_uint32),
-        ("padding", ct.c_uint32 * 2),
-    ]
 
 
 class MeshUniforms(UniformBase):

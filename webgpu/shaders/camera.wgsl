@@ -11,11 +11,11 @@ struct CameraUniforms {
 
 @group(0) @binding(0) var<uniform> u_camera : CameraUniforms;
 
-fn cameraMapPoint(p: vec3<f32>) -> vec4<f32> {
+fn cameraMapPoint(p: vec3f) -> vec4f {
     return u_camera.model_view_projection * vec4<f32>(p, 1.0);
 }
 
-fn cameraMapNormal(n: vec3<f32>) -> vec4<f32> {
+fn cameraMapNormal(n: vec3f) -> vec4f {
     return u_camera.normal_mat * vec4(n, 1.0);
 }
 

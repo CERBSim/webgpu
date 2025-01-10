@@ -1,9 +1,9 @@
+from .light import Light
 from .colormap import Colormap
 from .camera import Camera
 from .input_handler import InputHandler
 from .uniforms import (
     ClippingUniforms,
-    FontUniforms,
     FunctionUniforms,
     MeshUniforms,
 )
@@ -65,7 +65,6 @@ class WebGPU:
         print("canvas", canvas.width, canvas.height, canvas)
 
         self.u_clipping = ClippingUniforms(self.device)
-        self.u_font = FontUniforms(self.device)
         self.u_function = FunctionUniforms(self.device)
         self.u_mesh = MeshUniforms(self.device)
         self.u_mesh.shrink = 0.5
@@ -91,6 +90,7 @@ class WebGPU:
         self.multisample = MultisampleState(count=multisample_count)
 
         self.colormap = Colormap(device)
+        self.light = Light(device)
         self.camera = Camera(device)
         self.depth_format = TextureFormat.depth24plus
 
@@ -99,7 +99,7 @@ class WebGPU:
             format=self.depth_format,
             usage=js.GPUTextureUsage.RENDER_ATTACHMENT,
             label="depth_texture",
-            sampleCount=4,
+            sampleCount=multisample_count,
         )
         self.input_handler = InputHandler(canvas, self.camera.uniforms)
 
@@ -108,6 +108,7 @@ class WebGPU:
             RenderPassColorAttachment(
                 view=self.multisample_texture.createView(),
                 resolveTarget=self.context.getCurrentTexture().createView(),
+                # view=self.context.getCurrentTexture().createView(),
                 clearValue=Color(1, 1, 1, 1),
                 loadOp=loadOp,
             )
@@ -123,14 +124,12 @@ class WebGPU:
     def update_uniforms(self):
         self.camera.uniforms.update_buffer()
         self.u_clipping.update_buffer()
-        self.u_font.update_buffer()
         self.u_function.update_buffer()
         self.u_mesh.update_buffer()
 
     def get_bindings(self):
         return [
             *self.u_clipping.get_bindings(),
-            *self.u_font.get_bindings(),
             *self.u_function.get_bindings(),
             *self.u_mesh.get_bindings(),
             *self.camera.get_bindings(),
@@ -155,7 +154,6 @@ class WebGPU:
     def __del__(self):
         print("destroy WebGPU")
         del self.u_clipping
-        del self.u_font
         del self.u_function
         del self.u_mesh
         del self.colormap

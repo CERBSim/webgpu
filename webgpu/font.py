@@ -3,8 +3,9 @@ import json
 import os
 import zlib
 
-from .utils import Device
+from .utils import Device, read_shader_file, TextureBinding
 from .webgpu_api import *
+from .uniforms import UniformBase, Binding, ct
 
 
 def create_font_texture(device: Device, size: int = 15):
@@ -104,6 +105,41 @@ def create_font_data(size: int = 15, font_file: str = ""):
 
     # image.save(f"out_{size}.png")
     return image.tobytes(), w, h
+
+
+class FontUniforms(UniformBase):
+    _binding = Binding.FONT
+    _fields_ = [
+        ("width", ct.c_uint32),
+        ("height", ct.c_uint32),
+        ("padding", ct.c_uint32 * 2),
+    ]
+
+
+class Font:
+    def __init__(self, device, size=15):
+        self.device = device
+        self.uniforms = FontUniforms(device)
+        self.set_font_size(size)
+
+    def get_bindings(self):
+        return [
+            TextureBinding(Binding.FONT_TEXTURE, self._texture, dim=2),
+            *self.uniforms.get_bindings(),
+        ]
+
+    def get_shader_code(self):
+        return read_shader_file("font.wgsl", __file__)
+
+    def set_font_size(self, font_size: int):
+        from .font import create_font_texture
+
+        self._texture = create_font_texture(self.device, font_size)
+        char_width = self._texture.width // (127 - 32)
+        char_height = self._texture.height
+        self.uniforms.width = char_width
+        self.uniforms.height = char_height
+        self.uniforms.update_buffer()
 
 
 if __name__ == "__main__":
