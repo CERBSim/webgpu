@@ -4,7 +4,6 @@ from .camera import Camera
 from .input_handler import InputHandler
 from .uniforms import (
     ClippingUniforms,
-    FunctionUniforms,
     MeshUniforms,
 )
 from .utils import BaseBinding, to_js
@@ -65,7 +64,6 @@ class WebGPU:
         print("canvas", canvas.width, canvas.height, canvas)
 
         self.u_clipping = ClippingUniforms(self.device)
-        self.u_function = FunctionUniforms(self.device)
         self.u_mesh = MeshUniforms(self.device)
         self.u_mesh.shrink = 0.5
 
@@ -124,13 +122,12 @@ class WebGPU:
     def update_uniforms(self):
         self.camera.uniforms.update_buffer()
         self.u_clipping.update_buffer()
-        self.u_function.update_buffer()
+        self.colormap.uniforms.update_buffer()
         self.u_mesh.update_buffer()
 
     def get_bindings(self):
         return [
             *self.u_clipping.get_bindings(),
-            *self.u_function.get_bindings(),
             *self.u_mesh.get_bindings(),
             *self.camera.get_bindings(),
             *self.colormap.get_bindings(),
@@ -154,7 +151,6 @@ class WebGPU:
     def __del__(self):
         print("destroy WebGPU")
         del self.u_clipping
-        del self.u_function
         del self.u_mesh
         del self.colormap
         del self.camera

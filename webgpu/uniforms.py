@@ -21,7 +21,7 @@ class Binding:
     CLIPPING = 1
     FONT = 2
     FONT_TEXTURE = 3
-    FUNCTION = 5
+    COLORMAP = 5
     COLORMAP_TEXTURE = 6
     COLORMAP_SAMPLER = 7
 
@@ -102,9 +102,6 @@ class ClippingUniforms(UniformBase):
         super().__init__(device, mode=mode, **kwargs)
 
 
-class FunctionUniforms(UniformBase):
-    _binding = Binding.FUNCTION
-    _fields_ = [("min", ct.c_float), ("max", ct.c_float), ("padding", ct.c_float * 2)]
 
 
 class MeshUniforms(UniformBase):

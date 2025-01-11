@@ -5,12 +5,16 @@ from webgpu.webgpu_api import (
     TextureFormat,
 )
 
-from .uniforms import Binding
+from .uniforms import Binding, UniformBase, ct
 from .utils import SamplerBinding, TextureBinding, read_shader_file
+
+class ColormapUniforms(UniformBase):
+    _binding = Binding.COLORMAP
+    _fields_ = [("min", ct.c_float), ("max", ct.c_float), ("padding", ct.c_float * 2)]
 
 
 class Colormap:
-    def __init__(self, device):
+    def __init__(self, device, minval=0, maxval=1):
         self.device = device
         n = 5
         data = [0] * n * 4
@@ -28,6 +32,10 @@ class Colormap:
             format=TextureFormat.rgba8unorm,
             dimension="1d",
         )
+        self.uniforms = ColormapUniforms(device)
+        self.uniforms.min = minval
+        self.uniforms.max = maxval
+        self.uniforms.update_buffer()
 
         device.queue.writeTexture(
             TexelCopyTextureInfo(self.texture),
@@ -41,14 +49,18 @@ class Colormap:
             minFilter="linear",
         )
 
+    def set_min_max(self, minval, maxval):
+        self.uniforms.min = minval
+        self.uniforms.max = maxval
+        self.uniforms.update_buffer()
+
     def get_bindings(self):
         return [
             TextureBinding(Binding.COLORMAP_TEXTURE, self.texture),
             SamplerBinding(Binding.COLORMAP_SAMPLER, self.sampler),
+            *self.uniforms.get_bindings(),
         ]
 
     def get_shader_code(self):
         return read_shader_file("colormap.wgsl", __file__)
 
-    def __del__(self):
-        del self.texture
