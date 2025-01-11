@@ -74,21 +74,6 @@ class UniformBase(ct.Structure):
     def __del__(self):
         self._buffer.destroy()
 
-
-class CameraUniforms(UniformBase):
-    """Uniforms class, derived from ctypes.Structure to ensure correct memory layout"""
-
-    _binding = Binding.CAMERA
-
-    _fields_ = [
-        ("model_view", ct.c_float * 16),
-        ("model_view_projection", ct.c_float * 16),
-        ("normal_mat", ct.c_float * 16),
-        ("aspect", ct.c_float),
-        ("padding", ct.c_uint32 * 3),
-    ]
-
-
 class ClippingUniforms(UniformBase):
     _binding = Binding.CLIPPING
     _fields_ = [
