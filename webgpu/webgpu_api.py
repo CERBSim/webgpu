@@ -1552,7 +1552,11 @@ class Queue(BaseWebGPUHandle):
         size: int | None = None,
     ):
         self.handle.writeBuffer(
-            buffer.handle, bufferOffset, js.Uint8Array.new(data), dataOffset, size
+            buffer.handle,
+            bufferOffset,
+            pyodide.ffi.to_js(memoryview(data)),
+            dataOffset,
+            size,
         )
 
     def writeTexture(
@@ -1563,7 +1567,10 @@ class Queue(BaseWebGPUHandle):
         size: list,
     ) -> None:
         return self.handle.writeTexture(
-            destination.toJS(), js.Uint8Array.new(data), dataLayout.toJS(), size
+            destination.toJS(),
+            pyodide.ffi.to_js(memoryview(bytes(data))),
+            dataLayout.toJS(),
+            size,
         )
 
 
