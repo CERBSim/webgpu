@@ -74,6 +74,7 @@ class UniformBase(ct.Structure):
     def __del__(self):
         self._buffer.destroy()
 
+
 class ClippingUniforms(UniformBase):
     _binding = Binding.CLIPPING
     _fields_ = [
@@ -85,8 +86,6 @@ class ClippingUniforms(UniformBase):
 
     def __init__(self, device, mode=0, **kwargs):
         super().__init__(device, mode=mode, **kwargs)
-
-
 
 
 class MeshUniforms(UniformBase):

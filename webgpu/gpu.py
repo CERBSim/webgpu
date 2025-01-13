@@ -54,6 +54,7 @@ class WebGPU:
     multisample: MultisampleState
 
     def __init__(self, device, canvas, multisample_count=4):
+        print("init gpu")
         import js
 
         self.render_function = None

@@ -213,8 +213,10 @@ if not _is_pyodide:
         display(
             Javascript(
                 _draw_js_code_template.format(
-                    canvas_id=_get_canvas_id(), data=_encode_data(data),
-                    width=width, height=height
+                    canvas_id=_get_canvas_id(),
+                    data=_encode_data(data),
+                    width=width,
+                    height=height,
                 )
             )
         )
@@ -223,8 +225,9 @@ if not _is_pyodide:
         data = {"cf": cf, "mesh": mesh}
         _run_js_code(data, width=width, height=height)
 
-    def DrawCustom(data, client_function, modules: list[str] = [],
-                   width=600, height=600):
+    def DrawCustom(
+        data, client_function, modules: list[str] = [], width=600, height=600
+    ):
         data["_init_function"] = _encode_function(client_function)
         data["modules"] = {module: create_package_zip(module) for module in modules}
         _run_js_code(data, width=width, height=height)
