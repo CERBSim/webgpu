@@ -183,8 +183,8 @@ async function draw() {{
     var canvas = document.createElement('canvas');
     var canvas_id = "{canvas_id}";
     canvas.id = canvas_id;
-    canvas.width = 400;
-    canvas.height = 400;
+    canvas.width = {width};
+    canvas.height = {height};
     canvas.style = "background-color: #d0d0d0";
     console.log("create canvas with id", canvas.id, canvas);
     console.log("got id", canvas_id);
@@ -209,20 +209,22 @@ if not _is_pyodide:
         _call_counter += 1
         return f"canvas_{_call_counter}"
 
-    def _run_js_code(data):
+    def _run_js_code(data, width, height):
         display(
             Javascript(
                 _draw_js_code_template.format(
-                    canvas_id=_get_canvas_id(), data=_encode_data(data)
+                    canvas_id=_get_canvas_id(), data=_encode_data(data),
+                    width=width, height=height
                 )
             )
         )
 
-    def Draw(cf, mesh):
+    def Draw(cf, mesh, width=600, height=600):
         data = {"cf": cf, "mesh": mesh}
-        _run_js_code(data)
+        _run_js_code(data, width=width, height=height)
 
-    def DrawCustom(data, client_function, modules: list[str] = []):
+    def DrawCustom(data, client_function, modules: list[str] = [],
+                   width=600, height=600):
         data["_init_function"] = _encode_function(client_function)
         data["modules"] = {module: create_package_zip(module) for module in modules}
-        _run_js_code(data)
+        _run_js_code(data, width=width, height=height)

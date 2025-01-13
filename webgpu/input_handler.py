@@ -136,6 +136,11 @@ class InputHandler:
         if ev.button == 1:
             self._is_moving = True
 
+    def on_mouseout(self, event):
+        self._is_moving = False
+        self._is_rotating = False
+        self._is_zooming = False
+
     def on_mouseup(self, _):
         global _is_moving
         self._is_moving = False
@@ -145,6 +150,7 @@ class InputHandler:
     def on_mousewheel(self, ev):
         self.transform.scale(1 - ev.deltaY / 1000)
         self._render()
+        ev.preventDefault()
 
     def on_mousemove(self, ev):
         if self._is_rotating:
@@ -183,6 +189,7 @@ class InputHandler:
         self.on("mouseup", self.on_mouseup)
         self.on("mousemove", self.on_mousemove)
         self.on("wheel", self.on_mousewheel)
+        self.on("mouseout", self.on_mouseout)
 
     def __del__(self):
         self.unregister_callbacks()
