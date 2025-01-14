@@ -15,4 +15,4 @@ python3 -m pip install .
 python3 -m jupyter notebook example.ipynb
 ```
 
-Note that your browser needs WebGPU support, you can verify that by opening the [webgpureport](https://webgpureport.org) website. See [here](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) for more information about the current status and needed settings.
+Note that your browser needs WebGPU support, you can verify that by opening the [WebGPU Report](https://webgpureport.org) website. See [here](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) for more information about the current status and needed settings.
