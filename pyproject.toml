@@ -5,24 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "webgpu"
 version = "0.0.1"
-description = "A WebGPU project with compute shaders and utilities to visualize NGSolve meshes and functions"
+description = "A Python based WebGPU API using pyodide"
 authors = [
     { name = "Matthias Hochsteger", email = "mhochsteger@cerbsim.com" }
 ]
-# license = { text = "MIT" }
-keywords = ["WebGPU", "compute shaders", "graphics", "Python", "NGSolve", "FEM", "Netgen"]
+license = { text = " LGPLv2+" }
+keywords = ["WebGPU", "compute shaders", "graphics", "Python", "pyodide"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    # "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)",
     "Operating System :: OS Independent"
 ]
 readme = "README.md"
 requires-python = ">=3.8"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["webgpu*"]
-
 [tool.setuptools.package-data]
-# Include .wgsl and .js files in the webgpu package
-webgpu = ["shader/*.wgsl", "*.js"]
+"webgpu" = ["shaders/*.wgsl"]
