@@ -1,28 +1,18 @@
-# NGSolve with Pyodide and WebGPU
+# WebGPU API for Python using Pyodide
 
-This repository contains an example setup for using NGSolve with Pyodide and WebGPU. Follow the instructions below to set up and run the project, either as a standalone HTML server or within a Jupyter Notebook.
+This repository contains a Python wrapper for the WebGPU API to be used in browser environments (for instance plain HTML or Jupyter Notebooks).
 
-You can test the hosted example here (takes a few seconds to init Pyodide): https://mhochsteger.github.io/webgpu_pyodide_experiments/
-
-Note that you need a browser with webgpu support.
+An example jupyter notebook file is [here](example.ipynb), the executed html is available [here](https://cerbsim.github.io/webgpu/).
 
 ## Setup
 
-To get started, download and extract the required NGSolve Pyodide package:
+To get started, just install the python package and run the jupyter notebook.
 
 ```bash
-wget https://ngsolve.org/files/ngsolve_pyodide_0.26.2.tar.bz2
-tar xvf ngsolve_pyodide_0.26.2.tar.bz2
-python3 -m pip install -e .
+git clone https://github.com/cerbsim/webgpu
+cd webgpu
+python3 -m pip install .
+python3 -m jupyter notebook example.ipynb
 ```
 
-## Running the server
-
-Run `python dev.py` and open `http://localhost:8000/index.html`. Everytime you change some code, the website is automatically hot-reloaded (pyodide stays alive) and the `webgpu` package is reloaded and executed.
-For the hot-reload feature you need to have the python packages `websockets` and `watchdog` installed
-
-## Jupyter notebook
-
-```
-jupyter notebook webgpu.ipynb
-```
+Note that your browser needs WebGPU support, you can verify that by opening the [webgpureport](https://webgpureport.org) website. See [here](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) for more information about the current status and needed settings.
