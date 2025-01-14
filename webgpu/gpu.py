@@ -60,6 +60,7 @@ class WebGPU:
         self.render_function = None
         self.device = device
         self.format = js.navigator.gpu.getPreferredCanvasFormat()
+        self.color_target = ColorTargetState(format=self.format)
         self.canvas = canvas
 
         print("canvas", canvas.width, canvas.height, canvas)
