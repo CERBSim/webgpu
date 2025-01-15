@@ -1,11 +1,8 @@
-from .light import Light
-from .colormap import Colormap
 from .camera import Camera
+from .colormap import Colormap
 from .input_handler import InputHandler
-from .uniforms import (
-    ClippingUniforms,
-    MeshUniforms,
-)
+from .light import Light
+from .uniforms import ClippingUniforms, MeshUniforms
 from .utils import BaseBinding, to_js
 from .webgpu_api import *
 
@@ -60,7 +57,22 @@ class WebGPU:
         self.render_function = None
         self.device = device
         self.format = js.navigator.gpu.getPreferredCanvasFormat()
-        self.color_target = ColorTargetState(format=self.format)
+        self.color_target = ColorTargetState(
+            format=self.format,
+            blend=BlendState(
+                color=BlendComponent(
+                    srcFactor=BlendFactor.one,
+                    dstFactor=BlendFactor.one_minus_src_alpha,
+                    operation=BlendOperation.add,
+                ),
+                alpha=BlendComponent(
+                    srcFactor=BlendFactor.one,
+                    dstFactor=BlendFactor.one_minus_src_alpha,
+                    operation=BlendOperation.add,
+                ),
+            ),
+        )
+
         self.canvas = canvas
 
         print("canvas", canvas.width, canvas.height, canvas)

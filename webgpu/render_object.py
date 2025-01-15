@@ -31,7 +31,7 @@ class BaseRenderObject(metaclass=_PostInitMeta):
             self.label = label
 
     def get_bounding_box(self):
-        return ([0., 0., 0.], [1., 1., 1.])
+        return ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0])
 
     def update(self):
         self.create_render_pipeline()
