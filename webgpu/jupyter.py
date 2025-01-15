@@ -128,7 +128,7 @@ async def _init(canvas_id="canvas"):
     return gpu
 
 
-async def _draw_client(canvas_id, data):
+async def _draw_client(canvas_id, data, globs):
     import js
     import pyodide.ffi
     from webgpu.jupyter import _decode_data, _decode_function
@@ -153,8 +153,10 @@ async def _draw_client(canvas_id, data):
 
     for module_name in data.get("modules", {}):
         reload_package(module_name)
-
-    func = _decode_function(data["init_function"])
+    if "init_function" in data:
+        func = _decode_function(data["init_function"])
+    else:
+        func = globs[data["init_function_name"]]
     func(gpu, **data["kwargs"])
 
 
@@ -170,7 +172,7 @@ async function draw() {{
     console.log("got id", canvas_id);
     element.appendChild(canvas);
     await window.webgpu_ready;
-    await window.pyodide.runPythonAsync('import webgpu.jupyter; await webgpu.jupyter._draw_client("{canvas_id}", "{data}")');
+    await window.pyodide.runPythonAsync('import webgpu.jupyter; await webgpu.jupyter._draw_client("{canvas_id}", "{data}", globals())');
 }}
 draw();
     """
@@ -214,7 +216,10 @@ if not _is_pyodide:
     ):
         data = {}
         data["kwargs"] = kwargs
-        data["init_function"] = _encode_function(client_function)
+        if isinstance(client_function, str):
+            data["init_function_name"] = client_function
+        else:
+            data["init_function"] = _encode_function(client_function)
         data["modules"] = {module: create_package_zip(module) for module in modules}
         data["files"] = {f: open(f, "rb").read() for f in files}
         _run_js_code(data, width=width, height=height)
