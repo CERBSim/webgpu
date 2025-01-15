@@ -224,5 +224,4 @@ if not _is_pyodide:
 
     @register_cell_magic
     def pyodide(line, cell):
-        print("run code", cell)
         run_code_in_pyodide(str(cell))
