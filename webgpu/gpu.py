@@ -162,4 +162,3 @@ class WebGPU:
         # del self.input_handler
         # del self.depth_texture
         # del self.device
-

@@ -115,6 +115,7 @@ def _decode_function(func_str):
     func_name = sorted(d.keys())[-1]
     return d[func_name]
 
+
 async def _init(canvas_id="canvas"):
     from webgpu.gpu import init_webgpu
 
@@ -126,10 +127,12 @@ async def _init(canvas_id="canvas"):
     gpu.update_uniforms()
     return gpu
 
+
 async def _draw_client(canvas_id, data):
     import js
     import pyodide.ffi
     from webgpu.jupyter import _decode_data, _decode_function
+
     gpu = await _init(canvas_id)
 
     data = _decode_data(data)
@@ -153,6 +156,7 @@ async def _draw_client(canvas_id, data):
 
     func = _decode_function(data["init_function"])
     func(gpu, **data["kwargs"])
+
 
 _draw_js_code_template = r"""
 async function draw() {{
@@ -200,14 +204,16 @@ if not _is_pyodide:
         _run_js_code(data, width=width, height=height)
 
     def DrawCustom(
-            client_function, kwargs={},
-            modules: list[str] = [],
-            files: list[str] = [],
-            width=600, height=600,
+        client_function,
+        kwargs={},
+        modules: list[str] = [],
+        files: list[str] = [],
+        width=600,
+        height=600,
     ):
         data = {}
         data["kwargs"] = kwargs
         data["init_function"] = _encode_function(client_function)
         data["modules"] = {module: create_package_zip(module) for module in modules}
-        data["files"] = { f : open(f, "rb").read() for f in files }
+        data["files"] = {f: open(f, "rb").read() for f in files}
         _run_js_code(data, width=width, height=height)
