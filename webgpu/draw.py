@@ -3,12 +3,11 @@ from .render_object import RenderObject
 
 def max_bounding_box(boxes):
     import numpy as np
-
     pmin = np.array(boxes[0][0])
     pmax = np.array(boxes[0][1])
     for b in boxes[1:]:
-        pmin = np.min(pmin, b[0])
-        pmax = np.max(pmax, b[1])
+        pmin = np.minimum(pmin, np.array(b[0]))
+        pmax = np.maximum(pmax, np.array(b[1]))
     return (pmin, pmax)
 
 
