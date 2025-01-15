@@ -177,6 +177,7 @@ draw();
 
 if not _is_pyodide:
     from IPython.core.magics.display import Javascript, display
+    from IPython.core.magic import register_cell_magic
 
     display(Javascript(_init_js_code))
 
@@ -217,3 +218,11 @@ if not _is_pyodide:
         data["modules"] = {module: create_package_zip(module) for module in modules}
         data["files"] = {f: open(f, "rb").read() for f in files}
         _run_js_code(data, width=width, height=height)
+
+    def run_code_in_pyodide(code: str):
+        display(Javascript(f"window.pyodide.runPythonAsync(`{code}`)"))
+
+    @register_cell_magic
+    def pyodide(line, cell):
+        print("run code", cell)
+        run_code_in_pyodide(str(cell))
