@@ -105,15 +105,15 @@ def _decode_data(data):
 
 def _encode_function(func):
     import inspect
+    return [func.__name__, inspect.getsource(func)]
 
-    return inspect.getsource(func)
 
-
-def _decode_function(func_str):
-    d = {}
-    exec(func_str, d, d)
-    func_name = sorted(d.keys())[-1]
-    return d[func_name]
+def _decode_function(encoded_func):
+    import __main__
+    func_name, func_str = encoded_func
+    symbols = __main__.__dict__
+    exec(func_str, symbols, symbols)
+    return symbols[func_name]
 
 
 async def _init(canvas_id="canvas"):
@@ -220,7 +220,7 @@ if not _is_pyodide:
         _run_js_code(data, width=width, height=height)
 
     def run_code_in_pyodide(code: str):
-        display(Javascript(f"window.pyodide.runPythonAsync(`{code}`)"))
+        display(Javascript(f"window.webgpu_ready.then(() => {{ window.pyodide.runPythonAsync(`{code}`) }});"))
 
     @register_cell_magic
     def pyodide(line, cell):
