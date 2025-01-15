@@ -115,12 +115,22 @@ def _decode_function(func_str):
     func_name = sorted(d.keys())[-1]
     return d[func_name]
 
+async def _init(canvas_id="canvas"):
+    from webgpu.gpu import init_webgpu
 
-def _draw_client(data):
+    print("init with canvas id", canvas_id)
+    canvas = js.document.getElementById(canvas_id)
+    print("canvas", canvas)
+
+    gpu = await init_webgpu(canvas)
+    gpu.update_uniforms()
+    return gpu
+
+async def _draw_client(canvas_id, data):
     import js
     import pyodide.ffi
-
-    from webgpu.jupyter import _decode_data, _decode_function, gpu
+    from webgpu.jupyter import _decode_data, _decode_function
+    gpu = await _init(canvas_id)
 
     data = _decode_data(data)
 
@@ -134,49 +144,15 @@ def _draw_client(data):
         zipf = zipfile.ZipFile(io.BytesIO(module_data))
         zipf.extractall()
 
+    for file_name, file_data in data.get("files", {}).items():
+        with open(file_name, "wb") as f:
+            f.write(file_data)
+
     for module_name in data.get("modules", {}):
         reload_package(module_name)
 
-    if "_init_function" in data:
-        func = _decode_function(data["_init_function"])
-        func(data)
-    else:
-        # from ngsolve_webgpu import *
-        import ngsolve as ngs
-
-        mesh = data["mesh"]
-        cf = data["cf"]
-        order = data.get("order", 1)
-
-        mesh_data = MeshData(mesh, cf, order)
-        mesh_object = MeshRenderObject(gpu, mesh_data)
-
-        def render_function(t):
-            gpu.update_uniforms()
-
-            encoder = gpu.device.createCommandEncoder()
-            mesh_object.render(encoder)
-            gpu.device.queue.submit([encoder.finish()])
-
-        render_function = pyodide.ffi.create_proxy(render_function)
-        gpu.input_handler.render_function = render_function
-        js.requestAnimationFrame(render_function)
-
-
-gpu = None
-
-
-async def _init(canvas_id="canvas"):
-    global gpu
-    from webgpu.gpu import init_webgpu
-
-    print("init with canvas id", canvas_id)
-    canvas = js.document.getElementById(canvas_id)
-    print("canvas", canvas)
-
-    gpu = await init_webgpu(canvas)
-    gpu.update_uniforms()
-
+    func = _decode_function(data["init_function"])
+    func(gpu, **data["kwargs"])
 
 _draw_js_code_template = r"""
 async function draw() {{
@@ -190,9 +166,7 @@ async function draw() {{
     console.log("got id", canvas_id);
     element.appendChild(canvas);
     await window.webgpu_ready;
-    await window.pyodide.runPythonAsync('import webgpu.jupyter; await webgpu.jupyter._init("{canvas_id}")');
-    const data_string = "{data}";
-    window.pyodide.runPython("import webgpu.jupyter; webgpu.jupyter._draw_client")(data_string);
+    await window.pyodide.runPythonAsync('import webgpu.jupyter; await webgpu.jupyter._draw_client("{canvas_id}", "{data}")');
 }}
 draw();
     """
@@ -226,8 +200,14 @@ if not _is_pyodide:
         _run_js_code(data, width=width, height=height)
 
     def DrawCustom(
-        data, client_function, modules: list[str] = [], width=600, height=600
+            client_function, kwargs={},
+            modules: list[str] = [],
+            files: list[str] = [],
+            width=600, height=600,
     ):
-        data["_init_function"] = _encode_function(client_function)
+        data = {}
+        data["kwargs"] = kwargs
+        data["init_function"] = _encode_function(client_function)
         data["modules"] = {module: create_package_zip(module) for module in modules}
+        data["files"] = { f : open(f, "rb").read() for f in files }
         _run_js_code(data, width=width, height=height)

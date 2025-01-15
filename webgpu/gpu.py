@@ -163,30 +163,3 @@ class WebGPU:
         # del self.depth_texture
         # del self.device
 
-
-class RenderObject:
-    """Base class for render objects"""
-
-    gpu: WebGPU
-    label: str = ""
-
-    def __init__(self, gpu, label=None):
-        self.gpu = gpu
-
-        if label is None:
-            self.label = self.__class__.__name__
-        else:
-            self.label = label
-
-    def render(self, encoder: CommandEncoder) -> None:
-        raise NotImplementedError
-
-    def get_bindings(self) -> list[BaseBinding]:
-        raise NotImplementedError
-
-    def get_shader_code(self) -> str:
-        raise NotImplementedError
-
-    @property
-    def device(self) -> Device:
-        return self.gpu.device
