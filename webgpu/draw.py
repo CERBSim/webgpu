@@ -25,7 +25,8 @@ def Draw(objects: list[RenderObject] | RenderObject):
     pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])
     gpu.input_handler.transform._center = 0.5 * (pmin + pmax)
     gpu.input_handler.transform._scale = 2 / np.linalg.norm(pmax - pmin)
-    gpu.input_handler.transform.rotate(30, -20)
+    if not (pmin[2] == 0 and pmax[2] == 0):
+        gpu.input_handler.transform.rotate(30, -20)
     gpu.input_handler._update_uniforms()
 
     def render_function(t):
