@@ -6,6 +6,54 @@ from . import webgpu_api as wgpu
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
 
+_device = None
+
+
+async def get_device():
+    global _device
+
+    if _device is not None:
+        return _device
+
+    import js
+
+    adapter = await requestAdapter(powerPreference=PowerPreference.high_performance)
+
+    required_features = []
+    if "timestamp-query" in adapter.features:
+        print("have timestamp query")
+        required_features.append("timestamp-query")
+    else:
+        print("no timestamp query")
+
+    one_meg = 1024**2
+    one_gig = 1024**3
+    _device = await adapter.requestDevice(
+        label="WebGPU device",
+        requiredLimits=Limits(
+            maxBufferSize=one_gig - 16,
+            maxStorageBufferBindingSize=one_gig - 16,
+        ),
+    )
+    limits = _device.limits
+    js.console.log("device limits\n", limits)
+    js.console.log("adapter info\n", adapter.info)
+
+    print(
+        f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB"
+    )
+    print(f"max buffer size {limits.maxBufferSize / one_meg:.2f} MB")
+
+    return _device
+
+
+class Pyodide:
+    def __init__(self):
+        pass
+
+    def __setattr__(self, key, value):
+        pass
+
 
 def read_shader_file(file_name, module_file) -> str:
     shader_dir = Path(module_file).parent / "shaders"

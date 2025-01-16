@@ -1,5 +1,6 @@
 import base64
 import pickle
+
 from .utils import reload_package
 
 try:
@@ -133,6 +134,7 @@ async def _init(canvas_id="canvas"):
 async def _draw_client(canvas_id, data, globs):
     import js
     import pyodide.ffi
+
     from webgpu.jupyter import _decode_data, _decode_function
 
     gpu = await _init(canvas_id)
@@ -143,8 +145,8 @@ async def _draw_client(canvas_id, data, globs):
 
     for module_data in data.get("modules", {}).values():
         # extract zipfile from binary chunk
-        import zipfile
         import io
+        import zipfile
 
         zipf = zipfile.ZipFile(io.BytesIO(module_data))
         zipf.extractall()
@@ -180,8 +182,8 @@ draw();
     """
 
 if not _is_pyodide:
-    from IPython.core.magics.display import Javascript, display
     from IPython.core.magic import register_cell_magic
+    from IPython.core.magics.display import Javascript, display
 
     display(Javascript(_init_js_code))
 
@@ -236,3 +238,16 @@ if not _is_pyodide:
     @register_cell_magic
     def pyodide(line, cell):
         run_code_in_pyodide(str(cell))
+
+    del pyodide
+
+    class Pyodide:
+        def __setattr__(self, key, value):
+            data = _encode_data(value)
+            display(
+                Javascript(
+                    f"window.webgpu_ready.then(() => {{ window.pyodide.runPythonAsync(`import webgpu.jupyter; {key} = webgpu.jupyter._decode_data('{data}')`) }});"
+                )
+            )
+
+    pyodide = Pyodide()

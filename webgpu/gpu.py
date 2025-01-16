@@ -3,41 +3,13 @@ from .colormap import Colormap
 from .input_handler import InputHandler
 from .light import Light
 from .uniforms import ClippingUniforms, MeshUniforms
-from .utils import BaseBinding, to_js
+from .utils import to_js, get_device
 from .webgpu_api import *
 
 
 async def init_webgpu(canvas):
     """Initialize WebGPU, create device and canvas"""
-    import js
-
-    adapter = await requestAdapter(powerPreference=PowerPreference.high_performance)
-
-    required_features = []
-    if "timestamp-query" in adapter.features:
-        print("have timestamp query")
-        required_features.append("timestamp-query")
-    else:
-        print("no timestamp query")
-
-    one_meg = 1024**2
-    one_gig = 1024**3
-    device = await adapter.requestDevice(
-        label="WebGPU device",
-        requiredLimits=Limits(
-            maxBufferSize=one_gig - 16,
-            maxStorageBufferBindingSize=one_gig - 16,
-        ),
-    )
-    limits = device.limits
-    js.console.log("device limits\n", limits)
-    js.console.log("adapter info\n", adapter.info)
-
-    print(
-        f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB"
-    )
-    print(f"max buffer size {limits.maxBufferSize / one_meg:.2f} MB")
-
+    device = await get_device()
     return WebGPU(device, canvas)
 
 
