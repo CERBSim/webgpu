@@ -86,7 +86,8 @@ async function main() {
     + r"""`;
   const webpgu_zip = decodeB64(webgpu_b64);
   await pyodide.unpackArchive(webpgu_zip, 'zip');
-  pyodide.runPython("import glob; print(glob.glob('**', recursive=True))");
+  await pyodide.runPythonAsync('import webgpu.utils');
+  await pyodide.runPythonAsync('await webgpu.utils.init_device()');
 }
 window.webgpu_ready = main();
 

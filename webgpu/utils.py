@@ -2,14 +2,13 @@ import base64
 import zlib
 from pathlib import Path
 
-from . import webgpu_api as wgpu
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
 
-_device = None
+_device: Device = None
 
 
-async def get_device():
+async def init_device() -> Device:
     global _device
 
     if _device is not None:
@@ -44,6 +43,12 @@ async def get_device():
     )
     print(f"max buffer size {limits.maxBufferSize / one_meg:.2f} MB")
 
+    return _device
+
+
+def get_device() -> Device:
+    if _device is None:
+        raise RuntimeError("Device not initialized")
     return _device
 
 
@@ -174,6 +179,8 @@ class SamplerBinding(BaseBinding):
 class BufferBinding(BaseBinding):
     def __init__(self, nr, buffer, read_only=True, visibility=ShaderStage.ALL):
         type_ = "read-only-storage" if read_only else "storage"
+        if not read_only:
+            visibility = ShaderStage.COMPUTE
         super().__init__(
             nr=nr,
             visibility=visibility,
@@ -237,3 +244,58 @@ def reload_package(package_name):
 
     reload_recursive(package)
     return reloaded_modules
+
+
+def run_compute_shader(
+    encoder, code, bindings, n_workgroups, label="compute", entry_point="main"
+):
+    from webgpu.utils import create_bind_group, get_device
+
+    device = get_device()
+
+    shader_module = device.createShaderModule(code)
+
+    layout, bind_group = create_bind_group(device, bindings, label)
+    pipeline = device.createComputePipeline(
+        device.createPipelineLayout([layout], label),
+        ComputeState(
+            shader_module,
+            entry_point,
+        ),
+        label,
+    )
+
+    pass_encoder = encoder.beginComputePass()
+    pass_encoder.setPipeline(pipeline)
+    pass_encoder.setBindGroup(0, bind_group)
+    pass_encoder.dispatchWorkgroups(*n_workgroups)
+    pass_encoder.end()
+
+
+def buffer_from_array(array, usage=BufferUsage.STORAGE | BufferUsage.COPY_DST):
+    device = get_device()
+    buffer = device.createBuffer(array.size * array.itemsize, usage=usage)
+    device.queue.writeBuffer(buffer, 0, array.tobytes())
+    return buffer
+
+
+def uniform_from_array(array):
+    return buffer_from_array(array, usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST)
+
+
+class ReadBuffer:
+    def __init__(self, buffer, encoder):
+        self.buffer = buffer
+        self.read_buffer = get_device().createBuffer(
+            buffer.size, BufferUsage.MAP_READ | BufferUsage.COPY_DST
+        )
+        encoder.copyBufferToBuffer(self.buffer, 0, self.read_buffer, 0, buffer.size)
+
+    async def get_array(self, dtype):
+        import numpy as np
+
+        await self.read_buffer.mapAsync(MapMode.READ, 0, self.read_buffer.size)
+        data = self.read_buffer.getMappedRange(0, self.read_buffer.size)
+        res = np.frombuffer(data.to_py(), dtype=dtype)
+        self.read_buffer.unmap()
+        return res
