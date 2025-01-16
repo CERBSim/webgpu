@@ -120,25 +120,25 @@ def _decode_function(encoded_func):
     return symbols[func_name]
 
 
-async def _init(canvas_id="canvas"):
+def _init(canvas_id="canvas"):
     from webgpu.gpu import init_webgpu
 
     print("init with canvas id", canvas_id)
     canvas = js.document.getElementById(canvas_id)
     print("canvas", canvas)
 
-    gpu = await init_webgpu(canvas)
+    gpu = init_webgpu(canvas)
     gpu.update_uniforms()
     return gpu
 
 
-async def _draw_client(canvas_id, data, globs):
+def _draw_client(canvas_id, data, globs):
     import js
     import pyodide.ffi
 
     from webgpu.jupyter import _decode_data, _decode_function
 
-    gpu = await _init(canvas_id)
+    gpu = _init(canvas_id)
 
     data = _decode_data(data)
 
@@ -177,7 +177,7 @@ async function draw() {{
     console.log("got id", canvas_id);
     element.appendChild(canvas);
     await window.webgpu_ready;
-    await window.pyodide.runPythonAsync('import webgpu.jupyter; await webgpu.jupyter._draw_client("{canvas_id}", "{data}", globals())');
+    await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{data}", globals())');
 }}
 draw();
     """

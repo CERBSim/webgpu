@@ -7,9 +7,9 @@ from .utils import to_js, get_device
 from .webgpu_api import *
 
 
-async def init_webgpu(canvas):
+def init_webgpu(canvas):
     """Initialize WebGPU, create device and canvas"""
-    device = await get_device()
+    device = get_device()
     return WebGPU(device, canvas)
 
 
