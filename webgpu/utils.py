@@ -7,6 +7,13 @@ from .webgpu_api import toJS as to_js
 
 _device: Device = None
 
+try:
+    import js
+
+    _is_pyodide = True
+except:
+    _is_pyodide = False
+
 
 async def init_device() -> Device:
     global _device

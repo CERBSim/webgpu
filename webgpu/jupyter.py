@@ -1,14 +1,7 @@
 import base64
 import pickle
 
-from .utils import reload_package
-
-try:
-    import js
-
-    _is_pyodide = True
-except:
-    _is_pyodide = False
+from .utils import reload_package, _is_pyodide
 
 import base64
 
@@ -120,7 +113,11 @@ def _decode_function(encoded_func):
     return symbols[func_name]
 
 
+_render_canvases = {}
+
+
 def _init(canvas_id="canvas"):
+    import js
     from webgpu.gpu import init_webgpu
 
     print("init with canvas id", canvas_id)
@@ -128,23 +125,26 @@ def _init(canvas_id="canvas"):
     print("canvas", canvas)
 
     gpu = init_webgpu(canvas)
+    _render_canvases[canvas_id] = gpu
     gpu.update_uniforms()
     return gpu
 
 
-def _draw_client(canvas_id, data, globs):
+def get_render_canvas(canvas_id):
+    return _render_canvases[canvas_id]
+
+
+def _draw_client(canvas_id, scene, assets, globs):
     import js
     import pyodide.ffi
 
     from webgpu.jupyter import _decode_data, _decode_function
 
-    gpu = _init(canvas_id)
-
-    data = _decode_data(data)
-
     from pathlib import Path
 
-    for module_data in data.get("modules", {}).values():
+    assets = _decode_data(assets)
+
+    for module_data in assets.get("modules", {}).values():
         # extract zipfile from binary chunk
         import io
         import zipfile
@@ -152,17 +152,23 @@ def _draw_client(canvas_id, data, globs):
         zipf = zipfile.ZipFile(io.BytesIO(module_data))
         zipf.extractall()
 
-    for file_name, file_data in data.get("files", {}).items():
+    for file_name, file_data in assets.get("files", {}).items():
         with open(file_name, "wb") as f:
             f.write(file_data)
 
-    for module_name in data.get("modules", {}):
+    for module_name in assets.get("modules", {}):
         reload_package(module_name)
-    if "init_function" in data:
-        func = _decode_function(data["init_function"])
+
+    if "redraw" in assets and assets["redraw"]:
+        gpu = get_render_canvas(canvas_id)
     else:
-        func = globs[data["init_function_name"]]
-    func(gpu, **data["kwargs"])
+        gpu = _init(canvas_id)
+
+    if "init_function" in assets:
+        func = _decode_function(assets["init_function"])
+    else:
+        func = globs[assets["init_function_name"]]
+    func(gpu, _decode_data(scene))
 
 
 _draw_js_code_template = r"""

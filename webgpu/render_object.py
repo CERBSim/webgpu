@@ -1,5 +1,5 @@
 from .gpu import WebGPU
-from .utils import BaseBinding, create_bind_group
+from .utils import BaseBinding, create_bind_group, _is_pyodide
 from .webgpu_api import (
     CommandEncoder,
     CompareFunction,
@@ -11,11 +11,18 @@ from .webgpu_api import (
     VertexState,
 )
 
+_render_objects = {}
+
 
 class _PostInitMeta(type):
     def __call__(cls, *args, **kw):
         instance = super().__call__(*args, **kw)
-        instance.update()
+        if _is_pyodide:
+            instance.update()
+        else:
+            _id = len(_render_objects)
+            _render_objects[_id] = instance
+            instance._id = _id
         return instance
 
 
@@ -23,7 +30,7 @@ class BaseRenderObject(metaclass=_PostInitMeta):
     gpu: WebGPU
     label: str = ""
 
-    def __init__(self, gpu, label=None):
+    def __init__(self, gpu=None, label=None):
         self.gpu = gpu
         if label is None:
             self.label = self.__class__.__name__
