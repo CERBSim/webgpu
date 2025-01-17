@@ -1,9 +1,9 @@
 import base64
 import pickle
 
+from .draw import Draw as DrawPyodide
 from .render_object import RenderObject, _render_objects
 from .utils import Scene, _is_pyodide, reload_package
-from .draw import Draw as DrawPyodide
 
 
 def create_package_zip(module_name="webgpu"):
@@ -323,7 +323,11 @@ if not _is_pyodide:
 
 def pyodide_install_packages(packages):
     if not _is_pyodide:
-        run_code_in_pyodide(f"import micropip; await micropip.install({packages});")
+        display(
+            Javascript(
+                f"window.webgpu_ready = window.webgpu_ready.then(() => {{ return window.pyodide.loadPackage({packages}); }})"
+            )
+        )
 
 
 def update_render_object(id, **kwargs):
