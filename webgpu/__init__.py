@@ -7,6 +7,5 @@ from .utils import (
     create_bind_group,
 )
 from .render_object import RenderObject
-from .draw import Draw
 from .font import Font
 from .colormap import Colormap

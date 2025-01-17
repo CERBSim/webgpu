@@ -1,9 +1,9 @@
 import base64
 import pickle
 
-from .utils import reload_package, _is_pyodide
-
-import base64
+from .render_object import RenderObject, _render_objects
+from .utils import Scene, _is_pyodide, reload_package
+from .draw import Draw as DrawPyodide
 
 
 def create_package_zip(module_name="webgpu"):
@@ -69,7 +69,7 @@ async function main() {
         }
       );
       pyodide.setDebug(true);
-      await pyodide.loadPackage(['netgen', 'ngsolve', 'numpy', 'packaging']);
+      await pyodide.loadPackage(['micropip', 'numpy', 'packaging']);
   }
   else {
       await webgpu_ready;
@@ -118,6 +118,7 @@ _render_canvases = {}
 
 def _init(canvas_id="canvas"):
     import js
+
     from webgpu.gpu import init_webgpu
 
     print("init with canvas id", canvas_id)
@@ -135,12 +136,12 @@ def get_render_canvas(canvas_id):
 
 
 def _draw_client(canvas_id, scene, assets, globs):
+    from pathlib import Path
+
     import js
     import pyodide.ffi
 
     from webgpu.jupyter import _decode_data, _decode_function
-
-    from pathlib import Path
 
     assets = _decode_data(assets)
 
@@ -164,11 +165,17 @@ def _draw_client(canvas_id, scene, assets, globs):
     else:
         gpu = _init(canvas_id)
 
+    scene = _decode_data(scene)
+
     if "init_function" in assets:
         func = _decode_function(assets["init_function"])
-    else:
+        func(gpu, **scene)
+    elif "init_function_name" in assets:
         func = globs[assets["init_function_name"]]
-    func(gpu, _decode_data(scene))
+        func(gpu, **scene)
+    else:
+        scene.init(gpu)
+        DrawPyodide(scene)
 
 
 _draw_js_code_template = r"""
@@ -183,16 +190,21 @@ async function draw() {{
     console.log("got id", canvas_id);
     element.appendChild(canvas);
     await window.webgpu_ready;
-    await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{data}", globals())');
+    await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{data}", "{assets}", globals())');
 }}
 draw();
     """
 
 if not _is_pyodide:
     from IPython.core.magic import register_cell_magic
-    from IPython.core.magics.display import Javascript, display
+    from IPython.display import HTML, Javascript, display
 
     display(Javascript(_init_js_code))
+
+    # Load lilgui (only needed once)
+    display(
+        HTML("""<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.20"></script>"""),
+    )
 
     _call_counter = 0
 
@@ -201,21 +213,70 @@ if not _is_pyodide:
         _call_counter += 1
         return f"canvas_{_call_counter}"
 
-    def _run_js_code(data, width, height):
+    def _run_js_code(data, assets, width, height):
         display(
             Javascript(
                 _draw_js_code_template.format(
                     canvas_id=_get_canvas_id(),
                     data=_encode_data(data),
+                    assets=_encode_data(assets),
                     width=width,
                     height=height,
                 )
             )
         )
 
-    def Draw(cf, mesh, width=600, height=600):
-        data = {"cf": cf, "mesh": mesh}
-        _run_js_code(data, width=width, height=height)
+    def Draw(
+        scene: Scene | list[RenderObject] | RenderObject,
+        width=600,
+        height=600,
+        modules=[],
+    ):
+        if isinstance(scene, RenderObject):
+            scene = [scene]
+        if isinstance(scene, list):
+            scene = Scene(scene)
+        if not scene.canvas_id:
+            scene.canvas_id = _get_canvas_id()
+        canvas_id = scene.canvas_id
+        html_code = f"""
+    <div id="{canvas_id + '_row'}" style="display: flex; justify-content: space-between;">
+        <canvas id="{canvas_id}" style="flex: 3; margin-right: 10px; border: 1px solid black; padding: 10px; height: {height}px; width: {width}px; background-color: #d0d0d0;"></canvas>
+        <div id="{canvas_id + '_gui'}" style="flex: 1; margin-left: 10px; border: 1px solid black; padding: 10px;"></div>
+    </div>
+    """
+        js_code = r"""
+    async function draw() {{
+        var gui_element = document.getElementById('{canvas_id}' + '_gui');
+        console.log('gui_element =', gui_element);
+        window.gui = new lil.GUI({{container: gui_element}});
+        var canvas2 = document.createElement('canvas');
+        console.log("canvas2 =", canvas2);
+        var canvas = document.getElementById("{canvas_id}");
+        console.log(canvas);
+        canvas.width = {width};
+        canvas.height = {height};
+        canvas.style = "background-color: #d0d0d0";
+        await window.webgpu_ready;
+        await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{scene}", "{assets}", globals())');
+    }}
+    draw();
+        """
+        assets = {"modules": {module: create_package_zip(module) for module in modules}}
+        display(
+            HTML(html_code),
+            Javascript(
+                js_code.format(
+                    canvas_id=canvas_id,
+                    scene=_encode_data(scene),
+                    assets=_encode_data(assets),
+                    width=width,
+                    height=height,
+                )
+            ),
+        )
+
+        return scene
 
     def DrawCustom(
         client_function,
@@ -225,15 +286,15 @@ if not _is_pyodide:
         width=600,
         height=600,
     ):
-        data = {}
-        data["kwargs"] = kwargs
+        assets = {
+            "modules": {module: create_package_zip(module) for module in modules},
+            "files": {f: open(f, "rb").read() for f in files},
+        }
         if isinstance(client_function, str):
-            data["init_function_name"] = client_function
+            assets["init_function_name"] = client_function
         else:
-            data["init_function"] = _encode_function(client_function)
-        data["modules"] = {module: create_package_zip(module) for module in modules}
-        data["files"] = {f: open(f, "rb").read() for f in files}
-        _run_js_code(data, width=width, height=height)
+            assets["init_function"] = _encode_function(client_function)
+        _run_js_code(kwargs, assets, width=width, height=height)
 
     def run_code_in_pyodide(code: str):
         display(
@@ -258,3 +319,25 @@ if not _is_pyodide:
             )
 
     pyodide = Pyodide()
+
+
+def pyodide_install_packages(packages):
+    if not _is_pyodide:
+        run_code_in_pyodide(f"import micropip; await micropip.install({packages});")
+
+
+def update_render_object(id, **kwargs):
+    if _is_pyodide:
+        obj = _render_objects[id]
+        obj.update(**kwargs)
+    else:
+        kwargs = _encode_data(kwargs)
+        run_code_in_pyodide(
+            f"import webgpu.jupyter; webgpu.jupyter.update_render_object({id}, **webgpu.jupyter._decode_data('{kwargs}'));"
+        )
+
+
+def redraw_canvas(canvas_id: str):
+    run_code_in_pyodide(
+        f"import webgpu.draw, js; js.requestAnimationFrame(webgpu.draw._canvas_id_to_gpu['{canvas_id}'].input_handler.render_function)"
+    )

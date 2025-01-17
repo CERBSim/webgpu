@@ -1,26 +1,23 @@
 from .render_object import RenderObject
+from .utils import Scene, max_bounding_box
+
+_canvas_id_to_gpu = {}
 
 
-def max_bounding_box(boxes):
-    import numpy as np
-
-    pmin = np.array(boxes[0][0])
-    pmax = np.array(boxes[0][1])
-    for b in boxes[1:]:
-        pmin = np.minimum(pmin, np.array(b[0]))
-        pmax = np.maximum(pmax, np.array(b[1]))
-    return (pmin, pmax)
-
-
-def Draw(objects: list[RenderObject] | RenderObject):
-    import numpy as np
+def Draw(scene: Scene | RenderObject | list[RenderObject]):
     import js
+    import numpy as np
     import pyodide.ffi
 
-    if isinstance(objects, RenderObject):
-        objects = [objects]
-    if len(objects) == 0:
-        return
+    if isinstance(scene, RenderObject):
+        scene = [scene]
+    if isinstance(scene, list):
+        scene = Scene(scene)
+
+    gpu = scene.gpu
+    _canvas_id_to_gpu[gpu.canvas.id] = gpu
+
+    objects = scene.render_objects
     gpu = objects[0].gpu
     pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])
     gpu.input_handler.transform._center = 0.5 * (pmin + pmax)
@@ -39,3 +36,5 @@ def Draw(objects: list[RenderObject] | RenderObject):
     render_function = pyodide.ffi.create_proxy(render_function)
     gpu.input_handler.render_function = render_function
     js.requestAnimationFrame(render_function)
+    scene.render_function = render_function
+    return scene

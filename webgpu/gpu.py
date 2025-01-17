@@ -47,7 +47,7 @@ class WebGPU:
 
         self.canvas = canvas
 
-        print("canvas", canvas.width, canvas.height, canvas)
+        print("canvas", canvas.width, canvas.height, canvas, canvas.id)
 
         self.u_clipping = ClippingUniforms(self.device)
         self.u_mesh = MeshUniforms(self.device)

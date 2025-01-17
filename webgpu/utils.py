@@ -306,3 +306,45 @@ class ReadBuffer:
         res = np.frombuffer(data.to_py(), dtype=dtype)
         self.read_buffer.unmap()
         return res
+
+
+def max_bounding_box(boxes):
+    import numpy as np
+
+    pmin = np.array(boxes[0][0])
+    pmax = np.array(boxes[0][1])
+    for b in boxes[1:]:
+        pmin = np.minimum(pmin, np.array(b[0]))
+        pmax = np.maximum(pmax, np.array(b[1]))
+    return (pmin, pmax)
+
+
+class Scene:
+    def __init__(self, render_objects, canvas_id=""):
+        self.canvas_id = canvas_id
+        self.render_objects = render_objects
+
+        if len(render_objects):
+            if render_objects[0].gpu:
+                self.canvas_id = render_objects[0].gpu.canvas.id
+
+    def init(self, gpu):
+        for obj in self.render_objects:
+            obj.gpu = gpu
+            obj.update()
+
+    def redraw(self):
+        import time
+        from .jupyter import redraw_canvas
+
+        ts = time.time()
+        for obj in self.render_objects:
+            obj.redraw(timestamp=ts)
+
+        redraw_canvas(self.canvas_id)
+
+    @property
+    def gpu(self):
+        if not self.render_objects:
+            return None
+        return self.render_objects[0].gpu

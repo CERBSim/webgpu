@@ -1142,6 +1142,9 @@ class Buffer(BaseWebGPUHandle):
     def destroy(self) -> None:
         self.handle.destroy()
 
+    def __del__(self):
+        self.destroy()
+
 
 class CommandEncoder(BaseWebGPUHandle):
     _first_render_pass: bool = True
@@ -1513,6 +1516,9 @@ class Device(BaseWebGPUHandle):
     def destroy(self) -> None:
         return self.handle.destroy()
 
+    def __del__(self):
+        self.destroy()
+
     @property
     def limits(self) -> Limits:
         return self.handle.limits
@@ -1812,3 +1818,6 @@ class Texture(BaseWebGPUHandle):
 
     def destroy(self) -> None:
         return self.handle.destroy()
+
+    def __del__(self):
+        self.destroy()
