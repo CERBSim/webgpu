@@ -20,6 +20,8 @@ def _add_render_object(obj):
         _render_objects[_id] = obj
         obj._id = _id
     else:
+        if not hasattr(obj, "_id"):
+            return
         if obj._id in _render_objects and obj is not _render_objects[obj._id]:
             raise ValueError(f"Object with id {obj._id} already exists")
         _render_objects[obj._id] = obj
