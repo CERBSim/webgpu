@@ -307,6 +307,12 @@ if not _is_pyodide:
     def pyodide(line, cell):
         run_code_in_pyodide(str(cell))
 
+    @register_cell_magic
+    def pyodide_and_kernel(line, cell):
+        run_code_in_pyodide(str(cell))
+        ip = get_ipython()
+        exec(cell, ip.user_global_ns)
+
     del pyodide
 
     class Pyodide:
