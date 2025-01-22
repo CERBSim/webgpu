@@ -121,10 +121,7 @@ def _init(canvas_id="canvas"):
 
     from webgpu.gpu import init_webgpu
 
-    print("init with canvas id", canvas_id)
     canvas = js.document.getElementById(canvas_id)
-    print("canvas", canvas)
-
     gpu = init_webgpu(canvas)
     _render_canvases[canvas_id] = gpu
     gpu.update_uniforms()
@@ -186,8 +183,6 @@ async function draw() {{
     canvas.width = {width};
     canvas.height = {height};
     canvas.style = "background-color: #d0d0d0";
-    console.log("create canvas with id", canvas.id, canvas);
-    console.log("got id", canvas_id);
     element.appendChild(canvas);
     await window.webgpu_ready;
     await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{data}", "{assets}", globals())');

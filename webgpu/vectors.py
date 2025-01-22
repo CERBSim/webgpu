@@ -61,8 +61,8 @@ class BaseVectorRenderObject(RenderObject):
 class VectorRenderer(BaseVectorRenderObject):
     def __init__(self, points, vectors, size=None, gpu=None):
         super().__init__(gpu=gpu, label="VectorField")
-        self.points = np.array(points, dtype=np.float32).flatten()
-        self.vectors = np.array(vectors, dtype=np.float32).flatten()
+        self.points = np.asarray(points, dtype=np.float32).reshape(-1)
+        self.vectors = np.asarray(vectors, dtype=np.float32).reshape(-1)
         self.bounding_box = self.points.reshape(-1, 3).min(axis=0), self.points.reshape(
             -1, 3
         ).max(axis=0)

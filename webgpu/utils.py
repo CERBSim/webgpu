@@ -328,6 +328,9 @@ class Scene:
             if render_objects[0].gpu:
                 self.canvas_id = render_objects[0].gpu.canvas.id
 
+    def __repr__(self):
+        return ""
+
     def init(self, gpu):
         for obj in self.render_objects:
             obj.gpu = gpu
