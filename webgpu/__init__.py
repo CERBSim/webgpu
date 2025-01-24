@@ -1,4 +1,4 @@
-from .gpu import WebGPU
+from .scene import Scene
 from .utils import (
     BaseBinding,
     BufferBinding,

@@ -1,20 +1,16 @@
-from .camera import Camera
-from .colormap import Colormap
 from .input_handler import InputHandler
-from .light import Light
-from .uniforms import ClippingUniforms, MeshUniforms
 from .utils import to_js, get_device
 from .webgpu_api import *
 
 
-def init_webgpu(canvas):
+def init_webgpu(html_canvas):
     """Initialize WebGPU, create device and canvas"""
     device = get_device()
-    return WebGPU(device, canvas)
+    return Canvas(device, html_canvas)
 
 
-class WebGPU:
-    """WebGPU management class, handles "global" state, like device, canvas, frame/depth buffer, colormap and uniforms"""
+class Canvas:
+    """Canvas management class, handles "global" state, like webgpu device, canvas, frame and depth buffer"""
 
     device: Device
     depth_format: TextureFormat
@@ -23,7 +19,6 @@ class WebGPU:
     multisample: MultisampleState
 
     def __init__(self, device, canvas, multisample_count=4):
-        print("init gpu")
         import js
 
         self.render_function = None
@@ -47,12 +42,6 @@ class WebGPU:
 
         self.canvas = canvas
 
-        print("canvas", canvas.width, canvas.height, canvas, canvas.id)
-
-        self.u_clipping = ClippingUniforms(self.device)
-        self.u_mesh = MeshUniforms(self.device)
-        self.u_mesh.shrink = 0.5
-
         self.context = canvas.getContext("webgpu")
         self.context.configure(
             to_js(
@@ -72,10 +61,6 @@ class WebGPU:
             usage=TextureUsage.RENDER_ATTACHMENT,
         )
         self.multisample = MultisampleState(count=multisample_count)
-
-        self.colormap = Colormap(device)
-        self.light = Light(device)
-        self.camera = Camera(device)
         self.depth_format = TextureFormat.depth24plus
 
         self.depth_texture = device.createTexture(
@@ -85,7 +70,7 @@ class WebGPU:
             label="depth_texture",
             sampleCount=multisample_count,
         )
-        self.input_handler = InputHandler(canvas, self.camera.uniforms)
+        self.input_handler = InputHandler(canvas)
 
     def color_attachments(self, loadOp: LoadOp):
         return [
@@ -105,44 +90,6 @@ class WebGPU:
             depthLoadOp=loadOp,
         )
 
-    def update_uniforms(self):
-        self.camera.uniforms.update_buffer()
-        self.u_clipping.update_buffer()
-        self.colormap.uniforms.update_buffer()
-        self.u_mesh.update_buffer()
-
-    def get_bindings(self):
-        return [
-            *self.u_clipping.get_bindings(),
-            *self.u_mesh.get_bindings(),
-            *self.camera.get_bindings(),
-            *self.colormap.get_bindings(),
-        ]
-
-    def begin_render_pass(self, command_encoder: CommandEncoder, **kwargs):
-        load_op = command_encoder.getLoadOp()
-
-        render_pass_encoder = command_encoder.beginRenderPass(
-            self.color_attachments(load_op),
-            self.depth_stencil_attachment(load_op),
-            **kwargs,
-        )
-
-        render_pass_encoder.setViewport(
-            0, 0, self.canvas.width, self.canvas.height, 0.0, 1.0
-        )
-
-        return render_pass_encoder
-
     def __del__(self):
-        print("destroy WebGPU")
-        del self.u_clipping
-        del self.u_mesh
-        del self.colormap
-        del self.camera
-
         # unregister is needed to remove circular references
         self.input_handler.unregister_callbacks()
-        # del self.input_handler
-        # del self.depth_texture
-        # del self.device

@@ -76,7 +76,6 @@ def _convert(d):
 
 
 def toJS(value):
-    # print("convert", value)
     value = _convert(value)
     ret = pyodide.ffi.to_js(
         value,
@@ -84,21 +83,13 @@ def toJS(value):
         default_converter=_default_converter,
         create_pyproxies=False,
     )
-    # js.console.log("ret", ret)
     return ret
 
 
 def fromJS(obj):
     if type(obj) in [str, int, float, bool]:
         return obj
-    print("fromJS", obj)
-    print("dir", dir(obj))
-    print("object_keys", obj.object_keys())
-    print("object_keys", obj.object_values())
-    print("object_map", obj.as_object_map())
     return dict(obj)
-
-    return {key: obj[key] for key in obj.object_keys()}
 
 
 class BaseWebGPUObject:

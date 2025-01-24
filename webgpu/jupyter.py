@@ -3,7 +3,8 @@ import pickle
 
 from .draw import Draw as DrawPyodide
 from .render_object import RenderObject, _render_objects
-from .utils import Scene, _is_pyodide, reload_package
+from .scene import Scene
+from .utils import _is_pyodide, reload_package
 
 
 def create_package_zip(module_name="webgpu"):
@@ -113,19 +114,12 @@ def _decode_function(encoded_func):
     return symbols[func_name]
 
 
-_render_canvases = {}
-
-
 def _init(canvas_id="canvas"):
     import js
 
-    from webgpu.gpu import init_webgpu
+    from webgpu.canvas import init_webgpu
 
-    canvas = js.document.getElementById(canvas_id)
-    gpu = init_webgpu(canvas)
-    _render_canvases[canvas_id] = gpu
-    gpu.update_uniforms()
-    return gpu
+    return init_webgpu(js.document.getElementById(canvas_id))
 
 
 def get_render_canvas(canvas_id):
@@ -157,21 +151,17 @@ def _draw_client(canvas_id, scene, assets, globs):
     for module_name in assets.get("modules", {}):
         reload_package(module_name)
 
-    if "redraw" in assets and assets["redraw"]:
-        gpu = get_render_canvas(canvas_id)
-    else:
-        gpu = _init(canvas_id)
-
+    canvas = _init(canvas_id)
     scene = _decode_data(scene)
 
     if "init_function" in assets:
         func = _decode_function(assets["init_function"])
-        func(gpu, **scene)
+        func(canvas, **scene)
     elif "init_function_name" in assets:
         func = globs[assets["init_function_name"]]
-        func(gpu, **scene)
+        func(canvas, **scene)
     else:
-        scene.init(gpu)
+        scene.init(canvas)
         DrawPyodide(scene)
 
 
@@ -231,9 +221,7 @@ if not _is_pyodide:
             scene = [scene]
         if isinstance(scene, list):
             scene = Scene(scene)
-        if not scene.canvas_id:
-            scene.canvas_id = _get_canvas_id()
-        canvas_id = scene.canvas_id
+        canvas_id = _get_canvas_id()
         html_code = f"""
     <div id="{canvas_id + '_row'}" style="display: flex; justify-content: space-between;">
         <canvas id="{canvas_id}" style="flex: 3; margin-right: 10px; border: 1px solid black; padding: 10px; height: {height}px; width: {width}px; background-color: #d0d0d0;"></canvas>

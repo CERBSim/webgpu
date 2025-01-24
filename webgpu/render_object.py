@@ -1,5 +1,8 @@
-from .gpu import WebGPU
-from .utils import BaseBinding, create_bind_group, _is_pyodide
+from .camera import Camera
+from .canvas import Canvas
+from .light import Light
+from .uniforms import ClippingUniforms
+from .utils import BaseBinding, _is_pyodide, create_bind_group
 from .webgpu_api import (
     CommandEncoder,
     CompareFunction,
@@ -84,12 +87,52 @@ class DataObject(RedrawObject):
         return self._buffers
 
 
+class RenderOptions:
+    viewport: tuple[int, int, int, int, float, float]
+    canvas: Canvas
+
+    def __init__(self, canvas):
+        self.canvas = canvas
+        self.clipping = ClippingUniforms(self.device)
+        self.light = Light(self.device)
+        self.camera = Camera(self.device)
+
+    @property
+    def device(self) -> Device:
+        return self.canvas.device
+
+    def update_buffers(self):
+        self.clipping.update_buffer()
+        self.camera._update_uniforms()
+
+    def get_bindings(self):
+        return [
+            *self.clipping.get_bindings(),
+            *self.light.get_bindings(),
+            *self.camera.get_bindings(),
+        ]
+
+    def begin_render_pass(self, command_encoder: CommandEncoder, **kwargs):
+        load_op = command_encoder.getLoadOp()
+
+        render_pass_encoder = command_encoder.beginRenderPass(
+            self.canvas.color_attachments(load_op),
+            self.canvas.depth_stencil_attachment(load_op),
+            **kwargs,
+        )
+
+        render_pass_encoder.setViewport(
+            0, 0, self.canvas.canvas.width, self.canvas.canvas.height, 0.0, 1.0
+        )
+
+        return render_pass_encoder
+
+
 class BaseRenderObject(RedrawObject, metaclass=_PostInitMeta):
-    gpu: WebGPU
+    options: RenderOptions
     label: str = ""
 
-    def __init__(self, gpu=None, label=None):
-        self.gpu = gpu
+    def __init__(self, label=None):
         if label is None:
             self.label = self.__class__.__name__
         else:
@@ -103,7 +146,7 @@ class BaseRenderObject(RedrawObject, metaclass=_PostInitMeta):
 
     @property
     def device(self) -> Device:
-        return self.gpu.device
+        return self.options.device
 
     def create_render_pipeline(self) -> None:
         raise NotImplementedError
@@ -139,20 +182,20 @@ class RenderObject(BaseRenderObject):
             fragment=FragmentState(
                 module=shader_module,
                 entryPoint=self.fragment_entry_point,
-                targets=[self.gpu.color_target],
+                targets=[self.options.canvas.color_target],
             ),
             primitive=PrimitiveState(topology=self.topology),
             depthStencil=DepthStencilState(
-                format=self.gpu.depth_format,
+                format=self.options.canvas.depth_format,
                 depthWriteEnabled=True,
                 depthCompare=CompareFunction.less,
                 depthBias=self.depthBias,
             ),
-            multisample=self.gpu.multisample,
+            multisample=self.options.canvas.multisample,
         )
 
     def render(self, encoder: CommandEncoder) -> None:
-        render_pass = self.gpu.begin_render_pass(encoder)
+        render_pass = self.options.begin_render_pass(encoder)
         render_pass.setPipeline(self.pipeline)
         render_pass.setBindGroup(0, self.group)
         render_pass.draw(self.n_vertices, self.n_instances)
