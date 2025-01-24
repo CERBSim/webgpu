@@ -13,8 +13,10 @@ class Binding:
 class TriangulationRenderer(RenderObject):
     n_vertices: int = 3
 
-    def __init__(self, points, normals=None, label="Triangulation", gpu=None):
-        super().__init__(gpu, label=label)
+    def __init__(self, points, normals=None, color=(0.,1.,0.,1.),
+                 label="Triangulation"):
+        super().__init__(label=label)
+        self.color = color
         self.points = np.asarray(points, dtype=np.float32).reshape(-1)
         assert len(self.points) % 9 == 0, "Invalid number of points"
         if normals is None:
@@ -36,11 +38,20 @@ class TriangulationRenderer(RenderObject):
     def get_bounding_box(self):
         return self._bounding_box
 
+    def get_color_shader(self):
+        cs = """
+fn getColor(vertId: u32, trigId: u32) -> vec4f {{
+  return vec4f{color};
+}}""".format(color=self.color)
+        print(cs)
+        return cs
+
     def get_shader_code(self) -> str:
         return (
             read_shader_file("triangulation.wgsl", __file__)
             + self.gpu.camera.get_shader_code()
             + self.gpu.light.get_shader_code()
+            + self.get_color_shader()
         )
 
     def get_bindings(self):
