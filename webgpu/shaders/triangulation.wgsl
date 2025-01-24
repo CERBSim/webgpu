@@ -6,8 +6,8 @@ struct TriangleFragmentInput {
   @builtin(position) position: vec4<f32>,
     @location(0) p: vec3<f32>,
     @location(1) n: vec3<f32>,
-    @location(2) vertId: u32,
-    @location(3) trigId: u32,
+    @location(2) @interpolate(flat) vertId: u32,
+    @location(3) @interpolate(flat) trigId: u32,
 };
 
 @vertex
