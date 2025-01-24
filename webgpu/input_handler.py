@@ -58,7 +58,7 @@ class InputHandler:
         self.unregister_callbacks()
         js_handler = create_proxy(self._handle_js_event)
         options = to_js({"capture": True})
-        for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout"]:
+        for event in ["mousedown", "mouseup", "mousemove", "mousewheel", "mouseout"]:
             self.html_canvas.addEventListener(event, js_handler, options)
 
     def __del__(self):

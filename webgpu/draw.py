@@ -1,11 +1,23 @@
-from .render_object import RenderObject
+from .render_object import BaseRenderObject
 from .utils import max_bounding_box
 from .scene import Scene
+from .canvas import Canvas
 
 
-def Draw(scene: Scene):
+def Draw(
+    scene: Scene | BaseRenderObject | list[BaseRenderObject],
+    canvas: Canvas | None = None,
+) -> Scene:
     import js
     import numpy as np
+
+    if isinstance(scene, BaseRenderObject):
+        scene = Scene([scene])
+    elif isinstance(scene, list):
+        scene = Scene(scene)
+
+    if canvas is not None:
+        scene.init(canvas)
 
     objects = scene.render_objects
     pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])

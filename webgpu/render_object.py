@@ -1,3 +1,5 @@
+import uuid
+
 from .camera import Camera
 from .canvas import Canvas
 from .light import Light
@@ -19,7 +21,7 @@ _render_objects = {}
 
 def _add_render_object(obj):
     if not _is_pyodide:
-        _id = len(_render_objects)
+        _id = uuid.uuid4()
         _render_objects[_id] = obj
         obj._id = _id
     else:
@@ -33,8 +35,6 @@ def _add_render_object(obj):
 class _PostInitMeta(type):
     def __call__(cls, *args, **kw):
         instance = super().__call__(*args, **kw)
-        if _is_pyodide:
-            instance.update()
         _add_render_object(instance)
         return instance
 
@@ -147,6 +147,10 @@ class BaseRenderObject(RedrawObject, metaclass=_PostInitMeta):
     @property
     def device(self) -> Device:
         return self.options.device
+
+    @property
+    def canvas(self) -> Canvas:
+        return self.options.canvas
 
     def create_render_pipeline(self) -> None:
         raise NotImplementedError

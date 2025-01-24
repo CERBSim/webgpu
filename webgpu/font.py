@@ -118,9 +118,9 @@ class FontUniforms(UniformBase):
 
 
 class Font:
-    def __init__(self, gpu, size=15):
-        self.gpu = gpu
-        self.uniforms = FontUniforms(gpu.device)
+    def __init__(self, canvas, size=15):
+        self.canvas = canvas
+        self.uniforms = FontUniforms(canvas.device)
         self.set_font_size(size)
 
     def get_bindings(self):
@@ -135,13 +135,13 @@ class Font:
     def set_font_size(self, font_size: int):
         from .font import create_font_texture
 
-        self._texture = create_font_texture(self.gpu.device, font_size)
+        self._texture = create_font_texture(self.canvas.device, font_size)
         char_width = self._texture.width // (127 - 32)
         char_height = self._texture.height
         self.uniforms.width = char_width
         self.uniforms.height = char_height
-        self.uniforms.canvas_width = self.gpu.canvas.width
-        self.uniforms.canvas_height = self.gpu.canvas.height
+        self.uniforms.canvas_width = self.canvas.canvas.width
+        self.uniforms.canvas_height = self.canvas.canvas.height
         self.uniforms.update_buffer()
 
 
