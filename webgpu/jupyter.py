@@ -5,7 +5,7 @@ from .draw import Draw as DrawPyodide
 from .render_object import RenderObject, _render_objects
 from .scene import Scene
 from .utils import _is_pyodide, reload_package
-
+from .lilgui import LilGUI
 
 def create_package_zip(module_name="webgpu"):
     """
@@ -222,6 +222,7 @@ if not _is_pyodide:
         if isinstance(scene, list):
             scene = Scene(scene)
         canvas_id = _get_canvas_id()
+        scene.gui = LilGUI(canvas_id, scene._id)
         html_code = f"""
     <div id="{canvas_id + '_row'}" style="display: flex; justify-content: space-between;">
         <canvas id="{canvas_id}" style="flex: 3; margin-right: 10px; border: 1px solid black; padding: 10px; height: {height}px; width: {width}px; background-color: #d0d0d0;"></canvas>
@@ -232,7 +233,10 @@ if not _is_pyodide:
     async function draw() {{
         var gui_element = document.getElementById('{canvas_id}' + '_gui');
         console.log('gui_element =', gui_element);
-        window.gui = new lil.GUI({{container: gui_element}});
+        if(window.lil_guis === undefined) {{
+          window.lil_guis = new Object();
+        }}
+        window.lil_guis['{canvas_id}'] = new lil.GUI({{container: gui_element}});
         var canvas2 = document.createElement('canvas');
         console.log("canvas2 =", canvas2);
         var canvas = document.getElementById("{canvas_id}");
