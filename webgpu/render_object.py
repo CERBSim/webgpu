@@ -4,7 +4,7 @@ from .camera import Camera
 from .canvas import Canvas
 from .light import Light
 from .uniforms import ClippingUniforms
-from .utils import BaseBinding, _is_pyodide, create_bind_group
+from .utils import BaseBinding, _is_pyodide, create_bind_group, get_device
 from .webgpu_api import (
     CommandEncoder,
     CompareFunction,
@@ -146,7 +146,7 @@ class BaseRenderObject(RedrawObject, metaclass=_PostInitMeta):
 
     @property
     def device(self) -> Device:
-        return self.options.device
+        return get_device()
 
     @property
     def canvas(self) -> Canvas:
