@@ -212,6 +212,33 @@ if not _is_pyodide:
             )
         )
 
+    html_code = r"""
+<div id="{canvas_id}_row" style="display: flex; justify-content: space-between;">
+    <canvas id="{canvas_id}" style="flex: 3; margin-right: 10px; padding: 10px; height: {height}px; width: {width}px; background-color: #d0d0d0;"></canvas>
+    <div id="{canvas_id}_gui" style="flex: 1; margin-left: 10px; padding: 10px;"></div>
+</div>
+"""
+    js_code = r"""
+async function draw() {{
+    var gui_element = document.getElementById('{canvas_id}' + '_gui');
+    console.log('gui_element =', gui_element);
+    if(window.lil_guis === undefined) {{
+      window.lil_guis = new Object();
+    }}
+    window.lil_guis['{canvas_id}'] = new lil.GUI({{container: gui_element}});
+    var canvas2 = document.createElement('canvas');
+    console.log("canvas2 =", canvas2);
+    var canvas = document.getElementById("{canvas_id}");
+    console.log(canvas);
+    canvas.width = {width};
+    canvas.height = {height};
+    canvas.style = "background-color: #d0d0d0";
+    await window.webgpu_ready;
+    await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{scene}", "{assets}", globals())');
+}}
+draw();
+    """
+
     def Draw(
         scene: Scene | list[RenderObject] | RenderObject,
         width=600,
@@ -224,35 +251,9 @@ if not _is_pyodide:
             scene = Scene(scene)
         canvas_id = _get_canvas_id()
         scene.gui = LilGUI(canvas_id, scene._id)
-        html_code = f"""
-    <div id="{canvas_id + '_row'}" style="display: flex; justify-content: space-between;">
-        <canvas id="{canvas_id}" style="flex: 3; margin-right: 10px; padding: 10px; height: {height}px; width: {width}px; background-color: #d0d0d0;"></canvas>
-        <div id="{canvas_id + '_gui'}" style="flex: 1; margin-left: 10px; padding: 10px;"></div>
-    </div>
-    """
-        js_code = r"""
-    async function draw() {{
-        var gui_element = document.getElementById('{canvas_id}' + '_gui');
-        console.log('gui_element =', gui_element);
-        if(window.lil_guis === undefined) {{
-          window.lil_guis = new Object();
-        }}
-        window.lil_guis['{canvas_id}'] = new lil.GUI({{container: gui_element}});
-        var canvas2 = document.createElement('canvas');
-        console.log("canvas2 =", canvas2);
-        var canvas = document.getElementById("{canvas_id}");
-        console.log(canvas);
-        canvas.width = {width};
-        canvas.height = {height};
-        canvas.style = "background-color: #d0d0d0";
-        await window.webgpu_ready;
-        await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{scene}", "{assets}", globals())');
-    }}
-    draw();
-        """
         assets = {"modules": {module: create_package_zip(module) for module in modules}}
         display(
-            HTML(html_code),
+            HTML(html_code.format(canvas_id=canvas_id, width=width, height=height)),
             Javascript(
                 js_code.format(
                     canvas_id=canvas_id,
@@ -282,7 +283,19 @@ if not _is_pyodide:
             assets["init_function_name"] = client_function
         else:
             assets["init_function"] = _encode_function(client_function)
-        _run_js_code(kwargs, assets, width=width, height=height)
+        canvas_id = _get_canvas_id()
+        display(
+            HTML(html_code.format(canvas_id=canvas_id, height=height, width=width)),
+            Javascript(
+                js_code.format(
+                    canvas_id=canvas_id,
+                    scene=_encode_data(kwargs),
+                    assets=_encode_data(assets),
+                    width=width,
+                    height=height,
+                )
+            ),
+        )
 
     def run_code_in_pyodide(code: str):
         display(
