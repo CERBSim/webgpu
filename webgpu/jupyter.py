@@ -7,6 +7,7 @@ from .scene import Scene
 from .utils import _is_pyodide, reload_package
 from .lilgui import LilGUI
 
+
 def create_package_zip(module_name="webgpu"):
     """
     Creates a zip file containing all files in the specified Python package.
