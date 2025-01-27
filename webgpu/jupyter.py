@@ -220,6 +220,7 @@ if not _is_pyodide:
 """
     js_code = r"""
 async function draw() {{
+    await window.webgpu_ready;
     var gui_element = document.getElementById('{canvas_id}' + '_gui');
     console.log('gui_element =', gui_element);
     if(window.lil_guis === undefined) {{
@@ -233,7 +234,6 @@ async function draw() {{
     canvas.width = {width};
     canvas.height = {height};
     canvas.style = "background-color: #d0d0d0";
-    await window.webgpu_ready;
     await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{scene}", "{assets}", globals())');
 }}
 draw();
