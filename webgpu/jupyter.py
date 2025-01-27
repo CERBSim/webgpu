@@ -225,8 +225,8 @@ if not _is_pyodide:
         scene.gui = LilGUI(canvas_id, scene._id)
         html_code = f"""
     <div id="{canvas_id + '_row'}" style="display: flex; justify-content: space-between;">
-        <canvas id="{canvas_id}" style="flex: 3; margin-right: 10px; border: 1px solid black; padding: 10px; height: {height}px; width: {width}px; background-color: #d0d0d0;"></canvas>
-        <div id="{canvas_id + '_gui'}" style="flex: 1; margin-left: 10px; border: 1px solid black; padding: 10px;"></div>
+        <canvas id="{canvas_id}" style="flex: 3; margin-right: 10px; padding: 10px; height: {height}px; width: {width}px; background-color: #d0d0d0;"></canvas>
+        <div id="{canvas_id + '_gui'}" style="flex: 1; margin-left: 10px; padding: 10px;"></div>
     </div>
     """
         js_code = r"""
