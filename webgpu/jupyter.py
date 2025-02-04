@@ -61,8 +61,21 @@ async function fetchSnapshot() {
   return await response.arrayBuffer();
 };
 
+function initLilGUI() {
+    // In generated html files, requirejs is imported before lil-gui is loaded.
+    // Thus, we must load lil-gui using require, use import otherwise.
+    if(window.define === undefined){
+        import(lil_url);
+    } else {
+        require([lil_url], (module) => {
+            window.lil = module;
+        });
+    }
+}
+
 async function main() {
   if(window.webgpu_ready === undefined) {
+      initLilGUI();
       const pyodide_module = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
       window.pyodide = await pyodide_module.loadPyodide( {
         // _loadSnapshot: await fetchSnapshot(),
@@ -183,14 +196,9 @@ draw();
 
 if not _is_pyodide:
     from IPython.core.magic import register_cell_magic
-    from IPython.display import HTML, Javascript, display
+    from IPython.display import Javascript, display
 
     display(Javascript(_init_js_code))
-
-    # Load lilgui (only needed once)
-    display(
-        HTML("""<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.20"></script>"""),
-    )
 
     _call_counter = 0
 
