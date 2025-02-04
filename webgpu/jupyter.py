@@ -64,6 +64,7 @@ async function fetchSnapshot() {
 function initLilGUI() {
     // In generated html files, requirejs is imported before lil-gui is loaded.
     // Thus, we must load lil-gui using require, use import otherwise.
+    const lil_url = "https://cdn.jsdelivr.net/npm/lil-gui@0.20";
     if(window.define === undefined){
         import(lil_url);
     } else {
