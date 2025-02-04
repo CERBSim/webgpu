@@ -196,7 +196,7 @@ draw();
 
 if not _is_pyodide:
     from IPython.core.magic import register_cell_magic
-    from IPython.display import Javascript, display
+    from IPython.display import HTML, Javascript, display
 
     display(Javascript(_init_js_code))
 
