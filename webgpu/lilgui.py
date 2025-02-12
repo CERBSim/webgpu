@@ -60,7 +60,7 @@ def _receive(canvas_id, scene_id, option, render_objects: list[str], func: str):
         from webgpu.jupyter import _decode_function, _decode_data
         from webgpu.scene import redraw_scene
 
-        ro = [_render_objects[uuid.UUID(obj_id)] for obj_id in render_objects]
+        ro = [_render_objects[str(uuid.UUID(obj_id))] for obj_id in render_objects]
         if len(ro) == 1:
             ro = ro[0]
         f = _decode_function(_decode_data(func))

@@ -21,7 +21,7 @@ _render_objects = {}
 
 def _add_render_object(obj):
     if not _is_pyodide:
-        _id = uuid.uuid4()
+        _id = str(uuid.uuid4())
         _render_objects[_id] = obj
         obj._id = _id
     else:

@@ -353,7 +353,7 @@ def update_render_object(id, **kwargs):
     else:
         kwargs = _encode_data(kwargs)
         run_code_in_pyodide(
-            f"import webgpu.jupyter; webgpu.jupyter.update_render_object({id}, **webgpu.jupyter._decode_data('{kwargs}'));"
+            f"import webgpu.jupyter; webgpu.jupyter.update_render_object('{id}', **webgpu.jupyter._decode_data('{kwargs}'));"
         )
 
 
