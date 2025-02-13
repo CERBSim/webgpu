@@ -77,11 +77,11 @@ function initLilGUI() {
 async function main() {
   if(window.webgpu_ready === undefined) {
       initLilGUI();
-      const pyodide_module = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
+      const pyodide_module = await import("https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs");
       window.pyodide = await pyodide_module.loadPyodide( {
         // _loadSnapshot: await fetchSnapshot(),
-        lockFileURL: 'https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@webgpu2/pyodide-lock.json',
-        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
+        // lockFileURL: 'https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@webgpu2/pyodide-lock.json',
+        // indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
         }
       );
       pyodide.setDebug(true);
