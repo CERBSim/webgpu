@@ -43,7 +43,8 @@ class Scene:
         import pyodide.ffi
 
         self.canvas = canvas
-        self.options = RenderOptions(self.canvas)
+        self.options = RenderOptions(self.canvas,
+                                     self.render)
 
         for obj in self.render_objects:
             obj.options = self.options

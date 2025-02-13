@@ -8,36 +8,70 @@ from webgpu.webgpu_api import (
 
 from .uniforms import Binding, UniformBase, ct
 from .utils import SamplerBinding, TextureBinding, read_shader_file
-
+from .render_object import RenderObject
 
 class ColormapUniforms(UniformBase):
     _binding = Binding.COLORMAP
-    _fields_ = [("min", ct.c_float), ("max", ct.c_float), ("padding", ct.c_float * 2)]
+    _fields_ = [("min", ct.c_float),
+                ("max", ct.c_float),
+                ("position_x", ct.c_float),
+                ("position_y", ct.c_float),
+                ("discrete", ct.c_uint32),
+                ("n_colors", ct.c_uint32),
+                ("width", ct.c_float),
+                ("height", ct.c_float)]
 
 
-class Colormap:
+class Colormap(RenderObject):
     texture: Texture
+    vertex_entry_point: str = "colormap_vertex"
+    fragment_entry_point: str = "colormap_fragment"
+    n_vertices: int = 3
 
-    def __init__(self, device, minval=0, maxval=1):
+    def __init__(self, minval=0, maxval=1):
         self.texture = None
-        self.device = device
+        self.minval = minval
+        self.maxval = maxval
+        self.position_x = -0.9
+        self.position_y = 0.9
+        self.discrete = 0
+        self.n_colors = 8
+        self.width = 1.
+        self.height = 0.05
 
-        self.uniforms = ColormapUniforms(device)
-        self.uniforms.min = minval
-        self.uniforms.max = maxval
+    def update(self, minval=None, maxval=None):
+        if minval is not None:
+            self.minval = minval
+        if maxval is not None:
+            self.maxval = maxval
+        self.uniforms = ColormapUniforms(self.device)
+        self.uniforms.min = self.minval
+        self.uniforms.max = self.maxval
+        self.uniforms.position_x = self.position_x
+        self.uniforms.position_y = self.position_y
+        self.uniforms.discrete = self.discrete
+        self.uniforms.n_colors = self.n_colors
+        self.uniforms.width = self.width
+        self.uniforms.height = self.height
+        self.n_instances = 2 * self.n_colors
         self.uniforms.update_buffer()
 
-        self.sampler = device.createSampler(
+        self.sampler = self.device.createSampler(
             magFilter="linear",
             minFilter="linear",
         )
 
         self.set_colormap("matlab:jet")
+        self.create_render_pipeline()
+
+    def set_n_colors(self, n_colors):
+        self.uniforms.n_colors = n_colors
+        self.n_instances = 2 * n_colors
+        self.uniforms.update_buffer()
 
     def set_min_max(self, minval, maxval):
-        self.uniforms.min = minval
-        self.uniforms.max = maxval
-        self.uniforms.update_buffer()
+        self.minval = minval
+        self.maxval = maxval
 
     def get_bindings(self):
         return [

@@ -26,13 +26,12 @@ class BaseVectorRenderObject(RenderObject):
     topology = PrimitiveTopology.triangle_strip
     n_vertices = 10
 
-    def update(self):
-        raise NotImplementedError(
-            "BaseVectorRenderObject.update() must be implemented and create buffers!"
-        )
+    def __init__(self, label="VectorField"):
+        super().__init__(label=label)
+        self.colormap = Colormap()
 
-    def create_colormap(self, minval, maxval):
-        self.colormap = Colormap(self.device, minval=minval, maxval=maxval)
+    def update(self):
+        self.colormap.update()
 
     def get_bindings(self):
         return [
@@ -82,7 +81,7 @@ class VectorRenderer(BaseVectorRenderObject):
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).min(),
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).max(),
         )
-        self.create_colormap(min_vec, max_vec)
+        self.colormap.update(min_vec, max_vec)
         self.n_instances = len(self.points) // 3
         self.create_render_pipeline()
 

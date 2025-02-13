@@ -1,3 +1,4 @@
+from typing import Callable
 import uuid
 
 from .camera import Camera
@@ -90,8 +91,10 @@ class DataObject(RedrawObject):
 class RenderOptions:
     viewport: tuple[int, int, int, int, float, float]
     canvas: Canvas
+    render_function: Callable
 
-    def __init__(self, canvas):
+    def __init__(self, canvas, render_function):
+        self.render_function = render_function
         self.canvas = canvas
         self.clipping = ClippingUniforms(self.device)
         self.light = Light(self.device)
