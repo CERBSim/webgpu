@@ -31,6 +31,7 @@ class BaseVectorRenderObject(RenderObject):
         self.colormap = Colormap()
 
     def update(self):
+        self.colormap.options = self.options
         self.colormap.update()
 
     def get_bindings(self):
@@ -70,6 +71,7 @@ class VectorRenderer(BaseVectorRenderObject):
         )
 
     def update(self):
+        super().update()
         self._buffers = {
             "points": buffer_from_array(self.points),
             "vectors": buffer_from_array(self.vectors),
