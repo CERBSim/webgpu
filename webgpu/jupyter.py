@@ -85,7 +85,8 @@ async function main() {
         }
       );
       pyodide.setDebug(true);
-      await pyodide.loadPackage(['micropip', 'numpy', 'packaging']);
+      window.pyodide_ready = pyodide.loadPackage(['micropip', 'numpy', 'packaging']);
+      await window.pyodide_ready;
   }
   else {
       await webgpu_ready;
