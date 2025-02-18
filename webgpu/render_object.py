@@ -168,6 +168,23 @@ class BaseRenderObject(RedrawObject, metaclass=_PostInitMeta):
         raise NotImplementedError
 
 
+class MultipleRenderObject(BaseRenderObject):
+    def __init__(self, render_objects):
+        self.render_objects = render_objects
+    
+    def update(self):
+        for r in self.render_objects:
+            r.options = self.options
+            r.update()
+
+    def redraw(self, timestamp=None):
+        for r in self.render_objects:
+            r.redraw(timestamp=timestamp)
+
+    def render(self, encoder):
+        for r in self.render_objects:
+            r.render(encoder)    
+
 class RenderObject(BaseRenderObject):
     """Base class for render objects"""
 

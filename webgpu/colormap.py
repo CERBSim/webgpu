@@ -8,7 +8,8 @@ from webgpu.webgpu_api import (
 
 from .uniforms import Binding, UniformBase, ct
 from .utils import SamplerBinding, TextureBinding, read_shader_file
-from .render_object import RenderObject
+from .render_object import RenderObject, MultipleRenderObject
+from .labels import Labels
 
 class ColormapUniforms(UniformBase):
     _binding = Binding.COLORMAP
@@ -22,7 +23,7 @@ class ColormapUniforms(UniformBase):
                 ("height", ct.c_float)]
 
 
-class Colormap(RenderObject):
+class Colorbar(RenderObject):
     texture: Texture
     vertex_entry_point: str = "colormap_vertex"
     fragment_entry_point: str = "colormap_fragment"
@@ -120,6 +121,38 @@ class Colormap(RenderObject):
             TexelCopyBufferLayout(bytesPerRow=n * 4),
             [n, 1, 1],
         )
+
+class Colormap(MultipleRenderObject):
+    def __init__(self):
+        self.colorbar = Colorbar()
+        self.labels = Labels([], [], font_size=14, h_align="center", v_align="top")
+        self.update_labels()
+        super().__init__([self.colorbar, self.labels])
+
+    @property
+    def autoupdate(self):
+        return self.colorbar.autoupdate
+
+    def get_shader_code(self):
+        return self.colorbar.get_shader_code()
+
+    def get_bindings(self):
+        return self.colorbar.get_bindings()
+
+    @autoupdate.setter
+    def autoupdate(self, value):
+        self.colorbar.autoupdate = value
+
+    def set_min_max(self, min, max):
+        self.colorbar.set_min_max(min,max)
+        self.update_labels()
+
+    def update_labels(self):
+        self.labels.labels = [str(v) for v in [self.colorbar.minval + i/4 * (self.colorbar.maxval-self.colorbar.minval) for i in range(6)]]
+        self.labels.positions = [(self.colorbar.position_x + i * self.colorbar.width/4, self.colorbar.position_y-0.01, 0) for i in range(5)]
+
+    def get_bounding_box(self):
+        return None
 
 
 _colormaps = {
