@@ -311,6 +311,7 @@ class ReadBuffer:
 def max_bounding_box(boxes):
     import numpy as np
 
+    boxes = [b for b in boxes if b is not None]
     pmin = np.array(boxes[0][0])
     pmax = np.array(boxes[0][1])
     for b in boxes[1:]:

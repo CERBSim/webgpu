@@ -141,7 +141,7 @@ class BaseRenderObject(RedrawObject, metaclass=_PostInitMeta):
         else:
             self.label = label
 
-    def get_bounding_box(self):
+    def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0])
 
     def update(self):

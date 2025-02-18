@@ -64,6 +64,9 @@ class Colormap(RenderObject):
         self.set_colormap("matlab:jet")
         self.create_render_pipeline()
 
+    def get_bounding_box(self):
+        return None
+
     def set_n_colors(self, n_colors):
         self.uniforms.n_colors = n_colors
         self.n_instances = 2 * n_colors
