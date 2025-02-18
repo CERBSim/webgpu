@@ -83,7 +83,7 @@ class Colormap(RenderObject):
         self.minval = minval
         self.maxval = maxval
         if set_autoupdate:
-            self.autoupdate = True
+            self.autoupdate = False
         if self.uniforms is not None:
             self.uniforms.min = minval
             self.uniforms.max = maxval
