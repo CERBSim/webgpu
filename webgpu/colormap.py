@@ -38,13 +38,17 @@ class Colormap(RenderObject):
         self.n_colors = 8
         self.width = 1.
         self.height = 0.05
+        self.uniforms = None
+        self.sampler = None
+        self.autoupdate = True
 
     def update(self, minval=None, maxval=None):
         if minval is not None:
             self.minval = minval
         if maxval is not None:
             self.maxval = maxval
-        self.uniforms = ColormapUniforms(self.device)
+        if self.uniforms is None:
+            self.uniforms = ColormapUniforms(self.device)
         self.uniforms.min = self.minval
         self.uniforms.max = self.maxval
         self.uniforms.position_x = self.position_x
@@ -56,25 +60,34 @@ class Colormap(RenderObject):
         self.n_instances = 2 * self.n_colors
         self.uniforms.update_buffer()
 
-        self.sampler = self.device.createSampler(
-            magFilter="linear",
-            minFilter="linear",
-        )
+        if self.sampler is None:
+            self.sampler = self.device.createSampler(
+                magFilter="linear",
+                minFilter="linear",
+            )
 
-        self.set_colormap("matlab:jet")
+        if self.texture is None:
+            self.set_colormap("matlab:jet")
         self.create_render_pipeline()
 
     def get_bounding_box(self):
         return None
 
     def set_n_colors(self, n_colors):
-        self.uniforms.n_colors = n_colors
         self.n_instances = 2 * n_colors
-        self.uniforms.update_buffer()
+        if self.uniforms is not None:
+            self.uniforms.n_colors = n_colors
+            self.uniforms.update_buffer()
 
-    def set_min_max(self, minval, maxval):
+    def set_min_max(self, minval, maxval, set_autoupdate=True):
         self.minval = minval
         self.maxval = maxval
+        if set_autoupdate:
+            self.autoupdate = True
+        if self.uniforms is not None:
+            self.uniforms.min = minval
+            self.uniforms.max = maxval
+            self.uniforms.update_buffer()
 
     def get_bindings(self):
         return [
