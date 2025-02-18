@@ -112,8 +112,8 @@ class FontUniforms(UniformBase):
     _fields_ = [
         ("width", ct.c_uint32),
         ("height", ct.c_uint32),
-        ("canvas_width", ct.c_uint32),
-        ("canvas_height", ct.c_uint32),
+        ("width_normalized", ct.c_float),
+        ("height_normalized", ct.c_float),
     ]
 
 
@@ -140,8 +140,8 @@ class Font:
         char_height = self._texture.height
         self.uniforms.width = char_width
         self.uniforms.height = char_height
-        self.uniforms.canvas_width = self.canvas.canvas.width
-        self.uniforms.canvas_height = self.canvas.canvas.height
+        self.uniforms.width_normalized = 2. * char_width / self.canvas.canvas.width
+        self.uniforms.height_normalized = 2. * char_height / self.canvas.canvas.height
         self.uniforms.update_buffer()
 
 
