@@ -207,3 +207,6 @@ class RenderObject(BaseRenderObject):
         render_pass.setBindGroup(0, self.group)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
+
+    def add_options_to_gui(self, gui):
+        pass

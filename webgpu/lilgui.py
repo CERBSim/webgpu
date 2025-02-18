@@ -9,6 +9,19 @@ class LilGUI:
         self.canvas_id = canvas_id
         self.scene_id = scene_id
 
+    def dropdown(self,
+                 values: dict[str, object],
+                 func: Callable[[RenderObject, object], None],
+                 value: str | None = None,
+                 objects: list[RenderObject] | RenderObject = [],
+                 label="Dropdown"):
+        if value is None:
+            value = list(values.keys())[0]
+        self._connect(func,
+                      option={"type": "dropdown", "values": values, "label": label,
+                              "value" : value},
+                      render_objects=objects)
+
     def slider(
         self,
         value: float,
@@ -16,8 +29,11 @@ class LilGUI:
         objects: list[RenderObject] | RenderObject = [],
         min=0.0,
         max=1.0,
+        step=None,
         label="Slider",
     ):
+        if step is None:
+            step = (max - min) / 100
         self._connect(
             func,
             option={
@@ -26,6 +42,7 @@ class LilGUI:
                 "max": max,
                 "value": value,
                 "label": label,
+                "step" : step
             },
             render_objects=objects,
         )
@@ -77,6 +94,10 @@ def create_gui_option(canvas_id, option, f):
     gui = getattr(js.lil_guis, canvas_id)
     if option["type"] == "slider":
         slider = pyodide.ffi.to_js({option["label"]: option["value"]})
-        gui.add(slider, option["label"], option["min"], option["max"]).onChange(
+        gui.add(slider, option["label"], option["min"], option["max"], option["step"]).onChange(
             pyodide.ffi.create_proxy(f)
         )
+    if option["type"] == "dropdown":
+        print("values = ", option["values"])
+        dropdown = pyodide.ffi.to_js({option["label"]: option["value"]})
+        gui.add(dropdown, option["label"], pyodide.ffi.to_js(option["values"])).onChange(pyodide.ffi.create_proxy(f))
