@@ -167,6 +167,8 @@ class BaseRenderObject(RedrawObject, metaclass=_PostInitMeta):
     def get_shader_code(self) -> str:
         raise NotImplementedError
 
+    def add_options_to_gui(self, gui):
+        pass
 
 class MultipleRenderObject(BaseRenderObject):
     def __init__(self, render_objects):
@@ -183,7 +185,7 @@ class MultipleRenderObject(BaseRenderObject):
 
     def render(self, encoder):
         for r in self.render_objects:
-            r.render(encoder)    
+            r.render(encoder)
 
 class RenderObject(BaseRenderObject):
     """Base class for render objects"""
@@ -224,6 +226,3 @@ class RenderObject(BaseRenderObject):
         render_pass.setBindGroup(0, self.group)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
-
-    def add_options_to_gui(self, gui):
-        pass

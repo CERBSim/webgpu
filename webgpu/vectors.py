@@ -83,7 +83,9 @@ class VectorRenderer(BaseVectorRenderObject):
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).min(),
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).max(),
         )
-        self.colormap.update(min_vec, max_vec)
+        if self.colormap.autoupdate:
+            self.colormap.set_min_max(min_vec, max_vec, set_autoupdate=False)
+        self.colormap.update()
         self.n_instances = len(self.points) // 3
         self.create_render_pipeline()
 

@@ -318,3 +318,14 @@ def max_bounding_box(boxes):
         pmin = np.minimum(pmin, np.array(b[0]))
         pmax = np.maximum(pmax, np.array(b[1]))
     return (pmin, pmax)
+
+
+def format_number(n):
+    if n == 0:
+        return "0"
+    abs_n = abs(n)
+    # Use scientific notation for numbers smaller than 0.001 or larger than 9999
+    if abs_n < 1e-2 or abs_n >= 1e3:
+        return f"{n:.2e}"
+    else:
+        return f"{n:.3g}"

@@ -7,7 +7,7 @@ from webgpu.webgpu_api import (
 )
 
 from .uniforms import Binding, UniformBase, ct
-from .utils import SamplerBinding, TextureBinding, read_shader_file
+from .utils import SamplerBinding, TextureBinding, read_shader_file, format_number
 from .render_object import RenderObject, MultipleRenderObject
 from .labels import Labels
 
@@ -143,12 +143,12 @@ class Colormap(MultipleRenderObject):
     def autoupdate(self, value):
         self.colorbar.autoupdate = value
 
-    def set_min_max(self, min, max):
-        self.colorbar.set_min_max(min,max)
+    def set_min_max(self, min, max, set_autoupdate=True):
+        self.colorbar.set_min_max(min, max, set_autoupdate)
         self.update_labels()
 
     def update_labels(self):
-        self.labels.labels = [str(v) for v in [self.colorbar.minval + i/4 * (self.colorbar.maxval-self.colorbar.minval) for i in range(6)]]
+        self.labels.labels = [format_number(v) for v in [self.colorbar.minval + i/4 * (self.colorbar.maxval-self.colorbar.minval) for i in range(6)]]
         self.labels.positions = [(self.colorbar.position_x + i * self.colorbar.width/4, self.colorbar.position_y-0.01, 0) for i in range(5)]
 
     def get_bounding_box(self):
