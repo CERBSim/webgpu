@@ -7,7 +7,7 @@ from .lilgui import LilGUI
 
 def Draw(
     scene: Scene | BaseRenderObject | list[BaseRenderObject],
-    canvas: Canvas | None = None,
+    canvas: Canvas, lilgui=True
 ) -> Scene:
     import js
     import numpy as np
@@ -16,8 +16,8 @@ def Draw(
         scene = Scene([scene])
     elif isinstance(scene, list):
         scene = Scene(scene)
-    if canvas is not None:
-        scene.init(canvas)
+    scene.init(canvas)
+    if lilgui:
         scene.gui = LilGUI(canvas.canvas.id, scene._id)
 
     objects = scene.render_objects
