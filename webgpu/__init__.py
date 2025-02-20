@@ -9,3 +9,4 @@ from .utils import (
 from .render_object import RenderObject
 from .font import Font
 from .colormap import Colormap
+from .clipping import Clipping

@@ -4,7 +4,6 @@ import uuid
 from .camera import Camera
 from .canvas import Canvas
 from .light import Light
-from .uniforms import ClippingUniforms
 from .utils import BaseBinding, _is_pyodide, create_bind_group, get_device
 from .webgpu_api import (
     CommandEncoder,
@@ -96,7 +95,6 @@ class RenderOptions:
     def __init__(self, canvas, render_function):
         self.render_function = render_function
         self.canvas = canvas
-        self.clipping = ClippingUniforms(self.device)
         self.light = Light(self.device)
         self.camera = Camera(self.device)
 
@@ -105,12 +103,10 @@ class RenderOptions:
         return self.canvas.device
 
     def update_buffers(self):
-        self.clipping.update_buffer()
         self.camera._update_uniforms()
 
     def get_bindings(self):
         return [
-            *self.clipping.get_bindings(),
             *self.light.get_bindings(),
             *self.camera.get_bindings(),
         ]

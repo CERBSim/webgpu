@@ -178,7 +178,7 @@ def _draw_client(canvas_id, scene, assets, globs):
         func(canvas, **scene)
     else:
         scene.init(canvas)
-        DrawPyodide(scene)
+        DrawPyodide(scene, canvas)
 
 
 _draw_js_code_template = r"""

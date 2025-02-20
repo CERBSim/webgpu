@@ -77,17 +77,6 @@ class UniformBase(ct.Structure):
         self._buffer.destroy()
 
 
-class ClippingUniforms(UniformBase):
-    _binding = Binding.CLIPPING
-    _fields_ = [
-        ("plane", ct.c_float * 4),
-        ("sphere", ct.c_float * 4),
-        ("mode", ct.c_uint32),
-        ("padding", ct.c_uint32 * 3),
-    ]
-
-    def __init__(self, device, mode=0, **kwargs):
-        super().__init__(device, mode=mode, **kwargs)
 
 
 class MeshUniforms(UniformBase):

@@ -120,7 +120,8 @@ class Camera:
     def _on_mousewheel(self, ev):
         self.transform.scale(1 - ev.deltaY / 1000)
         self._render()
-        ev.preventDefault()
+        if hasattr(ev, "preventDefault"):
+            ev.preventDefault()
 
     def _on_mousemove(self, ev):
         if self._is_rotating:
