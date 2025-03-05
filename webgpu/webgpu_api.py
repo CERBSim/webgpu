@@ -2,39 +2,115 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
+import base64
 
 try:
     import js
     import pyodide.ffi
+    from pyodide.ffi import JsProxy
+
+    def _default_converter(value, a, b):
+        if isinstance(value, BaseWebGPUHandle):
+            return pyodide.ffi.to_js(value.handle)
+        if isinstance(value, BaseWebGPUObject):
+            return value.__dict__
+
+    def _convert(d):
+        if d is None:
+            return None
+        if isinstance(d, BaseWebGPUHandle):
+            return d.handle._to_js()
+        if isinstance(d, BaseWebGPUObject):
+            return _convert(d.__dict__) if d.__dict__ else None
+        if isinstance(d, Mapping):
+            if not d:
+                return None
+            ret = {}
+            for key in d:
+                value = _convert(d[key])
+                if value is not None:
+                    ret[key] = value
+            return ret
+
+        if isinstance(d, list):
+            return [_convert(value) for value in d]
+
+        return d
+
+    def toJS(value):
+        value = _convert(value)
+        ret = pyodide.ffi.to_js(
+            value,
+            dict_converter=js.Object.fromEntries,
+            default_converter=_default_converter,
+            create_pyproxies=False,
+        )
+        return ret
 
 except ImportError:
     # Mocks for linting
-    class js:
-        class Object:
-            @staticmethod
-            def fromEntries(**kwargs):
-                return dict(**kwargs)
+    from . import proxy
+    from .proxy import JsProxy
 
+    proxy.remote = proxy.JsRemote()
+    js = JsProxy()
+    proxy.js = js
+
+    def _convert(d):
+        if d is None:
+            return None
+        if isinstance(d, JsProxy):
+            return d._to_js()
+        if isinstance(d, BaseWebGPUHandle):
+            return d.handle
+        if isinstance(d, BaseWebGPUObject):
+            return _convert(d.__dict__) if d.__dict__ else None
+        if isinstance(d, Mapping):
+            if not d:
+                return None
+            ret = {}
+            for key in d:
+                value = _convert(d[key])
+                if value is not None:
+                    ret[key] = value
+            return ret
+
+        if isinstance(d, memoryview):
+            return {
+                    "__python_proxy_type__": "bytes",
+                    "data": base64.b64encode(d.tobytes()).decode(),
+                    }
+
+        if isinstance(d, list):
+            return [_convert(value) for value in d]
+        if isinstance(d, tuple):
+            return tuple((_convert(value) for value in d))
+
+        print(type(d).__name__)
+        if isinstance(d, function):
+            print("have function", d)
+            # return d
+
+        if callable(d):
+            print("have callable", d)
+            # return d
+        return d
+
+
+    def toJS(value):
+        c = _convert(value)
+        return c
+
+    proxy.convert = toJS
+    # TODO: JsPromise
     class pyodide:
         class ffi:
-            class JsProxy:
-                pass
-
             class JsPromise:
                 pass
 
-            @staticmethod
-            def to_js(
-                value,
-                dict_converter=None,
-                default_converter=None,
-                create_pyproxies=True,
-            ):
-                return value
-
 
 class BaseWebGPUHandle:
-    handle: pyodide.ffi.JsProxy
+    handle: JsProxy
 
     def __init__(self, handle):
         self.handle = handle
@@ -44,46 +120,6 @@ class BaseWebGPUHandle:
 
     def __del__(self):
         self.destroy()
-
-
-def _default_converter(value, a, b):
-    if isinstance(value, BaseWebGPUHandle):
-        return pyodide.ffi.to_js(value.handle)
-    if isinstance(value, BaseWebGPUObject):
-        return value.__dict__
-
-
-def _convert(d):
-    if d is None:
-        return None
-    if isinstance(d, BaseWebGPUHandle):
-        return d.handle
-    if isinstance(d, BaseWebGPUObject):
-        return _convert(d.__dict__) if d.__dict__ else None
-    if isinstance(d, Mapping):
-        if not d:
-            return None
-        ret = {}
-        for key in d:
-            value = _convert(d[key])
-            if value is not None:
-                ret[key] = value
-        return ret
-
-    if isinstance(d, list):
-        return [_convert(value) for value in d]
-    return d
-
-
-def toJS(value):
-    value = _convert(value)
-    ret = pyodide.ffi.to_js(
-        value,
-        dict_converter=js.Object.fromEntries,
-        default_converter=_default_converter,
-        create_pyproxies=False,
-    )
-    return ret
 
 
 def fromJS(obj):
@@ -940,14 +976,19 @@ async def requestAdapter(
         js.alert("WebGPU is not supported")
         sys.exit(1)
 
-    handle = await js.navigator.gpu.requestAdapter(
-        RequestAdapterOptions(
+    reqAdapter = js.navigator.gpu.requestAdapter
+    options = RequestAdapterOptions(
             featureLevel=featureLevel,
             powerPreference=powerPreference,
             forceFallbackAdapter=forceFallbackAdapter,
             xrCompatible=xrCompatible,
         ).toJS()
-    )
+    print("requestAdapter", reqAdapter, options)
+    handle = reqAdapter(options)
+    try:
+        handle = await handle
+    except:
+        pass
     if not handle:
         js.alert("WebGPU is not supported")
         sys.exit(1)
@@ -1093,8 +1134,8 @@ class Adapter(BaseWebGPUHandle):
         defaultQueue: QueueDescriptor | None = None,
         label: str = "",
     ) -> "Device":
-        return Device(
-            await self.handle.requestDevice(
+
+        device = self.handle.requestDevice(
                 DeviceDescriptor(
                     requiredFeatures=requiredFeatures,
                     requiredLimits=requiredLimits.toJS() if requiredLimits else None,
@@ -1102,7 +1143,12 @@ class Adapter(BaseWebGPUHandle):
                     label=label,
                 ).toJS()
             )
-        )
+
+        try:
+            await device
+        except:
+            pass
+        return Device(device)
 
 
 class Buffer(BaseWebGPUHandle):
@@ -1551,7 +1597,7 @@ class Queue(BaseWebGPUHandle):
         self.handle.writeBuffer(
             buffer.handle,
             bufferOffset,
-            pyodide.ffi.to_js(memoryview(data)),
+            toJS(memoryview(data)),
             dataOffset,
             size,
         )
@@ -1565,7 +1611,7 @@ class Queue(BaseWebGPUHandle):
     ) -> None:
         return self.handle.writeTexture(
             destination.toJS(),
-            pyodide.ffi.to_js(memoryview(bytes(data))),
+            toJS(memoryview(bytes(data))),
             dataLayout.toJS(),
             size,
         )

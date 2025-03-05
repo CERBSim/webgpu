@@ -19,7 +19,6 @@ class Canvas:
     multisample: MultisampleState
 
     def __init__(self, device, canvas, multisample_count=4):
-        import js
 
         self.render_function = None
         self.device = device

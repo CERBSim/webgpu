@@ -40,6 +40,7 @@ class _PostInitMeta(type):
 
 
 class RedrawObject:
+    _id: str
     _timestamp: float = -1
 
     def redraw(self, timestamp: float | None = None, **kwargs):

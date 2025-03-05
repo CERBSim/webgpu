@@ -8,8 +8,7 @@ from .webgpu_api import toJS as to_js
 _device: Device = None
 
 try:
-    import js
-
+    import pyodide
     _is_pyodide = True
 except:
     _is_pyodide = False
@@ -21,9 +20,11 @@ async def init_device() -> Device:
     if _device is not None:
         return _device
 
-    import js
-
-    adapter = await requestAdapter(powerPreference=PowerPreference.high_performance)
+    adapter = requestAdapter(powerPreference=PowerPreference.high_performance)
+    try:
+        adapter = await adapter
+    except:
+        pass
 
     required_features = []
     if "timestamp-query" in adapter.features:
@@ -34,13 +35,19 @@ async def init_device() -> Device:
 
     one_meg = 1024**2
     one_gig = 1024**3
-    _device = await adapter.requestDevice(
+    _device = adapter.requestDevice(
         label="WebGPU device",
         requiredLimits=Limits(
             maxBufferSize=one_gig - 16,
             maxStorageBufferBindingSize=one_gig - 16,
         ),
     )
+    try:
+        _device = await _device
+    except:
+        pass
+
+
     limits = _device.limits
     js.console.log("device limits\n", limits)
     js.console.log("adapter info\n", adapter.info)

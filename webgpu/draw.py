@@ -3,13 +3,13 @@ from .utils import max_bounding_box
 from .scene import Scene
 from .canvas import Canvas
 from .lilgui import LilGUI
+from .webgpu_api import js
 
 
 def Draw(
     scene: Scene | BaseRenderObject | list[BaseRenderObject],
     canvas: Canvas, lilgui=True
 ) -> Scene:
-    import js
     import numpy as np
 
     if isinstance(scene, BaseRenderObject):

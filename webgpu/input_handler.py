@@ -53,6 +53,7 @@ class InputHandler:
             self.emit(event.type, event)
 
     def register_callbacks(self):
+        return
         from pyodide.ffi import create_proxy
 
         self.unregister_callbacks()
