@@ -203,13 +203,13 @@ class JsProxy:
         return JsProxyIterator(self)
 
 
-def create_proxy(func):
+def create_proxy(func, **kwargs):
     id = next(remote._object_id)
     def wrapper(*args):
         import threading
         threading.Thread(target=func, args=args).start()
     remote._objects[id] = wrapper
-    return { "__python_proxy_type__": "function", "id": id }
+    return { "__python_proxy_type__": "function", "id": id } | kwargs
 
 if __name__ == "__main__":
     remote = JsRemote()

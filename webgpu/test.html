@@ -26,6 +26,29 @@
             console.log("Connection established");
           };
           this.socket.onmessage = (data) => this.onMessage(data);
+
+          window.patchedRequestAnimationFrame = (
+            device_id,
+            context_id,
+            target_texture_id,
+          ) => {
+            requestAnimationFrame((t) => {
+              const device = this.objects[device_id];
+              const context = this.objects[context_id];
+              const target = this.objects[target_texture_id];
+              console.log("context", context);
+              console.log("target", target);
+
+              const current = context.getCurrentTexture();
+              const encoder = device.createCommandEncoder();
+              encoder.copyTextureToTexture(
+                { texture: target },
+                { texture: current },
+                { width: current.width, height: current.height },
+              );
+              device.queue.submit([encoder.finish()]);
+            });
+          };
         }
 
         convertValue(value) {
@@ -48,10 +71,15 @@
             console.log("create python proxy", value);
             return (...args) => {
               console.log("call python proxy", value.id, args);
+              const texture_view = this.objects[value.context_id]
+                .getCurrentTexture()
+                .createView();
+              const view_id = this.counter++;
+              this.objects[view_id] = texture_view;
               this.socket.send(
                 JSON.stringify({
                   type: "call_function",
-                  args: JSON.stringify(args),
+                  args: JSON.stringify([view_id, ...args]),
                   id: value.id,
                 }),
               );

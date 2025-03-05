@@ -1,5 +1,5 @@
 from .input_handler import InputHandler
-from .utils import to_js, get_device
+from .utils import get_device, to_js
 from .webgpu_api import *
 
 
@@ -49,16 +49,24 @@ class Canvas:
                     "format": self.format,
                     "alphaMode": "premultiplied",
                     "sampleCount": multisample_count,
+                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
                 }
             )
         )
 
+        self.target_texture = device.createTexture(
+            size=[canvas.width, canvas.height, 1],
+            sampleCount=1,
+            format=self.format,
+            usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
+            label="target",
+        )
         self.multisample_texture = device.createTexture(
             size=[canvas.width, canvas.height, 1],
             sampleCount=multisample_count,
             format=self.format,
             usage=TextureUsage.RENDER_ATTACHMENT,
-            label="multisample"
+            label="multisample",
         )
         self.multisample = MultisampleState(count=multisample_count)
         self.depth_format = TextureFormat.depth24plus
@@ -72,11 +80,13 @@ class Canvas:
         )
         self.input_handler = InputHandler(canvas)
 
+        self.target_texture_view = self.target_texture.createView()
+
     def color_attachments(self, loadOp: LoadOp):
         return [
             RenderPassColorAttachment(
                 view=self.multisample_texture.createView(),
-                resolveTarget=self.context.getCurrentTexture().createView(),
+                resolveTarget=self.target_texture_view,
                 # view=self.context.getCurrentTexture().createView(),
                 clearValue=Color(1, 1, 1, 1),
                 loadOp=loadOp,
