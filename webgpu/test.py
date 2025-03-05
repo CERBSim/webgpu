@@ -30,7 +30,7 @@ triangle = TriangulationRenderer([0,0,0, 1,0,0, 0,1,0])
 
 # Draw(triangle, canvas, lilgui = False)
 
-def render():
+def render(*args, **kwargs):
     encoder = device.createCommandEncoder()
     triangle.render(encoder)
     device.queue.submit([encoder.finish()])
@@ -38,6 +38,25 @@ def render():
 options = RenderOptions(canvas, render)
 
 triangle.options = options
+triangle.options.update_buffers()
 triangle.update()
 
-js.requestAnimationFrame(toJS(render))
+pmin, pmax = triangle.get_bounding_box()
+
+camera = options.camera
+camera.transform._center = 0.5 * (pmin + pmax)
+camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
+
+if not (pmin[2] == 0 and pmax[2] == 0):
+    camera.transform.rotate(30, -20)
+camera._update_uniforms()
+
+def f(*args, **kwargs):
+    pass
+
+render_proxy = create_proxy(render)
+js.requestAnimationFrame(render_proxy)
+
+while True:
+    time.sleep(1)
+    js.requestAnimationFrame(render_proxy)

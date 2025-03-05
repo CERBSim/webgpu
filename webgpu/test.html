@@ -11,6 +11,10 @@
         );
       }
 
+      function b64ToBuffer(b64) {
+        return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
+      }
+
       class Remote {
         constructor() {
           this.counter = 1;
@@ -32,8 +36,32 @@
           )
             return value;
 
-          if (value.__python_proxy_type__ == "bytes")
-            return new Uint8Array(atob(value.data));
+          if (value.__python_proxy_type__ == "bytes") {
+            const buffer = b64ToBuffer(value.data);
+            //const buffer = Uint8Array.fromBase64(value.data);
+            //console.log("data create uint8array", value);
+            console.log("create uint8array", buffer);
+            return buffer;
+          }
+
+          if (value.__python_proxy_type__ == "function") {
+            console.log("create python proxy", value);
+            return (...args) => {
+              console.log("call python proxy", value.id, args);
+              this.socket.send(
+                JSON.stringify({
+                  type: "call_function",
+                  args: JSON.stringify(args),
+                  id: value.id,
+                }),
+              );
+              //console.log("socket", this.socket);
+              //
+              //console.log('start waiting')
+              //await new Promise(r => setTimeout(r, 2000));
+              //console.log('stopt waiting')
+            };
+          }
 
           if (value.__python_proxy_type__ == "proxy") {
             return this.objects[value.id];
@@ -95,17 +123,13 @@
 
         onMessage(event) {
           const data = JSON.parse(event.data);
-          console.log("got message", data);
           const request_id = data.request_id;
 
           const obj = data.id ? this.objects[data.id] : self;
 
           if (data.type === "call_function") {
-            console.log("call", obj);
-            console.log("args", data.args);
             const args = this.convertObject(data.args);
-            console.log("args", args);
-            console.log("this", this.objects[data.parent_id]);
+            console.log("call", obj, args);
             return this.sendResult(
               obj.apply(this.objects[data.parent_id], args),
               request_id,

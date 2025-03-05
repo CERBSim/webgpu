@@ -15,9 +15,14 @@ class JsRemote:
     _thread: threading.Thread
     _connected_clients: set
 
+    _object_id: itertools.count
+    _objects: dict
+
     def __init__(self):
         self._request_id = itertools.count()
         self._requests = {}
+        self._objects = {}
+        self._object_id = itertools.count()
         self._connected_clients = set()
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._start_server, daemon=True)
@@ -115,6 +120,14 @@ class JsRemote:
             event = self._requests[request_id]
             self._requests[request_id] = self._parse_result(data)
             event.set()
+            return
+
+        type = data.get("type", None)
+        print("on message", data)
+        if type == "call_function":
+            print("got call_function message", data)
+            args = json.loads(data["args"])
+            self._objects[data["id"]](*args)
 
     def _start_server(self):
         async def start_websocket():
@@ -155,11 +168,16 @@ class JsProxyIterator:
 
 
 class JsProxy:
+    _id: int
+    _parent_id: int
+
     def __init__(self, id=None, parent_id=None):
         self._id = id
         self._parent_id = parent_id
 
     def __getattr__(self, key):
+        if key.startswith("__"):
+            return super().__getattr__(key)
         return remote.get_prop(self._id, key)
 
     def __setattr__(self, key, value):
@@ -184,6 +202,14 @@ class JsProxy:
     def __iter__(self):
         return JsProxyIterator(self)
 
+
+def create_proxy(func):
+    id = next(remote._object_id)
+    def wrapper(*args):
+        import threading
+        threading.Thread(target=func, args=args).start()
+    remote._objects[id] = wrapper
+    return { "__python_proxy_type__": "function", "id": id }
 
 if __name__ == "__main__":
     remote = JsRemote()

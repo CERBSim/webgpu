@@ -12,13 +12,26 @@ struct TriangleFragmentInput {
 
 @vertex
 fn vertex_main(@builtin(vertex_index) vertId: u32, @builtin(instance_index) trigId: u32) -> TriangleFragmentInput {
+  /*
   let point = vec3<f32>(u_vertices[trigId * 9 + vertId * 3],
                         u_vertices[trigId * 9 + vertId * 3 + 1],
                         u_vertices[trigId * 9 + vertId * 3 + 2]);
   let normal = -vec3<f32>(u_normals[trigId * 9 + vertId * 3],
                          u_normals[trigId * 9 + vertId * 3 + 1],
                          u_normals[trigId * 9 + vertId * 3 + 2]);
+
   let position = cameraMapPoint(point);
+  */
+  var point = vec3f(0., 0., 0.);
+  if(vertId == 1) {
+    point = vec3f(1.0, 0., 0.);
+  }
+  if(vertId == 2) {
+    point = vec3f(0.0, 1., 0.);
+  }
+  let position = vec4<f32>(point, 1.0);
+  // let position = cameraMapPoint(point);
+  let normal = vec3f(0., 0., 1.);
   return TriangleFragmentInput(position,
                                point,
                                normal,
@@ -29,5 +42,5 @@ fn vertex_main(@builtin(vertex_index) vertId: u32, @builtin(instance_index) trig
 
 @fragment
 fn fragment_main(input: TriangleFragmentInput) -> @location(0) vec4<f32> {
-  return lightCalcColor(input.n, getColor(input.vertId, input.trigId));
+  return vec4f(1.,0.,0.,1.0); //lightCalcColor(input.n, getColor(input.vertId, input.trigId));
 }

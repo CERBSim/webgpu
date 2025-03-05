@@ -58,6 +58,7 @@ class Canvas:
             sampleCount=multisample_count,
             format=self.format,
             usage=TextureUsage.RENDER_ATTACHMENT,
+            label="multisample"
         )
         self.multisample = MultisampleState(count=multisample_count)
         self.depth_format = TextureFormat.depth24plus

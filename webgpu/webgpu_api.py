@@ -50,7 +50,7 @@ try:
 except ImportError:
     # Mocks for linting
     from . import proxy
-    from .proxy import JsProxy
+    from .proxy import JsProxy, create_proxy
 
     proxy.remote = proxy.JsRemote()
     js = JsProxy()
@@ -76,6 +76,7 @@ except ImportError:
             return ret
 
         if isinstance(d, memoryview):
+            print("send binary data", len(d.tobytes()))
             return {
                     "__python_proxy_type__": "bytes",
                     "data": base64.b64encode(d.tobytes()).decode(),
@@ -86,14 +87,6 @@ except ImportError:
         if isinstance(d, tuple):
             return tuple((_convert(value) for value in d))
 
-        print(type(d).__name__)
-        if isinstance(d, function):
-            print("have function", d)
-            # return d
-
-        if callable(d):
-            print("have callable", d)
-            # return d
         return d
 
 
@@ -119,7 +112,8 @@ class BaseWebGPUHandle:
         pass
 
     def __del__(self):
-        self.destroy()
+        pass
+        # self.destroy()
 
 
 def fromJS(obj):
@@ -1854,6 +1848,7 @@ class Texture(BaseWebGPUHandle):
         return TextureUsage(self.handle.usage())
 
     def destroy(self) -> None:
+        print("destroy texture")
         return self.handle.destroy()
 
     def __del__(self):
