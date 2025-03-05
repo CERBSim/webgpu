@@ -12,7 +12,8 @@ class JsRemote:
     _request_id: itertools.count
     _requests: dict
     _loop: asyncio.AbstractEventLoop
-    _thread: threading.Thread
+    _websocket_thread: threading.Thread
+    _callback_thread: threading.Thread
     _connected_clients: set
 
     _object_id: itertools.count
@@ -25,8 +26,9 @@ class JsRemote:
         self._object_id = itertools.count()
         self._connected_clients = set()
         self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._start_server, daemon=True)
-        self._thread.start()
+        self._websocket_thread = threading.Thread(target=self._start_websocket_server, daemon=True)
+        self._websocket_thread.start()
+        self._callback_queue = asyncio.Queue()
 
     async def _send_async(self, message):
         if self._connected_clients:
@@ -129,18 +131,23 @@ class JsRemote:
             args = json.loads(data["args"])
             self._objects[data["id"]](*args)
 
-    def _start_server(self):
+    def _start_websocket_server(self):
         async def start_websocket():
             async with websockets.serve(self._websocket_handler, "", WS_PORT) as server:
                 await server.serve_forever()
 
+        async def handle_callbacks():
+             while True:
+                func,args = await self._callback_queue.get()
+                func(*args)
+
         try:
             asyncio.set_event_loop(self._loop)
-
             self._loop.create_task(start_websocket())
+            self._loop.create_task(handle_callbacks())
             self._loop.run_forever()
         except Exception as e:
-            print("exception in _start_servers", e)
+            print("exception in _start_websocket_server", e)
 
 
 remote = None
@@ -203,13 +210,19 @@ class JsProxy:
         return JsProxyIterator(self)
 
 
-def create_proxy(func, **kwargs):
+def create_render_proxy(func):
     id = next(remote._object_id)
     def wrapper(*args):
-        import threading
-        threading.Thread(target=func, args=args).start()
+        remote._callback_queue.put((func, args))
     remote._objects[id] = wrapper
-    return { "__python_proxy_type__": "function", "id": id } | kwargs
+    return { "__python_proxy_type__": "render", "id": id }
+
+def create_proxy(func):
+    id = next(remote._object_id)
+    def wrapper(*args):
+        remote._callback_queue.put((func, args))
+    remote._objects[id] = wrapper
+    return { "__python_proxy_type__": "function", "id": id }
 
 if __name__ == "__main__":
     remote = JsRemote()

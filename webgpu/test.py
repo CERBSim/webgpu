@@ -48,9 +48,16 @@ triangle.update()
 
 pmin, pmax = triangle.get_bounding_box()
 
+print("pmin", pmin)
+print("pmax", pmax)
 camera = options.camera
 camera.transform._center = 0.5 * (pmin + pmax)
 camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
+
+print(camera.transform.mat )
+print("center", camera.transform._center)
+print("scale", camera.transform._scale)
+
 
 if not (pmin[2] == 0 and pmax[2] == 0):
     camera.transform.rotate(30, -20)
@@ -65,5 +72,7 @@ render(0)
 
 while True:
     time.sleep(1)
+    camera.transform.rotate(0, 10)
+    triangle.options.update_buffers()
     render(0)
 #     js.requestAnimationFrame(render_proxy)
