@@ -48,18 +48,19 @@ class InputHandler:
                 func.destroy()
         self._callbacks = {}
 
-    def _handle_js_event(self, event):
-        if event.type in self._callbacks:
-            self.emit(event.type, event)
+    def _handle_js_event(self, event_type):
+        def wrapper(event):
+            if event_type in self._callbacks:
+                self.emit(event_type, event)
+        return wrapper
 
     def register_callbacks(self):
-        return
-        from pyodide.ffi import create_proxy
+        from .webgpu_api import create_proxy
 
         self.unregister_callbacks()
-        js_handler = create_proxy(self._handle_js_event)
         options = to_js({"capture": True})
         for event in ["mousedown", "mouseup", "mousemove", "mousewheel", "mouseout"]:
+            js_handler = create_proxy(self._handle_js_event(event))
             self.html_canvas.addEventListener(event, js_handler, options)
 
     def __del__(self):

@@ -4,6 +4,12 @@
       console.log("hello");
       const PORT = 8765;
 
+      function serializeEvent(event) {
+        const keys = Object.keys(MouseEvent.prototype);
+        const entries = keys.map((k) => [k, event[k]]);
+        return Object.fromEntries(entries);
+      }
+
       function isPrimitive(value) {
         return (
           value === null ||
@@ -50,8 +56,9 @@
         }
 
         convertValue(value) {
-          if(value === null) 
-            return undefined;
+          if (value === null) return undefined;
+
+          if (value instanceof MouseEvent) return serializeEvent(value);
 
           if (
             value === undefined ||
@@ -60,18 +67,15 @@
           )
             return value;
 
-          if (value.__python_proxy_type__ == "bytes") {
-            const buffer = b64ToBuffer(value.data);
-            console.log("create uint8array", buffer);
-            return buffer;
-          }
+          if (value.__python_proxy_type__ == "bytes")
+            return b64ToBuffer(value.data);
 
           if (value.__python_proxy_type__ == "function") {
             return (...args) => {
               this.socket.send(
                 JSON.stringify({
                   type: "call_function",
-                  args: JSON.stringify(args),
+                  args: this.convertObject(args),
                   id: value.id,
                 }),
               );
@@ -88,7 +92,7 @@
               this.socket.send(
                 JSON.stringify({
                   type: "call_function",
-                  args: JSON.stringify([view_id, ...args]),
+                  args: [view_id, ...args],
                   id: value.id,
                 }),
               );
@@ -161,7 +165,6 @@
 
           if (data.type === "call_function") {
             const args = this.convertObject(data.args);
-            console.log("call", this.objects[data.parent_id], obj, args);
             return this.sendResult(
               obj.apply(this.objects[data.parent_id], args),
               request_id,

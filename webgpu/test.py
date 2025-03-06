@@ -30,8 +30,8 @@ triangle = TriangulationRenderer([0, 0, 0, 1, 0, 0, 0, 1, 0])
 
 # Draw(triangle, canvas, lilgui = False)
 
-def render(t):
-    global options
+def render(t=0):
+    triangle.options.update_buffers()
     encoder = device.createCommandEncoder()
     triangle.render(encoder)
     device.queue.submit([encoder.finish()])
@@ -63,6 +63,8 @@ if not (pmin[2] == 0 and pmax[2] == 0):
     camera.transform.rotate(30, -20)
 camera._update_uniforms()
 
+camera.register_callbacks(canvas.input_handler, render)
+
 render_proxy = create_proxy(
     render,
 )
@@ -72,7 +74,7 @@ render(0)
 
 while True:
     time.sleep(1)
-    camera.transform.rotate(0, 10)
-    triangle.options.update_buffers()
-    render(0)
+    # camera.transform.rotate(0, 10)
+    # triangle.options.update_buffers()
+    # render(0)
 #     js.requestAnimationFrame(render_proxy)

@@ -76,7 +76,6 @@ except ImportError:
             return ret
 
         if isinstance(d, memoryview):
-            print("send binary data", d.tobytes(), len(d.tobytes()))
             return {
                     "__python_proxy_type__": "bytes",
                     "data": base64.b64encode(d).decode(),

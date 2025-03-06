@@ -11,9 +11,11 @@ WS_PORT = 8765
 class JsRemote:
     _request_id: itertools.count
     _requests: dict
-    _loop: asyncio.AbstractEventLoop
+    _callback_loop: asyncio.AbstractEventLoop
+    _websocket_loop: asyncio.AbstractEventLoop
     _websocket_thread: threading.Thread
     _callback_thread: threading.Thread
+    _callback_queue: asyncio.Queue
     _connected_clients: set
 
     _object_id: itertools.count
@@ -25,10 +27,16 @@ class JsRemote:
         self._objects = {}
         self._object_id = itertools.count()
         self._connected_clients = set()
-        self._loop = asyncio.new_event_loop()
-        self._websocket_thread = threading.Thread(target=self._start_websocket_server, daemon=True)
-        self._websocket_thread.start()
+
+        self._callback_loop = asyncio.new_event_loop()
         self._callback_queue = asyncio.Queue()
+        self._callback_thread = threading.Thread(target=self._start_callback_server, daemon=True)
+
+        self._websocket_loop = asyncio.new_event_loop()
+        self._websocket_thread = threading.Thread(target=self._start_websocket_server, daemon=True)
+
+        self._websocket_thread.start()
+        self._callback_thread.start()
 
     async def _send_async(self, message):
         if self._connected_clients:
@@ -91,7 +99,7 @@ class JsRemote:
         if request_id is not None:
             event = threading.Event()
             self._requests[request_id] = event
-        asyncio.run_coroutine_threadsafe(self._send_async(message), self._loop)
+        asyncio.run_coroutine_threadsafe(self._send_async(message), self._websocket_loop)
         if request_id is not None:
             event.wait()
             return self._requests.pop(request_id)
@@ -125,32 +133,44 @@ class JsRemote:
             return
 
         type = data.get("type", None)
-        print("on message", data)
         if type == "call_function":
-            print("got call_function message", data)
-            args = json.loads(data["args"])
-            self._objects[data["id"]](*args)
+            args = data["args"]
+            self._objects[data["id"]](args)
+
+    def _start_callback_server(self):
+        async def handle_callbacks():
+             while True:
+                try:
+                    func,args = await self._callback_queue.get()
+                    func(*args)
+                except asyncio.QueueEmpty:
+                    pass
+                except Exception as e:
+                    print("error in callback", type(e), str(e))
+                # await asyncio.sleep(0.01)
+
+        try:
+            self._callback_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._callback_loop)
+            self._callback_loop.create_task(handle_callbacks())
+            self._callback_loop.run_forever()
+        except Exception as e:
+            print("exception in _start_callback_server", e)
 
     def _start_websocket_server(self):
         async def start_websocket():
             async with websockets.serve(self._websocket_handler, "", WS_PORT) as server:
                 await server.serve_forever()
 
-        async def handle_callbacks():
-             while True:
-                func,args = await self._callback_queue.get()
-                func(*args)
-
         try:
-            asyncio.set_event_loop(self._loop)
-            self._loop.create_task(start_websocket())
-            self._loop.create_task(handle_callbacks())
-            self._loop.run_forever()
+            asyncio.set_event_loop(self._websocket_loop)
+            self._websocket_loop.create_task(start_websocket())
+            self._websocket_loop.run_forever()
         except Exception as e:
             print("exception in _start_websocket_server", e)
 
 
-remote = None
+remote: JsRemote = None
 convert = None
 js = None
 
@@ -159,7 +179,6 @@ class JsProxyIterator:
     def __init__(self, proxy):
         self._proxy = proxy
         self._keys = proxy._get_keys()
-        print("keys", self._keys)
         self._index = 0
 
     def __next__(self):
@@ -212,15 +231,15 @@ class JsProxy:
 
 def create_render_proxy(func):
     id = next(remote._object_id)
-    def wrapper(*args):
-        remote._callback_queue.put((func, args))
+    def wrapper(args):
+        asyncio.run_coroutine_threadsafe(remote._callback_queue.put((func, args)), remote._callback_loop)
     remote._objects[id] = wrapper
     return { "__python_proxy_type__": "render", "id": id }
 
 def create_proxy(func):
     id = next(remote._object_id)
-    def wrapper(*args):
-        remote._callback_queue.put((func, args))
+    def wrapper(args):
+        asyncio.run_coroutine_threadsafe(remote._callback_queue.put((func, args)), remote._callback_loop)
     remote._objects[id] = wrapper
     return { "__python_proxy_type__": "function", "id": id }
 
