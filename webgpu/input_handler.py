@@ -52,6 +52,16 @@ class InputHandler:
     def _handle_js_event(self, event_type):
         def wrapper(event):
             if event_type in self._callbacks:
+                try:
+                    import pyodide.ffi
+
+                    if isinstance(event, pyodide.ffi.JsProxy):
+                        ev = {}
+                        for key in dir(event):
+                            ev[key] = getattr(event, key)
+                        event = ev
+                except ImportError:
+                    pass
                 self.emit(event_type, event)
 
         return wrapper

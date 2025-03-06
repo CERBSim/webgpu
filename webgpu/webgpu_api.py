@@ -7,7 +7,7 @@ from enum import Enum, IntFlag
 try:
     import js
     import pyodide.ffi
-    from pyodide.ffi import JsProxy
+    from pyodide.ffi import JsProxy, create_proxy
 
     def _default_converter(value, a, b):
         if isinstance(value, BaseWebGPUHandle):
@@ -19,7 +19,7 @@ try:
         if d is None:
             return None
         if isinstance(d, BaseWebGPUHandle):
-            return d.handle._to_js()
+            return d.handle
         if isinstance(d, BaseWebGPUObject):
             return _convert(d.__dict__) if d.__dict__ else None
         if isinstance(d, Mapping):
@@ -1138,7 +1138,7 @@ class Adapter(BaseWebGPUHandle):
         )
 
         try:
-            await device
+            device = await device
         except:
             pass
         return Device(device)

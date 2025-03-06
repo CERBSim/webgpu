@@ -50,7 +50,7 @@ class Scene:
             obj.update()
 
         self._js_render = pyodide.ffi.create_proxy(self.render)
-        self.options.camera.register_callbacks(canvas.input_handler, self._js_render)
+        self.options.camera.register_callbacks(canvas.input_handler, self._render)
         self.options.update_buffers()
         _scenes_by_id[self.id] = self
 
@@ -73,10 +73,22 @@ class Scene:
                 f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')"
             )
 
-    def render(self, t):
+    def _render(self):
+        import js
+
+        js.requestAnimationFrame(self._js_render)
+
+    def render(self, t=0):
         encoder = self.device.createCommandEncoder()
         for obj in self.render_objects:
             obj.render(encoder)
+        current = self.canvas.context.getCurrentTexture()
+        target = self.canvas.target_texture
+        encoder.copyTextureToTexture(
+            TexelCopyTextureInfo(self.canvas.target_texture),
+            TexelCopyTextureInfo(current),
+            [current.width, current.height],
+        )
         self.device.queue.submit([encoder.finish()])
 
 

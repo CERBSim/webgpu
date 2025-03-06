@@ -243,7 +243,7 @@ async function draw() {{
     console.log(canvas);
     canvas.width = {width};
     canvas.height = {height};
-    canvas.style = "background-color: #d0d0d0";
+    canvas.style = "background-color: #d0d0d0; max-width: {width}px; max-height: {height}px;";
     await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{scene}", "{assets}", globals())');
 }}
 draw();
@@ -251,8 +251,8 @@ draw();
 
     def Draw(
         scene: Scene | list[RenderObject] | RenderObject,
-        width=600,
-        height=600,
+        width=608,
+        height=608,
         modules=[],
     ):
         if isinstance(scene, RenderObject):
@@ -282,8 +282,8 @@ draw();
         kwargs={},
         modules: list[str] = [],
         files: list[str] = [],
-        width=600,
-        height=600,
+        width=608,
+        height=608,
     ):
         assets = {
             "modules": {module: create_package_zip(module) for module in modules},

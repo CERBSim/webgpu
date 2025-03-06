@@ -31,6 +31,6 @@ def Draw(
     if not (pmin[2] == 0 and pmax[2] == 0):
         camera.transform.rotate(30, -20)
     camera._update_uniforms()
-    js.requestAnimationFrame(scene._js_render)
+    scene._render()
 
     return scene
