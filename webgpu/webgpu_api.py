@@ -1045,7 +1045,7 @@ class TexelCopyBufferInfo(BaseWebGPUObject):
 class TexelCopyTextureInfo(BaseWebGPUObject):
     texture: "Texture"
     mipLevel: int = 0
-    origin: "Origin3d | None" = None
+    origin: Origin3d = field(default_factory=Origin3d)
     aspect: TextureAspect = TextureAspect.all
 
 

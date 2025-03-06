@@ -85,9 +85,9 @@ class Scene:
         current = self.canvas.context.getCurrentTexture()
         target = self.canvas.target_texture
         encoder.copyTextureToTexture(
-            TexelCopyTextureInfo(self.canvas.target_texture),
+            TexelCopyTextureInfo(target),
             TexelCopyTextureInfo(current),
-            [current.width, current.height],
+            [current.width, current.height, 1],
         )
         self.device.queue.submit([encoder.finish()])
 
