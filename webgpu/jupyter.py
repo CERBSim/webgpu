@@ -2,10 +2,10 @@ import base64
 import pickle
 
 from .draw import Draw as DrawPyodide
+from .lilgui import LilGUI
 from .render_object import RenderObject, _render_objects
 from .scene import Scene
 from .utils import _is_pyodide, reload_package
-from .lilgui import LilGUI
 
 
 def create_package_zip(module_name="webgpu"):

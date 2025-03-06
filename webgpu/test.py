@@ -3,7 +3,6 @@ import time
 
 from . import proxy
 from .canvas import Canvas
-
 # from .draw import Draw
 from .render_object import *
 from .triangles import *

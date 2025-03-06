@@ -1,7 +1,7 @@
-from .utils import buffer_from_array, BufferBinding, read_shader_file
-from .render_object import RenderObject
-
 import numpy as np
+
+from .render_object import RenderObject
+from .utils import BufferBinding, buffer_from_array, read_shader_file
 
 
 class Binding:

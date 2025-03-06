@@ -1,7 +1,8 @@
-from .utils import _is_pyodide
-from .render_object import _render_objects, RenderObject
 import uuid
 from typing import Callable
+
+from .render_object import RenderObject, _render_objects
+from .utils import _is_pyodide
 
 
 class Folder:
@@ -111,7 +112,8 @@ class Folder:
 
             create_gui_option(self.canvas_id, option, _func, self._id)
         else:
-            from .jupyter import _encode_function, _encode_data, run_code_in_pyodide
+            from .jupyter import (_encode_data, _encode_function,
+                                  run_code_in_pyodide)
 
             render_objects = [str(obj._id) for obj in render_objects]
             run_code_in_pyodide(
@@ -130,7 +132,7 @@ def _receive(
     assert _is_pyodide
 
     def _func(*args):
-        from webgpu.jupyter import _decode_function, _decode_data
+        from webgpu.jupyter import _decode_data, _decode_function
         from webgpu.scene import redraw_scene
 
         ro = [_render_objects[str(uuid.UUID(obj_id))] for obj_id in render_objects]
@@ -144,8 +146,8 @@ def _receive(
 
 
 def create_gui_option(canvas_id, option, f, folder_id):
-    import pyodide.ffi
     import js
+    import pyodide.ffi
 
     gui = getattr(js.lil_guis, canvas_id)
     if not hasattr(gui, "my_gui_folders"):

@@ -1,5 +1,6 @@
 from webgpu.render_object import BaseRenderObject
 from webgpu.utils import read_shader_file
+
 from .uniforms import UniformBase, ct
 
 

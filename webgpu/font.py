@@ -3,9 +3,9 @@ import json
 import os
 import zlib
 
-from .utils import Device, read_shader_file, TextureBinding
+from .uniforms import Binding, UniformBase, ct
+from .utils import Device, TextureBinding, read_shader_file
 from .webgpu_api import *
-from .uniforms import UniformBase, Binding, ct
 
 
 def create_font_texture(device: Device, size: int = 15):

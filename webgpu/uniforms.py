@@ -10,7 +10,7 @@ CAUTION:
 
 import ctypes as ct
 
-from .utils import UniformBinding, BaseBinding
+from .utils import BaseBinding, UniformBinding
 from .webgpu_api import BufferUsage, Device
 
 

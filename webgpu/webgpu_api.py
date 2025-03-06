@@ -1,8 +1,8 @@
+import base64
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
-import base64
 
 try:
     import js

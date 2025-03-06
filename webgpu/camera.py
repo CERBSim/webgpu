@@ -1,6 +1,7 @@
-from .uniforms import BaseBinding, UniformBase, ct, Binding
-from .utils import read_shader_file
 import numpy as np
+
+from .uniforms import BaseBinding, Binding, UniformBase, ct
+from .utils import read_shader_file
 
 
 class CameraUniforms(UniformBase):
