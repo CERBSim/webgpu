@@ -77,8 +77,6 @@ class UniformBase(ct.Structure):
         self._buffer.destroy()
 
 
-
-
 class MeshUniforms(UniformBase):
     _binding = Binding.MESH
     _fields_ = [

@@ -30,10 +30,14 @@ class JsRemote:
 
         self._callback_loop = asyncio.new_event_loop()
         self._callback_queue = asyncio.Queue()
-        self._callback_thread = threading.Thread(target=self._start_callback_server, daemon=True)
+        self._callback_thread = threading.Thread(
+            target=self._start_callback_server, daemon=True
+        )
 
         self._websocket_loop = asyncio.new_event_loop()
-        self._websocket_thread = threading.Thread(target=self._start_websocket_server, daemon=True)
+        self._websocket_thread = threading.Thread(
+            target=self._start_websocket_server, daemon=True
+        )
 
         self._websocket_thread.start()
         self._callback_thread.start()
@@ -99,7 +103,9 @@ class JsRemote:
         if request_id is not None:
             event = threading.Event()
             self._requests[request_id] = event
-        asyncio.run_coroutine_threadsafe(self._send_async(message), self._websocket_loop)
+        asyncio.run_coroutine_threadsafe(
+            self._send_async(message), self._websocket_loop
+        )
         if request_id is not None:
             event.wait()
             return self._requests.pop(request_id)
@@ -139,9 +145,9 @@ class JsRemote:
 
     def _start_callback_server(self):
         async def handle_callbacks():
-             while True:
+            while True:
                 try:
-                    func,args = await self._callback_queue.get()
+                    func, args = await self._callback_queue.get()
                     func(*args)
                 except asyncio.QueueEmpty:
                     pass
@@ -231,17 +237,27 @@ class JsProxy:
 
 def create_render_proxy(func):
     id = next(remote._object_id)
+
     def wrapper(args):
-        asyncio.run_coroutine_threadsafe(remote._callback_queue.put((func, args)), remote._callback_loop)
+        asyncio.run_coroutine_threadsafe(
+            remote._callback_queue.put((func, args)), remote._callback_loop
+        )
+
     remote._objects[id] = wrapper
-    return { "__python_proxy_type__": "render", "id": id }
+    return {"__python_proxy_type__": "render", "id": id}
+
 
 def create_proxy(func):
     id = next(remote._object_id)
+
     def wrapper(args):
-        asyncio.run_coroutine_threadsafe(remote._callback_queue.put((func, args)), remote._callback_loop)
+        asyncio.run_coroutine_threadsafe(
+            remote._callback_queue.put((func, args)), remote._callback_loop
+        )
+
     remote._objects[id] = wrapper
-    return { "__python_proxy_type__": "function", "id": id }
+    return {"__python_proxy_type__": "function", "id": id}
+
 
 if __name__ == "__main__":
     remote = JsRemote()

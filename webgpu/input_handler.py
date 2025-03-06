@@ -52,6 +52,7 @@ class InputHandler:
         def wrapper(event):
             if event_type in self._callbacks:
                 self.emit(event_type, event)
+
         return wrapper
 
     def register_callbacks(self):

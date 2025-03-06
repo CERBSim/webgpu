@@ -8,7 +8,8 @@ from .webgpu_api import js
 
 def Draw(
     scene: Scene | BaseRenderObject | list[BaseRenderObject],
-    canvas: Canvas, lilgui=True
+    canvas: Canvas,
+    lilgui=True,
 ) -> Scene:
     import numpy as np
 

@@ -77,9 +77,9 @@ except ImportError:
 
         if isinstance(d, memoryview):
             return {
-                    "__python_proxy_type__": "bytes",
-                    "data": base64.b64encode(d).decode(),
-                    }
+                "__python_proxy_type__": "bytes",
+                "data": base64.b64encode(d).decode(),
+            }
 
         if isinstance(d, list):
             return [_convert(value) for value in d]
@@ -88,12 +88,12 @@ except ImportError:
 
         return d
 
-
     def toJS(value):
         c = _convert(value)
         return c
 
     proxy.convert = toJS
+
     # TODO: JsPromise
     class pyodide:
         class ffi:
@@ -971,11 +971,11 @@ async def requestAdapter(
 
     reqAdapter = js.navigator.gpu.requestAdapter
     options = RequestAdapterOptions(
-            featureLevel=featureLevel,
-            powerPreference=powerPreference,
-            forceFallbackAdapter=forceFallbackAdapter,
-            xrCompatible=xrCompatible,
-        ).toJS()
+        featureLevel=featureLevel,
+        powerPreference=powerPreference,
+        forceFallbackAdapter=forceFallbackAdapter,
+        xrCompatible=xrCompatible,
+    ).toJS()
     print("requestAdapter", reqAdapter, options)
     handle = reqAdapter(options)
     try:
@@ -1129,13 +1129,13 @@ class Adapter(BaseWebGPUHandle):
     ) -> "Device":
 
         device = self.handle.requestDevice(
-                DeviceDescriptor(
-                    requiredFeatures=requiredFeatures,
-                    requiredLimits=requiredLimits.toJS() if requiredLimits else None,
-                    defaultQueue=defaultQueue,
-                    label=label,
-                ).toJS()
-            )
+            DeviceDescriptor(
+                requiredFeatures=requiredFeatures,
+                requiredLimits=requiredLimits.toJS() if requiredLimits else None,
+                defaultQueue=defaultQueue,
+                label=label,
+            ).toJS()
+        )
 
         try:
             await device

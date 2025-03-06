@@ -11,16 +11,19 @@ from .utils import SamplerBinding, TextureBinding, read_shader_file, format_numb
 from .render_object import RenderObject, MultipleRenderObject
 from .labels import Labels
 
+
 class ColormapUniforms(UniformBase):
     _binding = Binding.COLORMAP
-    _fields_ = [("min", ct.c_float),
-                ("max", ct.c_float),
-                ("position_x", ct.c_float),
-                ("position_y", ct.c_float),
-                ("discrete", ct.c_uint32),
-                ("n_colors", ct.c_uint32),
-                ("width", ct.c_float),
-                ("height", ct.c_float)]
+    _fields_ = [
+        ("min", ct.c_float),
+        ("max", ct.c_float),
+        ("position_x", ct.c_float),
+        ("position_y", ct.c_float),
+        ("discrete", ct.c_uint32),
+        ("n_colors", ct.c_uint32),
+        ("width", ct.c_float),
+        ("height", ct.c_float),
+    ]
 
 
 class Colorbar(RenderObject):
@@ -37,7 +40,7 @@ class Colorbar(RenderObject):
         self.position_y = 0.9
         self.discrete = 0
         self.n_colors = 8
-        self.width = 1.
+        self.width = 1.0
         self.height = 0.05
         self.uniforms = None
         self.sampler = None
@@ -122,6 +125,7 @@ class Colorbar(RenderObject):
             [n, 1, 1],
         )
 
+
 class Colormap(MultipleRenderObject):
     def __init__(self):
         self.colorbar = Colorbar()
@@ -148,8 +152,22 @@ class Colormap(MultipleRenderObject):
         self.update_labels()
 
     def update_labels(self):
-        self.labels.labels = [format_number(v) for v in [self.colorbar.minval + i/4 * (self.colorbar.maxval-self.colorbar.minval) for i in range(6)]]
-        self.labels.positions = [(self.colorbar.position_x + i * self.colorbar.width/4, self.colorbar.position_y-0.01, 0) for i in range(5)]
+        self.labels.labels = [
+            format_number(v)
+            for v in [
+                self.colorbar.minval
+                + i / 4 * (self.colorbar.maxval - self.colorbar.minval)
+                for i in range(6)
+            ]
+        ]
+        self.labels.positions = [
+            (
+                self.colorbar.position_x + i * self.colorbar.width / 4,
+                self.colorbar.position_y - 0.01,
+                0,
+            )
+            for i in range(5)
+        ]
 
     def get_bounding_box(self):
         return None

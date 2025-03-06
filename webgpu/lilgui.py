@@ -3,6 +3,7 @@ from .render_object import _render_objects, RenderObject
 import uuid
 from typing import Callable
 
+
 class Folder:
     def __init__(self, label: str | None, canvas_id, scene_id):
         self.label = label
@@ -12,31 +13,63 @@ class Folder:
 
     def folder(self, label: str, closed=False):
         folder = Folder(label, self.canvas_id, self.scene_id)
-        self._connect(None, option={"type": "folder", "label": label,
-                                    "folder_id" : folder._id,
-                                    "closed" : closed})
+        self._connect(
+            None,
+            option={
+                "type": "folder",
+                "label": label,
+                "folder_id": folder._id,
+                "closed": closed,
+            },
+        )
         return folder
 
-    def checkbox(self, label:str, value: bool, func: Callable[[RenderObject, bool], None], objects: list[RenderObject] | RenderObject = []):
-        self._connect(func, option={"type": "checkbox", "value": value,
-                                    "label" : label}, render_objects=objects)
+    def checkbox(
+        self,
+        label: str,
+        value: bool,
+        func: Callable[[RenderObject, bool], None],
+        objects: list[RenderObject] | RenderObject = [],
+    ):
+        self._connect(
+            func,
+            option={"type": "checkbox", "value": value, "label": label},
+            render_objects=objects,
+        )
 
-    def value(self, label: str, value: object, func: Callable[[RenderObject, object], None], objects: list[RenderObject] | RenderObject = []):
-        self._connect(func, option={"type": "value", "value": value,
-                                    "label" : label }, render_objects=objects)
+    def value(
+        self,
+        label: str,
+        value: object,
+        func: Callable[[RenderObject, object], None],
+        objects: list[RenderObject] | RenderObject = [],
+    ):
+        self._connect(
+            func,
+            option={"type": "value", "value": value, "label": label},
+            render_objects=objects,
+        )
 
-    def dropdown(self,
-                 values: dict[str, object],
-                 func: Callable[[RenderObject, object], None],
-                 value: str | None = None,
-                 objects: list[RenderObject] | RenderObject = [],
-                 label="Dropdown"):
+    def dropdown(
+        self,
+        values: dict[str, object],
+        func: Callable[[RenderObject, object], None],
+        value: str | None = None,
+        objects: list[RenderObject] | RenderObject = [],
+        label="Dropdown",
+    ):
         if value is None:
             value = list(values.keys())[0]
-        self._connect(func,
-                      option={"type": "dropdown", "values": values, "label": label,
-                              "value" : value},
-                      render_objects=objects)
+        self._connect(
+            func,
+            option={
+                "type": "dropdown",
+                "values": values,
+                "label": label,
+                "value": value,
+            },
+            render_objects=objects,
+        )
 
     def slider(
         self,
@@ -58,7 +91,7 @@ class Folder:
                 "max": max,
                 "value": value,
                 "label": label,
-                "step" : step
+                "step": step,
             },
             render_objects=objects,
         )
@@ -85,13 +118,15 @@ class Folder:
                 f"import webgpu.lilgui; webgpu.lilgui._receive('{self.canvas_id}', '{self.scene_id}', {option}, {render_objects}, '{_encode_data(_encode_function(func) if func is not None else None)}', '{self._id}')"
             )
 
+
 class LilGUI(Folder):
     def __init__(self, canvas_id, scene_id):
         super().__init__(None, canvas_id, scene_id)
 
 
-def _receive(canvas_id, scene_id, option, render_objects: list[str], func: str,
-             folder_id: str):
+def _receive(
+    canvas_id, scene_id, option, render_objects: list[str], func: str, folder_id: str
+):
     assert _is_pyodide
 
     def _func(*args):
@@ -114,21 +149,22 @@ def create_gui_option(canvas_id, option, f, folder_id):
 
     gui = getattr(js.lil_guis, canvas_id)
     if not hasattr(gui, "my_gui_folders"):
-        gui.my_gui_folders = { folder_id: gui }
+        gui.my_gui_folders = {folder_id: gui}
     gui = gui.my_gui_folders[folder_id]
     if option["type"] == "slider":
         slider = pyodide.ffi.to_js({option["label"]: option["value"]})
-        gui.add(slider, option["label"], option["min"], option["max"], option["step"]).onChange(
-            pyodide.ffi.create_proxy(f)
-        )
+        gui.add(
+            slider, option["label"], option["min"], option["max"], option["step"]
+        ).onChange(pyodide.ffi.create_proxy(f))
     if option["type"] == "dropdown":
         dropdown = pyodide.ffi.to_js({option["label"]: option["value"]})
-        gui.add(dropdown, option["label"], pyodide.ffi.to_js(option["values"])).onChange(pyodide.ffi.create_proxy(f))
+        gui.add(
+            dropdown, option["label"], pyodide.ffi.to_js(option["values"])
+        ).onChange(pyodide.ffi.create_proxy(f))
 
     if option["type"] == "value":
-        val = pyodide.ffi.to_js({ option["label"] : option["value"]})
-        gui.add(val,
-                option["label"]).onChange(pyodide.ffi.create_proxy(f))
+        val = pyodide.ffi.to_js({option["label"]: option["value"]})
+        gui.add(val, option["label"]).onChange(pyodide.ffi.create_proxy(f))
 
     if option["type"] == "checkbox":
         checkbox = pyodide.ffi.to_js({option["label"]: option["value"]})

@@ -9,6 +9,7 @@ _device: Device = None
 
 try:
     import pyodide
+
     _is_pyodide = True
 except:
     _is_pyodide = False
@@ -46,7 +47,6 @@ async def init_device() -> Device:
         _device = await _device
     except:
         pass
-
 
     limits = _device.limits
     js.console.log("device limits\n", limits)

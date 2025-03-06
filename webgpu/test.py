@@ -30,6 +30,7 @@ triangle = TriangulationRenderer([0, 0, 0, 1, 0, 0, 0, 1, 0])
 
 # Draw(triangle, canvas, lilgui = False)
 
+
 def render(t=0):
     triangle.options.update_buffers()
     encoder = device.createCommandEncoder()
@@ -54,7 +55,7 @@ camera = options.camera
 camera.transform._center = 0.5 * (pmin + pmax)
 camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
 
-print(camera.transform.mat )
+print(camera.transform.mat)
 print("center", camera.transform._center)
 print("scale", camera.transform._scale)
 
