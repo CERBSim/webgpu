@@ -35,6 +35,16 @@ class Remote {
     };
     this.socket.onmessage = (data) => this.onMessage(data);
 
+    this.resize_observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const canvas = entry.target;
+        const width = entry.contentBoxSize[0].inlineSize;
+        const height = entry.contentBoxSize[0].blockSize;
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+      }
+    });
+
     window.patchedRequestAnimationFrame = (
       device_id,
       context_id,
@@ -47,6 +57,9 @@ class Remote {
 
         const current = context.getCurrentTexture();
         const encoder = device.createCommandEncoder();
+
+        // console.log("sizes ", target.width, target.height, current.width, current.height);
+
         encoder.copyTextureToTexture(
           { texture: target },
           { texture: current },
@@ -182,12 +195,18 @@ class Remote {
       return this.sendResult(undefined, request_id);
     }
 
+    if (data.type === "on_canvas_resize") {
+      const canvas = this.convertObject(data.canvas);
+      this.resize_observer.observe(canvas);
+      return;
+    }
+
     if (data.type === "delete_object") {
       this.objects[data.id] = undefined;
       return;
     }
 
-    console.error("Unknown message type:", data);
+    console.error("Unknown message type:", data, data.type);
   }
 }
 

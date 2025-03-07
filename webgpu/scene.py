@@ -1,4 +1,5 @@
 from .canvas import Canvas
+from .proxy import create_proxy, js
 from .render_object import BaseRenderObject, RenderOptions
 from .utils import _is_pyodide
 from .webgpu_api import *
@@ -40,8 +41,6 @@ class Scene:
         return self.canvas.device
 
     def init(self, canvas):
-        import pyodide.ffi
-
         self.canvas = canvas
         self.options = RenderOptions(self.canvas, self.render)
 
@@ -49,47 +48,46 @@ class Scene:
             obj.options = self.options
             obj.update()
 
-        self._js_render = pyodide.ffi.create_proxy(self.render)
-        self.options.camera.register_callbacks(canvas.input_handler, self._render)
+        self._js_render = create_proxy(self.render)
+        self.options.camera.register_callbacks(canvas.input_handler, self.render)
         self.options.update_buffers()
-        _scenes_by_id[self.id] = self
-
-    def redraw(self):
-        import time
-
         if _is_pyodide:
-            import js
+            _scenes_by_id[self.id] = self
 
-            js.requestAnimationFrame(self._js_render)
-        else:
-            # TODO: check if we are in a jupyter kernel
-            from .jupyter import run_code_in_pyodide
-
-            ts = time.time()
-            for obj in self.render_objects:
-                obj.redraw(timestamp=ts)
-
-            run_code_in_pyodide(
-                f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')"
-            )
-
-    def _render(self):
-        import js
-
-        js.requestAnimationFrame(self._js_render)
+    # def redraw(self):
+    #     import time
+    #
+    #     if _is_pyodide:
+    #         import js
+    #
+    #         js.requestAnimationFrame(self._js_render)
+    #     else:
+    #         # TODO: check if we are in a jupyter kernel
+    #         from .jupyter import run_code_in_pyodide
+    #
+    #         ts = time.time()
+    #         for obj in self.render_objects:
+    #             obj.redraw(timestamp=ts)
+    #
+    #         run_code_in_pyodide(
+    #             f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')"
+    #         )
+    #
+    # def _render(self):
+    #     js.requestAnimationFrame(self._js_render)
 
     def render(self, t=0):
         encoder = self.device.createCommandEncoder()
+
         for obj in self.render_objects:
             obj.render(encoder)
-        current = self.canvas.context.getCurrentTexture()
-        target = self.canvas.target_texture
-        encoder.copyTextureToTexture(
-            TexelCopyTextureInfo(target),
-            TexelCopyTextureInfo(current),
-            [current.width, current.height, 1],
-        )
+
         self.device.queue.submit([encoder.finish()])
+        js.patchedRequestAnimationFrame(
+            self.canvas.device.handle._id,
+            self.canvas.context._id,
+            self.canvas.target_texture._id,
+        )
 
 
 if _is_pyodide:

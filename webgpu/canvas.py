@@ -42,16 +42,15 @@ class Canvas:
         self.canvas = canvas
 
         self.context = canvas.getContext("webgpu")
+        js.console.log("context", self.context)
         self.context.configure(
-            to_js(
-                {
-                    "device": device.handle,
-                    "format": self.format,
-                    "alphaMode": "premultiplied",
-                    "sampleCount": multisample_count,
-                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
-                }
-            )
+            {
+                "device": device.handle,
+                "format": self.format,
+                "alphaMode": "premultiplied",
+                "sampleCount": multisample_count,
+                "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
+            }
         )
 
         self.target_texture = device.createTexture(

@@ -17,8 +17,8 @@ device = loop.run_until_complete(init_device())
 
 html_canvas = js.document.createElement("canvas")
 html_canvas.id = 1
-html_canvas.width = 500
-html_canvas.height = 500
+html_canvas.width = 512
+html_canvas.height = 512
 html_canvas.style = "background-color: #d0d0d0"
 div_root = js.document.getElementById("root")
 div_root.appendChild(html_canvas)

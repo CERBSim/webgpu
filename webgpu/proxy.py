@@ -91,6 +91,14 @@ class JsRemote:
             )
         )
 
+    def on_canvas_resize(self, canvas):
+        return self._send(
+            {
+                "type": "on_canvas_resize",
+                "canvas": canvas._to_js(),
+            }
+        )
+
     def _send(self, data):
         """Sende a message to the JS environment,
         if request_id is set, (blocking-)wait for the response and return it"""
