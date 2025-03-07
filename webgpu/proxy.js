@@ -1,6 +1,19 @@
 function serializeEvent(event) {
   event.preventDefault();
-  const keys = ["deltaX", "deltaY", "button", "movementX", "movementY"]
+  const keys = [
+    "button",
+    "altKey",
+    "metaKey",
+    "ctrlKey",
+    "shiftKey",
+    "x",
+    "y",
+    "deltaX",
+    "deltaY",
+    "deltaMode",
+    "movementX",
+    "movementY",
+  ];
   return Object.fromEntries(keys.map((k) => [k, event[k]]));
 }
 
@@ -182,4 +195,3 @@ const remote = new Remote({
   port: 8765,
   host: "ws://localhost",
 });
-console.log("have remote")

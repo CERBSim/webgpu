@@ -36,8 +36,8 @@ class InputHandler:
     def on_mouseout(self, func):
         self.on("mouseout", func)
 
-    def on_scroll(self, func):
-        self.on("scroll", func)
+    def on_wheel(self, func):
+        self.on("wheel", func)
 
     def on_mousemove(self, func):
         self.on("mousemove", func)
@@ -71,7 +71,7 @@ class InputHandler:
 
         self.unregister_callbacks()
         options = to_js({"capture": True})
-        for event in ["mousedown", "mouseup", "mousemove", "scroll", "mouseout"]:
+        for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout"]:
             js_handler = create_proxy(self._handle_js_event(event))
             self.html_canvas.addEventListener(event, js_handler, options)
 
