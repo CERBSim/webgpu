@@ -105,7 +105,7 @@ class Camera:
         input_handler.on_mouseup(self._on_mouseup)
         input_handler.on_mouseout(self._on_mouseup)
         input_handler.on_mousemove(self._on_mousemove)
-        input_handler.on_mousewheel(self._on_mousewheel)
+        input_handler.on_scroll(self._on_scroll)
 
     def _on_mousedown(self, ev):
         if ev["button"] == 0:
@@ -118,7 +118,7 @@ class Camera:
         self._is_rotating = False
         self._is_zooming = False
 
-    def _on_mousewheel(self, ev):
+    def _on_scroll(self, ev):
         self.transform.scale(1 - ev["deltaY"] / 1000)
         self._render()
         if hasattr(ev, "preventDefault"):

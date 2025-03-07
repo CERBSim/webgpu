@@ -237,12 +237,13 @@ async function draw() {{
       window.lil_guis = new Object();
     }}
     window.lil_guis['{canvas_id}'] = new lil.GUI({{container: gui_element}});
-    var canvas2 = document.createElement('canvas');
-    console.log("canvas2 =", canvas2);
+    // var canvas2 = document.createElement('canvas');
+    // console.log("canvas2 =", canvas2);
     var canvas = document.getElementById("{canvas_id}");
+    console.log('canvas size', canvas.clientWidth, canvas.clientHeight);
     console.log(canvas);
-    canvas.width = {width};
-    canvas.height = {height};
+    canvas.width = Math.floor(canvas.clientWidth/32)*32;
+    canvas.height = Math.floor(canvas.clientHeight/32)*32;
     canvas.style = "background-color: #d0d0d0; max-width: {width}px; max-height: {height}px;";
     await window.pyodide.runPythonAsync('import webgpu.jupyter; webgpu.jupyter._draw_client("{canvas_id}", "{scene}", "{assets}", globals())');
 }}
