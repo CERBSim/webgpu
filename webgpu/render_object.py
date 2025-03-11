@@ -5,9 +5,16 @@ from .camera import Camera
 from .canvas import Canvas
 from .light import Light
 from .utils import BaseBinding, _is_pyodide, create_bind_group, get_device
-from .webgpu_api import (CommandEncoder, CompareFunction, DepthStencilState,
-                         Device, FragmentState, PrimitiveState,
-                         PrimitiveTopology, VertexState)
+from .webgpu_api import (
+    CommandEncoder,
+    CompareFunction,
+    DepthStencilState,
+    Device,
+    FragmentState,
+    PrimitiveState,
+    PrimitiveTopology,
+    VertexState,
+)
 
 _render_objects = {}
 

@@ -6,6 +6,7 @@ from IPython.display import HTML, Javascript, display
 
 from . import proxy, utils
 from .canvas import Canvas
+from .lilgui import LilGUI
 from .render_object import *
 from .scene import Scene
 from .triangles import *
@@ -74,27 +75,39 @@ def Draw(
     id_ = next(_id)
     root_id = f"__webgpu_root_{id_}"
     canvas_id = f"__webgpu_canvas_{id_}"
-    # scene.gui = LilGUI(canvas_id, scene._id)
+    lilgui_id = f"__webgpu_lilgui_{id_}"
 
     display(
         HTML(
             f"""
-            <div id='{root_id}'>
+            <div id='{root_id}'
+            style="display: flex; justify-content: space-between;"
+            >
                 <canvas 
-                    width={width}
-                    height={height}
                     id='{canvas_id}'
-                    style='background-color: #d0d0d0'
+                    style='background-color: #d0d0d0; flex: 3; width: {width}px; height: {height}px;'
                 >
                 </canvas>
+                <div id='{lilgui_id}'
+                    style='flex: 1;'
+
+                ></div>
             </div>
             """
+        )
+    )
+    display(
+        Javascript(
+            f"""window.lil_guis['{lilgui_id}'] = new lil.GUI({{
+                container: document.getElementById('{lilgui_id}')
+            }});"""
         )
     )
     html_canvas = js.document.getElementById(canvas_id)
     # proxy.remote.on_canvas_resize(html_canvas)
 
     canvas = Canvas(device, html_canvas)
+    scene.gui = LilGUI(lilgui_id, scene)
     scene.init(canvas)
     scene.render()
 

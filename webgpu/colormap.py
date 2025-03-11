@@ -1,11 +1,15 @@
-from webgpu.webgpu_api import (TexelCopyBufferLayout, TexelCopyTextureInfo,
-                               Texture, TextureFormat, TextureUsage)
+from webgpu.webgpu_api import (
+    TexelCopyBufferLayout,
+    TexelCopyTextureInfo,
+    Texture,
+    TextureFormat,
+    TextureUsage,
+)
 
 from .labels import Labels
 from .render_object import MultipleRenderObject, RenderObject
 from .uniforms import Binding, UniformBase, ct
-from .utils import (SamplerBinding, TextureBinding, format_number,
-                    read_shader_file)
+from .utils import SamplerBinding, TextureBinding, format_number, read_shader_file
 
 
 class ColormapUniforms(UniformBase):

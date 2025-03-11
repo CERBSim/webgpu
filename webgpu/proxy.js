@@ -17,6 +17,22 @@ function serializeEvent(event) {
   return Object.fromEntries(keys.map((k) => [k, event[k]]));
 }
 
+window.lil_guis = {};
+
+function initLilGUI() {
+    // In generated html files, requirejs is imported before lil-gui is loaded.
+    // Thus, we must load lil-gui using require, use import otherwise.
+    const lil_url = "https://cdn.jsdelivr.net/npm/lil-gui@0.20";
+    if(window.define === undefined){
+        import(lil_url);
+    } else {
+        require([lil_url], (module) => {
+            window.lil = module;
+        });
+    }
+}
+initLilGUI();
+
 function isPrimitive(value) {
   return (
     value === null || (typeof value !== "object" && typeof value !== "function")
@@ -61,7 +77,7 @@ class Remote {
         const current = context.getCurrentTexture();
         const encoder = device.createCommandEncoder();
 
-        // console.log("sizes ", target.width, target.height, current.width, current.height);
+        //console.log("sizes ", target.width, target.height, current.width, current.height);
 
         encoder.copyTextureToTexture(
           { texture: target },

@@ -9,10 +9,6 @@ from .webgpu_api import *
 
 
 def create_font_texture(device: Device, size: int = 15):
-    import js
-
-    from .utils import to_js
-
     fonts = json.load(open(os.path.join(os.path.dirname(__file__), "fonts.json")))
 
     dist = 0
