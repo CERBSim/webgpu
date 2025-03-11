@@ -1,7 +1,8 @@
+import itertools
 import time
 from pathlib import Path
 
-from IPython.display import Javascript, display
+from IPython.display import HTML, Javascript, display
 
 from . import proxy, utils
 from .canvas import Canvas
@@ -11,12 +12,21 @@ from .triangles import *
 from .webgpu_api import *
 
 time.sleep(0.1)
-js_code = Path("../webgpu/proxy.js").read_text()
+
+proxy.remote = proxy.JsRemote()
+
+js_code = (
+    Path("../webgpu/proxy.js")
+    .read_text()
+    .replace("WEBSOCKET_PORT", str(proxy.remote._websocket_port))
+)
 
 display(Javascript(js_code))
 
 while not proxy.remote._connected_clients:
-    time.sleep(0.1)
+    time.sleep(1 / 60)
+
+_id = itertools.count()
 
 
 def init_device():
@@ -25,7 +35,9 @@ def init_device():
         sys.exit(1)
 
     reqAdapter = js.navigator.gpu.requestAdapter
-    options = RequestAdapterOptions(powerPreference=PowerPreference.high_performance).toJS()
+    options = RequestAdapterOptions(
+        powerPreference=PowerPreference.high_performance
+    ).toJS()
     adapter = reqAdapter(options)
     if not adapter:
         js.alert("WebGPU is not supported")
@@ -48,14 +60,6 @@ def init_device():
 device = init_device()
 js.console.log("have device", device.handle)
 
-# ori_loop = asyncio.get_running_loop()
-# loop = asyncio.new_event_loop()
-# asyncio.set_event_loop(loop)
-# device = loop.run_until_complete(init_device())
-# asyncio.set_event_loop(ori_loop)
-# print('device:', device)
-# # device = await init_device()
-
 
 def Draw(
     scene: Scene | list[RenderObject] | RenderObject,
@@ -67,18 +71,28 @@ def Draw(
     if isinstance(scene, list):
         scene = Scene(scene)
 
+    id_ = next(_id)
+    root_id = f"__webgpu_root_{id_}"
+    canvas_id = f"__webgpu_canvas_{id_}"
     # scene.gui = LilGUI(canvas_id, scene._id)
 
-    display(Javascript("window._webgpu_element = element;"))
-    html_canvas = js.document.createElement("canvas")
-    html_canvas.id = 1
-    html_canvas.width = width
-    html_canvas.height = height
-    html_canvas.style = "background-color: #d0d0d0"
-    # div_root = js.document.getElementById("root")
-    div_root = js._webgpu_element
-    div_root.appendChild(html_canvas)
-    proxy.remote.on_canvas_resize(html_canvas)
+    display(
+        HTML(
+            f"""
+            <div id='{root_id}'>
+                <canvas 
+                    width={width}
+                    height={height}
+                    id='{canvas_id}'
+                    style='background-color: #d0d0d0'
+                >
+                </canvas>
+            </div>
+            """
+        )
+    )
+    html_canvas = js.document.getElementById(canvas_id)
+    # proxy.remote.on_canvas_resize(html_canvas)
 
     canvas = Canvas(device, html_canvas)
     scene.init(canvas)

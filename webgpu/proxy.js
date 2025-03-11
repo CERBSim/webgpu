@@ -33,6 +33,9 @@ class Remote {
     this.socket.onopen = () => {
       console.log("Connection established");
     };
+    this.socket.onclose = () => {
+      console.log("Connection closed");
+    };
     this.socket.onmessage = (data) => this.onMessage(data);
 
     this.resize_observer = new ResizeObserver((entries) => {
@@ -211,6 +214,6 @@ class Remote {
 }
 
 const remote = new Remote({
-  port: 8765,
+  port: WEBSOCKET_PORT,
   host: "ws://localhost",
 });

@@ -52,7 +52,6 @@ except ImportError:
     from . import proxy
     from .proxy import JsProxy, create_proxy
 
-    proxy.remote = proxy.JsRemote()
     js = JsProxy()
     proxy.js = js
 

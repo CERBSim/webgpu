@@ -14,6 +14,8 @@ class JsRemote:
     _callback_loop: asyncio.AbstractEventLoop
     _websocket_loop: asyncio.AbstractEventLoop
     _websocket_thread: threading.Thread
+    _websocket_port: int = -1
+    _websocket_server_started: threading.Event
     _callback_thread: threading.Thread
     _callback_queue: asyncio.Queue
     _connected_clients: set
@@ -35,12 +37,15 @@ class JsRemote:
         )
 
         self._websocket_loop = asyncio.new_event_loop()
+        self._websocket_server_started = threading.Event()
         self._websocket_thread = threading.Thread(
             target=self._start_websocket_server, daemon=True
         )
 
         self._websocket_thread.start()
         self._callback_thread.start()
+
+        self._websocket_server_started.wait()
 
     async def _send_async(self, message):
         if self._connected_clients:
@@ -130,12 +135,10 @@ class JsRemote:
 
     async def _websocket_handler(self, websocket, path=""):
         try:
-            print("========================\nnew websocket connection")
             self._connected_clients.add(websocket)
             async for message in websocket:
                 self._on_message(json.loads(message))
         finally:
-            print("========================\nclose websocket connection")
             self._connected_clients.remove(websocket)
 
     def _on_message(self, data):
@@ -173,8 +176,19 @@ class JsRemote:
 
     def _start_websocket_server(self):
         async def start_websocket():
-            async with websockets.serve(self._websocket_handler, "", WS_PORT) as server:
-                await server.serve_forever()
+            port = 8700
+            while True:
+                try:
+                    async with websockets.serve(
+                        self._websocket_handler, "", port
+                    ) as server:
+                        self._websocket_port = port
+                        self._websocket_server_started.set()
+                        await server.serve_forever()
+                except OSError as e:
+                    port += 1
+                except Exception as e:
+                    print("error in websocket server", e)
 
         try:
             asyncio.set_event_loop(self._websocket_loop)
@@ -265,15 +279,3 @@ def create_proxy(func):
 
     remote._objects[id] = wrapper
     return {"__python_proxy_type__": "function", "id": id}
-
-
-if __name__ == "__main__":
-    remote = JsRemote()
-    root = JsProxy()
-    while True:
-        import time
-
-        time.sleep(2)
-        if remote._connected_clients:
-            html = root.document.body.innerHTML[-100:]
-            print("html", html)
