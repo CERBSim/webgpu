@@ -54,27 +54,34 @@ class Scene:
         if _is_pyodide:
             _scenes_by_id[self.id] = self
 
-    # def redraw(self):
-    #     import time
-    #
-    #     if _is_pyodide:
-    #         import js
-    #
-    #         js.requestAnimationFrame(self._js_render)
-    #     else:
-    #         # TODO: check if we are in a jupyter kernel
-    #         from .jupyter import run_code_in_pyodide
-    #
-    #         ts = time.time()
-    #         for obj in self.render_objects:
-    #             obj.redraw(timestamp=ts)
-    #
-    #         run_code_in_pyodide(
-    #             f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')"
-    #         )
-    #
-    # def _render(self):
-    #     js.requestAnimationFrame(self._js_render)
+    def redraw(self):
+        import time
+
+        ts = time.time()
+        for obj in self.render_objects:
+            obj.redraw(timestamp=ts)
+
+        self.render()
+        return
+
+        if _is_pyodide:
+            import js
+
+            js.requestAnimationFrame(self._js_render)
+        else:
+            # TODO: check if we are in a jupyter kernel
+            from .jupyter import run_code_in_pyodide
+
+            ts = time.time()
+            for obj in self.render_objects:
+                obj.redraw(timestamp=ts)
+
+            run_code_in_pyodide(
+                f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')"
+            )
+
+    def _render(self):
+        js.requestAnimationFrame(self._js_render)
 
     def render(self, t=0):
         # print("render")

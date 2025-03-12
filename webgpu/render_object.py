@@ -53,9 +53,10 @@ class RedrawObject:
             return
 
         self._timestamp = timestamp
-        import webgpu.jupyter as wj
+        self.update(**kwargs)
+        # import webgpu.jupyter as wj
 
-        wj.update_render_object(self._id, **kwargs)
+        # wj.update_render_object(self._id, **kwargs)
 
     def __setstate__(self, state):
         self.__dict__.update(state)

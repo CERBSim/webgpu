@@ -12,12 +12,19 @@ from .scene import Scene
 from .triangles import *
 from .webgpu_api import *
 
+try:
+    import pyodide
+
+    _is_pyodide = True
+except ImportError:
+    _is_pyodide = False
+
 time.sleep(0.1)
 
 proxy.remote = proxy.JsRemote()
 
 js_code = (
-    Path("../webgpu/proxy.js")
+    (Path(__file__).parent / "proxy.js")
     .read_text()
     .replace("WEBSOCKET_PORT", str(proxy.remote._websocket_port))
 )
@@ -37,7 +44,7 @@ def init_device():
 
     reqAdapter = js.navigator.gpu.requestAdapter
     options = RequestAdapterOptions(
-        powerPreference=PowerPreference.high_performance
+        powerPreference=PowerPreference.low_power,
     ).toJS()
     adapter = reqAdapter(options)
     if not adapter:
@@ -97,6 +104,8 @@ def Draw(
         )
     )
     html_canvas = js.document.getElementById(canvas_id)
+    while html_canvas is None:
+        html_canvas = js.document.getElementById(canvas_id)
     html_canvas.width = width
     html_canvas.height = height
     # proxy.remote.on_canvas_resize(html_canvas)

@@ -83,15 +83,13 @@ class Clipping(BaseRenderObject):
 
     def add_options_to_gui(self, gui):
         folder = gui.folder("Clipping", closed=True)
-        folder.checkbox(
-            "enabled", self.mode != self.Mode.DISABLED, enable_clipping, self
-        )
-        folder.value("x", self.center[0], set_x_value, self)
-        folder.value("y", self.center[1], set_y_value, self)
-        folder.value("z", self.center[2], set_z_value, self)
-        folder.value("nx", self.normal[0], set_nx_value, self)
-        folder.value("ny", self.normal[1], set_ny_value, self)
-        folder.value("nz", self.normal[2], set_nz_value, self)
+        folder.checkbox("enabled", self.mode != self.Mode.DISABLED, enable_clipping)
+        folder.value("x", self.center[0], set_x_value)
+        folder.value("y", self.center[1], set_y_value)
+        folder.value("z", self.center[2], set_z_value)
+        folder.value("nx", self.normal[0], set_nx_value)
+        folder.value("ny", self.normal[1], set_ny_value)
+        folder.value("nz", self.normal[2], set_nz_value)
 
     def render(self, encoder):
         pass
