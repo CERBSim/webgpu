@@ -77,7 +77,9 @@ class Remote {
         const current = context.getCurrentTexture();
         const encoder = device.createCommandEncoder();
 
-        //console.log("sizes ", target.width, target.height, current.width, current.height);
+        // console.log("target ", target)
+        // console.log("current ", current)
+        // console.log("sizes ", target.width, target.height, current.width, current.height);
 
         encoder.copyTextureToTexture(
           { texture: target },
