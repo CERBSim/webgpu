@@ -77,6 +77,15 @@ class Scene:
     #     js.requestAnimationFrame(self._js_render)
 
     def render(self, t=0):
+        print("render")
+        print("canvas", self.canvas.canvas)
+        js.console.log("canvas", self.canvas.canvas)
+        print("canvas size ", self.canvas.canvas.width, self.canvas.canvas.height)
+        print(
+            "texture size",
+            self.canvas.target_texture.width,
+            self.canvas.target_texture.height,
+        )
         encoder = self.device.createCommandEncoder()
 
         for obj in self.render_objects:

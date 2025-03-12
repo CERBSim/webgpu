@@ -104,6 +104,8 @@ def Draw(
         )
     )
     html_canvas = js.document.getElementById(canvas_id)
+    html_canvas.width = width
+    html_canvas.height = height
     # proxy.remote.on_canvas_resize(html_canvas)
 
     canvas = Canvas(device, html_canvas)
