@@ -1,8 +1,7 @@
 import itertools
 import time
+import os
 from pathlib import Path
-
-from IPython.display import HTML, Javascript, display
 
 from . import proxy, utils
 from .canvas import Canvas
@@ -12,43 +11,48 @@ from .scene import Scene
 from .triangles import *
 from .webgpu_api import *
 
-try:
-    import pyodide
 
-    _is_pyodide = True
-except ImportError:
-    _is_pyodide = False
+def create_package_zip(module_name="webgpu"):
+    """
+    Creates a zip file containing all files in the specified Python package.
+    """
+    import importlib.util
+    import os
+    import tempfile
+    import zipfile
 
-time.sleep(0.1)
+    spec = importlib.util.find_spec(module_name)
+    if spec is None or spec.origin is None:
+        raise ValueError(f"Package {module_name} not found.")
 
-proxy.remote = proxy.JsRemote()
+    package_dir = os.path.dirname(spec.origin)
 
-js_code = (
-    (Path(__file__).parent / "proxy.js")
-    .read_text()
-    .replace("WEBSOCKET_PORT", str(proxy.remote._websocket_port))
-)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_filename = os.path.join(temp_dir, f"{module_name}.zip")
+        with zipfile.ZipFile(output_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, files in os.walk(package_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(
+                        file_path, start=os.path.dirname(package_dir)
+                    )
+                    zipf.write(file_path, arcname)
 
-display(Javascript(js_code))
-
-while not proxy.remote._connected_clients:
-    time.sleep(1 / 60)
-
-_id = itertools.count()
+        return open(output_filename, "rb").read()
 
 
-def init_device():
-    if not js.navigator.gpu:
-        js.alert("WebGPU is not supported")
+def init_device_sync():
+    if not proxy.js.navigator.gpu:
+        proxy.js.alert("WebGPU is not supported")
         sys.exit(1)
 
-    reqAdapter = js.navigator.gpu.requestAdapter
+    reqAdapter = proxy.js.navigator.gpu.requestAdapter
     options = RequestAdapterOptions(
         powerPreference=PowerPreference.low_power,
     ).toJS()
     adapter = reqAdapter(options)
     if not adapter:
-        js.alert("WebGPU is not supported")
+        proxy.js.alert("WebGPU is not supported")
         sys.exit(1)
     one_gig = 1024**3
     utils._device = Device(
@@ -65,37 +69,31 @@ def init_device():
     return utils._device
 
 
-device = init_device()
-js.console.log("have device", device.handle)
+_id_counter = itertools.count()
 
 
-def Draw(
-    scene: Scene | list[RenderObject] | RenderObject,
-    width=640,
-    height=640,
-):
+def _init_html(scene, width, height):
+    from IPython.display import HTML, display
+
     if isinstance(scene, RenderObject):
         scene = [scene]
     if isinstance(scene, list):
         scene = Scene(scene)
 
-    id_ = next(_id)
-    root_id = f"__webgpu_root_{id_}"
-    canvas_id = f"__webgpu_canvas_{id_}"
-    lilgui_id = f"__webgpu_lilgui_{id_}"
+    id_ = f"__webgpu_{next(_id_counter)}_"
 
     display(
         HTML(
             f"""
-            <div id='{root_id}'
+            <div id='{id_}root'
             style="display: flex; justify-content: space-between;"
             >
                 <canvas 
-                    id='{canvas_id}'
+                    id='{id_}canvas'
                     style='background-color: #d0d0d0; flex: 3; width: {width}px; height: {height}px;'
                 >
                 </canvas>
-                <div id='{lilgui_id}'
+                <div id='{id_}lilgui'
                     style='flex: 1;'
 
                 ></div>
@@ -103,17 +101,97 @@ def Draw(
             """
         )
     )
-    html_canvas = js.document.getElementById(canvas_id)
+
+    return scene, id_
+
+
+def _draw_scene(scene: Scene, width, height, id_):
+    html_canvas = proxy.js.document.getElementById(f"{id_}canvas")
+
     while html_canvas is None:
-        html_canvas = js.document.getElementById(canvas_id)
+        html_canvas = proxy.js.document.getElementById(f"{id_}canvas")
     html_canvas.width = width
     html_canvas.height = height
-    # proxy.remote.on_canvas_resize(html_canvas)
-    gui_element = js.document.getElementById(lilgui_id)
+    gui_element = proxy.js.document.getElementById(f"{id_}lilgui")
 
-    canvas = Canvas(device, html_canvas)
+    canvas = Canvas(utils.get_device(), html_canvas)
     scene.gui = LilGUI(gui_element, scene)
     scene.init(canvas)
     scene.render()
 
+
+def _DrawPyodide(b64_data: str):
+    import base64
+    import pickle
+
+    data = base64.b64decode(b64_data.encode("utf-8"))
+    id_, scene, width, height = pickle.loads(data)
+
+    _draw_scene(scene, width, height, id_)
     return scene
+
+
+def _DrawHTML(
+    scene: Scene | list[RenderObject] | RenderObject,
+    width=640,
+    height=640,
+):
+    """Draw a scene using display(Javascrip()) with all information in the HTML
+    This way, data is kept in the converted html when running nbconvert
+    The scene object is unpickled and drawn within a pyodide instance in the browser when the html is opened
+    """
+    from IPython.display import Javascript, display
+    import base64
+    import pickle
+
+    scene, id_ = _init_html(scene, width, height)
+
+    data = pickle.dumps((id_, scene, width, height))
+    b64_data = base64.b64encode(data).decode("utf-8")
+
+    display(Javascript(f"window.draw_scene('{b64_data}');"))
+    return scene
+
+
+def Draw(
+    scene: Scene | list[RenderObject] | RenderObject,
+    width=640,
+    height=640,
+):
+    scene, id_ = _init_html(scene, width, height)
+    _draw_scene(scene, width, height, id_)
+    return scene
+
+
+_proxy_js_code = (Path(__file__).parent / "proxy.js").read_text()
+
+if not proxy._is_pyodide:
+    from IPython.display import Javascript, display
+
+    if proxy._is_exporting:
+        Draw = _DrawHTML
+        webgpu_module = create_package_zip("webgpu")
+        webgpu_module_b64 = base64.b64encode(webgpu_module).decode("utf-8")
+        js_code = _proxy_js_code
+        js_code += f"\nconst _webgpu_code = '{webgpu_module_b64}';"
+        js_code += f"\nwindow.pyodide_ready = init_pyodide(_webgpu_code);"
+        display(Javascript(js_code))
+    else:
+        # Not exporting and not running in pyodide -> Start a websocket server and wait for the client to connect
+        proxy.init()
+
+        time.sleep(0.1)
+
+        port = proxy.remote._websocket_port
+        host = "ws://localhost"
+        js_code = (
+            _proxy_js_code
+            + f"const remote = new Remote({{port: {port}, host: '{host}'  }});"
+        )
+
+        display(Javascript(js_code))
+
+        while not proxy.remote._connected_clients:
+            time.sleep(1 / 60)
+
+        device = init_device_sync()

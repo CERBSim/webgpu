@@ -1,6 +1,6 @@
 from typing import Callable
 
-from .proxy import create_proxy, js
+from . import proxy
 
 
 class Folder:
@@ -22,7 +22,7 @@ class Folder:
             func(*args)
             self.scene.render()
 
-        self.gui.add({label: value}, label, *args).onChange(create_proxy(f))
+        self.gui.add({label: value}, label, *args).onChange(proxy.create_proxy(f))
 
     def checkbox(
         self,
@@ -70,4 +70,4 @@ class Folder:
 class LilGUI(Folder):
     def __init__(self, container, scene):
         super().__init__(None, container, scene)
-        self.gui = js.createLilGUI({"container": container})
+        self.gui = proxy.js.createLilGUI({"container": container})

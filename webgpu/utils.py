@@ -21,7 +21,7 @@ async def init_device() -> Device:
     if _device is not None:
         return _device
 
-    adapter = requestAdapter(powerPreference=PowerPreference.high_performance)
+    adapter = requestAdapter(powerPreference=PowerPreference.low_power)
     try:
         adapter = await adapter
     except:

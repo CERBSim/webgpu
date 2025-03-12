@@ -1,6 +1,7 @@
 from .input_handler import InputHandler
 from .utils import get_device, to_js
 from .webgpu_api import *
+from . import proxy
 
 
 def init_webgpu(html_canvas):
@@ -22,7 +23,7 @@ class Canvas:
 
         self.render_function = None
         self.device = device
-        self.format = js.navigator.gpu.getPreferredCanvasFormat()
+        self.format = proxy.js.navigator.gpu.getPreferredCanvasFormat()
         self.color_target = ColorTargetState(
             format=self.format,
             blend=BlendState(
@@ -42,15 +43,17 @@ class Canvas:
         self.canvas = canvas
 
         self.context = canvas.getContext("webgpu")
-        js.console.log("context", self.context)
+        proxy.js.console.log("context", self.context)
         self.context.configure(
-            {
-                "device": device.handle,
-                "format": self.format,
-                "alphaMode": "premultiplied",
-                "sampleCount": multisample_count,
-                "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
-            }
+            toJS(
+                {
+                    "device": device.handle,
+                    "format": self.format,
+                    "alphaMode": "premultiplied",
+                    "sampleCount": multisample_count,
+                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
+                }
+            )
         )
 
         self.target_texture = device.createTexture(
@@ -73,7 +76,7 @@ class Canvas:
         self.depth_texture = device.createTexture(
             size=[canvas.width, canvas.height, 1],
             format=self.depth_format,
-            usage=js.GPUTextureUsage.RENDER_ATTACHMENT,
+            usage=TextureUsage.RENDER_ATTACHMENT,
             label="depth_texture",
             sampleCount=multisample_count,
         )

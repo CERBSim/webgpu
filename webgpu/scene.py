@@ -1,5 +1,5 @@
 from .canvas import Canvas
-from .proxy import create_proxy, js
+from . import proxy
 from .render_object import BaseRenderObject, RenderOptions
 from .utils import _is_pyodide
 from .webgpu_api import *
@@ -9,6 +9,7 @@ class Scene:
     canvas: Canvas = None
     render_objects: list[BaseRenderObject]
     options: RenderOptions
+    gui: object = None
 
     def __init__(
         self,
@@ -48,7 +49,7 @@ class Scene:
             obj.options = self.options
             obj.update()
 
-        self._js_render = create_proxy(self.render)
+        self._js_render = proxy.create_proxy(self._render_direct)
         self.options.camera.register_callbacks(canvas.input_handler, self.render)
         self.options.update_buffers()
         if _is_pyodide:
@@ -81,9 +82,25 @@ class Scene:
             )
 
     def _render(self):
-        js.requestAnimationFrame(self._js_render)
+        proxy.js.requestAnimationFrame(self._js_render)
+
+    def _render_direct(self, t=0):
+        encoder = self.device.createCommandEncoder()
+
+        for obj in self.render_objects:
+            obj.render(encoder)
+
+        encoder.copyTextureToTexture(
+            TexelCopyTextureInfo(self.canvas.target_texture),
+            TexelCopyTextureInfo(self.canvas.context.getCurrentTexture()),
+            [self.canvas.canvas.width, self.canvas.canvas.height, 1],
+        )
+        self.device.queue.submit([encoder.finish()])
 
     def render(self, t=0):
+        if _is_pyodide:
+            self._render()
+            return
         # print("render")
         # print("canvas", self.canvas.canvas)
         # js.console.log("canvas", self.canvas.canvas)
@@ -99,11 +116,13 @@ class Scene:
             obj.render(encoder)
 
         self.device.queue.submit([encoder.finish()])
-        js.patchedRequestAnimationFrame(
-            self.canvas.device.handle._id,
-            self.canvas.context._id,
-            self.canvas.target_texture._id,
-        )
+
+        if not _is_pyodide:
+            proxy.js.patchedRequestAnimationFrame(
+                self.canvas.device.handle._id,
+                self.canvas.context._id,
+                self.canvas.target_texture._id,
+            )
 
 
 if _is_pyodide:

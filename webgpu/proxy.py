@@ -1,12 +1,9 @@
 import asyncio
+import base64
 import itertools
 import json
 import threading
-import base64
-
-import websockets
-
-WS_PORT = 8765
+import os
 
 
 class JsRemote:
@@ -179,6 +176,8 @@ class JsRemote:
             print("exception in _start_callback_server", e)
 
     def _start_websocket_server(self):
+        import websockets
+
         async def start_websocket():
             port = 8700
             while True:
@@ -204,7 +203,6 @@ class JsRemote:
 
 remote: JsRemote = None
 convert = None
-js = None
 
 
 class JsProxyIterator:
@@ -273,13 +271,35 @@ def create_render_proxy(func):
     return {"__python_proxy_type__": "render", "id": id}
 
 
-def create_proxy(func):
-    id = next(remote._object_id)
+_is_exporting = "JPY_SESSION_NAME" not in os.environ
 
-    def wrapper(args):
-        asyncio.run_coroutine_threadsafe(
-            remote._callback_queue.put((func, args)), remote._callback_loop
-        )
+remote: JsRemote = None
 
-    remote._objects[id] = wrapper
-    return {"__python_proxy_type__": "function", "id": id}
+try:
+    import pyodide
+    import pyodide.ffi
+    import js
+
+    _is_pyodide = True
+    create_proxy = pyodide.ffi.create_proxy
+
+except ImportError:
+    _is_pyodide = False
+    js = None
+
+    def create_proxy(func):
+        id = next(remote._object_id)
+
+        def wrapper(args):
+            asyncio.run_coroutine_threadsafe(
+                remote._callback_queue.put((func, args)), remote._callback_loop
+            )
+
+        remote._objects[id] = wrapper
+        return {"__python_proxy_type__": "function", "id": id}
+
+
+def init():
+    global remote, js
+    remote = JsRemote()
+    js = JsProxy()

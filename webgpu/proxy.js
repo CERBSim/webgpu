@@ -17,21 +17,28 @@ function serializeEvent(event) {
   return Object.fromEntries(keys.map((k) => [k, event[k]]));
 }
 
+function decodeB64(data) {
+  return Uint8Array.from(atob(data), (c) => c.charCodeAt(0)).buffer;
+}
+
+function encodeB64(buffer) {
+  return btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));
+}
 
 function initLilGUI() {
-    // In generated html files, requirejs is imported before lil-gui is loaded.
-    // Thus, we must load lil-gui using require, use import otherwise.
-    const lil_url = "https://cdn.jsdelivr.net/npm/lil-gui@0.20";
-    if(window.define === undefined){
-        import(lil_url);
-    } else {
-        require([lil_url], (module) => {
-            window.lil = module;
-        });
-    }
-    window.createLilGUI = (args) => {
-      return new lil.GUI(args);
-    };
+  // In generated html files, requirejs is imported before lil-gui is loaded.
+  // Thus, we must load lil-gui using require, use import otherwise.
+  const lil_url = "https://cdn.jsdelivr.net/npm/lil-gui@0.20";
+  if (window.define === undefined) {
+    import(lil_url);
+  } else {
+    require([lil_url], (module) => {
+      window.lil = module;
+    });
+  }
+  window.createLilGUI = (args) => {
+    return new lil.GUI(args);
+  };
 }
 initLilGUI();
 
@@ -103,8 +110,7 @@ class Remote {
     if (value === undefined || value === null || typeof value !== "object")
       return value;
 
-    if (value.__python_proxy_type__ == "bytes")
-      return Uint8Array.from(atob(value.data), (c) => c.charCodeAt(0)).buffer;
+    if (value.__python_proxy_type__ == "bytes") return decodeB64(value.data);
 
     if (value.__python_proxy_type__ == "function") {
       return (...args) => {
@@ -166,12 +172,12 @@ class Remote {
     const result = await Promise.resolve(ret);
     // console.log("send result", typeof result, isPrimitive(result), result);
 
-    if(result instanceof ArrayBuffer) {
+    if (result instanceof ArrayBuffer) {
       this.socket.send(
         JSON.stringify({
           type: "binary_value",
           request_id,
-          value: btoa(String.fromCharCode.apply(null, new Uint8Array(result))),
+          value: encodeB64(result),
         }),
       );
       return;
@@ -240,7 +246,24 @@ class Remote {
   }
 }
 
-const remote = new Remote({
-  port: WEBSOCKET_PORT,
-  host: "ws://localhost",
-});
+async function init_pyodide(webgpu_b64) {
+  const pyodide_module = await import(
+    "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs"
+  );
+  window.pyodide = await pyodide_module.loadPyodide();
+  pyodide.setDebug(true);
+  await pyodide.loadPackage([
+    "micropip",
+    "numpy",
+    "packaging",
+  ]);
+  const webpgu_zip = decodeB64(webgpu_b64);
+  await pyodide.unpackArchive(webpgu_zip, "zip");
+  await pyodide.runPythonAsync("import webgpu.utils");
+  await pyodide.runPythonAsync("await webgpu.utils.init_device()");
+}
+
+window.draw_scene = async (data) => {
+  await window.pyodide_ready;
+  window.pyodide.runPython(`import webgpu.jupyter; webgpu.jupyter._DrawPyodide("${data}")`)
+}

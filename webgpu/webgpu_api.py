@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
+from . import proxy
+
 try:
     import js
     import pyodide.ffi
@@ -51,9 +53,6 @@ except ImportError:
     # Mocks for linting
     from . import proxy
     from .proxy import JsProxy, create_proxy
-
-    js = JsProxy()
-    proxy.js = js
 
     def _convert(d):
         if d is None:
@@ -964,11 +963,11 @@ async def requestAdapter(
     forceFallbackAdapter: bool = False,
     xrCompatible: bool = False,
 ) -> "Adapter":
-    if not js.navigator.gpu:
-        js.alert("WebGPU is not supported")
+    if not proxy.js.navigator.gpu:
+        proxy.js.alert("WebGPU is not supported")
         sys.exit(1)
 
-    reqAdapter = js.navigator.gpu.requestAdapter
+    reqAdapter = proxy.js.navigator.gpu.requestAdapter
     options = RequestAdapterOptions(
         featureLevel=featureLevel,
         powerPreference=powerPreference,
@@ -982,7 +981,7 @@ async def requestAdapter(
     except:
         pass
     if not handle:
-        js.alert("WebGPU is not supported")
+        proxy.js.alert("WebGPU is not supported")
         sys.exit(1)
     return Adapter(handle)
 
