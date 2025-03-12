@@ -17,7 +17,6 @@ function serializeEvent(event) {
   return Object.fromEntries(keys.map((k) => [k, event[k]]));
 }
 
-window.lil_guis = {};
 
 function initLilGUI() {
     // In generated html files, requirejs is imported before lil-gui is loaded.
@@ -30,6 +29,9 @@ function initLilGUI() {
             window.lil = module;
         });
     }
+    window.createLilGUI = (args) => {
+      return new lil.GUI(args);
+    };
 }
 initLilGUI();
 

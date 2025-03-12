@@ -96,20 +96,14 @@ def Draw(
             """
         )
     )
-    display(
-        Javascript(
-            f"""window.lil_guis['{lilgui_id}'] = new lil.GUI({{
-                container: document.getElementById('{lilgui_id}')
-            }});"""
-        )
-    )
     html_canvas = js.document.getElementById(canvas_id)
     html_canvas.width = width
     html_canvas.height = height
     # proxy.remote.on_canvas_resize(html_canvas)
+    gui_element = js.document.getElementById(lilgui_id)
 
     canvas = Canvas(device, html_canvas)
-    scene.gui = LilGUI(lilgui_id, scene)
+    scene.gui = LilGUI(gui_element, scene)
     scene.init(canvas)
     scene.render()
 

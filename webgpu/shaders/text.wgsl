@@ -18,17 +18,17 @@ fn textLoadData(i: u32) -> TextData {
     let offset = u_text.n_texts * 4 + i * 2;
     let itext = u_text.data[ offset ];
     let char_data = u_text.data[ offset + 1 ];
-    let ichar = extractBits(char_data, 0, 16);
-    let char = extractBits(char_data, 16, 8);
+    let ichar = extractBits(char_data, 0u, 16u);
+    let char = extractBits(char_data, 16u, 8u);
 
     let offset_text = itext * 4;
     let pos = vec3f(bitcast<f32>(u_text.data[offset_text]), bitcast<f32>(u_text.data[offset_text + 1]), bitcast<f32>(u_text.data[offset_text + 2]));
     let text_data = u_text.data[offset_text + 3];
-    let length = extractBits(text_data, 0, 16);
-    let apply_camera = extractBits(text_data, 16, 8);
+    let length = extractBits(text_data, 0u, 16u);
+    let apply_camera = extractBits(text_data, 16u, 8u);
 
-    let x_align = f32(extractBits(text_data, 24, 2));
-    let y_align = f32(extractBits(text_data, 26, 2));
+    let x_align = f32(extractBits(text_data, 24u, 2u));
+    let y_align = f32(extractBits(text_data, 26u, 2u));
 
     let shift = vec2<f32>(-0.5 * x_align, -0.5 * y_align);
 
