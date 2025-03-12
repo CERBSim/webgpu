@@ -18,7 +18,11 @@ class Folder:
         return folder
 
     def add(self, label: str, value, func: Callable, *args):
-        self.gui.add({label: value}, label, *args).onChange(create_proxy(func))
+        def f(*args):
+            func(*args)
+            self.scene.render()
+
+        self.gui.add({label: value}, label, *args).onChange(create_proxy(f))
 
     def checkbox(
         self,

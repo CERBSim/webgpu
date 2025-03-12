@@ -83,48 +83,43 @@ class Clipping(BaseRenderObject):
 
     def add_options_to_gui(self, gui):
         folder = gui.folder("Clipping", closed=True)
-        folder.checkbox("enabled", self.mode != self.Mode.DISABLED, enable_clipping)
-        folder.value("x", self.center[0], set_x_value)
-        folder.value("y", self.center[1], set_y_value)
-        folder.value("z", self.center[2], set_z_value)
-        folder.value("nx", self.normal[0], set_nx_value)
-        folder.value("ny", self.normal[1], set_ny_value)
-        folder.value("nz", self.normal[2], set_nz_value)
+        folder.checkbox(
+            "enabled", self.mode != self.Mode.DISABLED, self.enable_clipping
+        )
+        folder.value("x", self.center[0], self.set_x_value)
+        folder.value("y", self.center[1], self.set_y_value)
+        folder.value("z", self.center[2], self.set_z_value)
+        folder.value("nx", self.normal[0], self.set_nx_value)
+        folder.value("ny", self.normal[1], self.set_ny_value)
+        folder.value("nz", self.normal[2], self.set_nz_value)
 
     def render(self, encoder):
         pass
 
+    def enable_clipping(self, value):
+        self.mode = self.Mode.PLANE if value else self.Mode.DISABLED
+        self.update()
 
-def enable_clipping(me, value):
-    me.mode = me.Mode.PLANE if value else me.Mode.DISABLED
-    me.update()
+    def set_x_value(self, value):
+        self.center[0] = value
+        self.update()
 
+    def set_y_value(self, value):
+        self.center[1] = value
+        self.update()
 
-def set_x_value(me, value):
-    me.center[0] = value
-    me.update()
+    def set_z_value(self, value):
+        self.center[2] = value
+        self.update()
 
+    def set_nx_value(self, value):
+        self.normal[0] = value
+        self.update()
 
-def set_y_value(me, value):
-    me.center[1] = value
-    me.update()
+    def set_ny_value(self, value):
+        self.normal[1] = value
+        self.update()
 
-
-def set_z_value(me, value):
-    me.center[2] = value
-    me.update()
-
-
-def set_nx_value(me, value):
-    me.normal[0] = value
-    me.update()
-
-
-def set_ny_value(me, value):
-    me.normal[1] = value
-    me.update()
-
-
-def set_nz_value(me, value):
-    me.normal[2] = value
-    me.update()
+    def set_nz_value(self, value):
+        self.normal[2] = value
+        self.update()
