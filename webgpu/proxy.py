@@ -2,6 +2,7 @@ import asyncio
 import itertools
 import json
 import threading
+import base64
 
 import websockets
 
@@ -130,6 +131,9 @@ class JsRemote:
 
         if data["type"] == "value":
             return data.get("value", None)
+
+        if data["type"] == "binary_value":
+            return base64.b64decode(data["value"])
 
         raise Exception(f"Unknown result type: {data}")
 

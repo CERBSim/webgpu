@@ -305,12 +305,12 @@ class ReadBuffer:
         )
         encoder.copyBufferToBuffer(self.buffer, 0, self.read_buffer, 0, buffer.size)
 
-    async def get_array(self, dtype):
+    def get_array(self, dtype):
         import numpy as np
 
-        await self.read_buffer.mapAsync(MapMode.READ, 0, self.read_buffer.size)
-        data = self.read_buffer.getMappedRange(0, self.read_buffer.size)
-        res = np.frombuffer(data.to_py(), dtype=dtype)
+        self.read_buffer.handle.mapAsync(MapMode.READ, 0, self.read_buffer.size)
+        data = self.read_buffer.handle.getMappedRange(0, self.read_buffer.size)
+        res = np.frombuffer(data, dtype=dtype)
         self.read_buffer.unmap()
         return res
 

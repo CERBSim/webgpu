@@ -158,13 +158,20 @@ class Remote {
     if (request_id === undefined) {
       return;
     }
-    let result = ret;
-    if (ret instanceof Promise) {
-      result = await ret;
-      //console.log("awaited promise", ret, result);
-    }
 
-    //console.log("send result", isPrimitive(result), result);
+    const result = await Promise.resolve(ret);
+    // console.log("send result", typeof result, isPrimitive(result), result);
+
+    if(result instanceof ArrayBuffer) {
+      this.socket.send(
+        JSON.stringify({
+          type: "binary_value",
+          request_id,
+          value: btoa(String.fromCharCode.apply(null, new Uint8Array(result))),
+        }),
+      );
+      return;
+    }
 
     if (isPrimitive(result)) {
       this.socket.send(
