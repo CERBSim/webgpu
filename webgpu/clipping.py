@@ -31,7 +31,7 @@ class Clipping(BaseRenderObject):
         self,
         mode=Mode.DISABLED,
         center=[0.0, 0.0, 0.0],
-        normal=[0.0, 1.0, 0.0],
+        normal=[0.0, -1.0, 0.0],
         radius=1.0,
     ):
         self.mode = mode

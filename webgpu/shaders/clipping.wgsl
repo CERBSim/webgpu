@@ -14,7 +14,7 @@ struct ClippingUniforms {
 fn calcClipping(p: vec3<f32>) -> bool {
     var result: bool = true;
     if( (u_clipping.mode & 0x01u) == 1u) {
-        if dot(u_clipping.plane, vec4<f32>(p, 1.0)) < 0. {
+        if dot(u_clipping.plane, vec4<f32>(p, 1.0)) > 0. {
             result = false;
         }
     }

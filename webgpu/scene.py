@@ -1,8 +1,9 @@
 from .canvas import Canvas
 from . import proxy
 from .render_object import BaseRenderObject, RenderOptions
-from .utils import _is_pyodide
+from .utils import _is_pyodide, max_bounding_box
 from .webgpu_api import *
+import math
 
 
 class Scene:
@@ -49,8 +50,20 @@ class Scene:
             obj.options = self.options
             obj.update()
 
+        pmin, pmax = max_bounding_box([o.get_bounding_box() for o in self.render_objects])
+        camera = self.options.camera
+        camera.transform._center = 0.5 * (pmin + pmax)
+        def norm(v):
+            return math.sqrt(v[0]**2 + v[1]**2 + v[2]**2)
+        camera.transform._scale = 2 / norm(pmax - pmin)
+        if not (pmin[2] == 0 and pmax[2] == 0):
+            camera.transform.rotate(270, 0)
+            camera.transform.rotate(0,-20)
+            camera.transform.rotate(20, 0)
+
+
         self._js_render = proxy.create_proxy(self._render_direct)
-        self.options.camera.register_callbacks(canvas.input_handler, self.render)
+        camera.register_callbacks(canvas.input_handler, self.render)
         self.options.update_buffers()
         if _is_pyodide:
             _scenes_by_id[self.id] = self
