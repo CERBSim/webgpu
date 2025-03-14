@@ -3,7 +3,6 @@ from .lilgui import LilGUI
 from .render_object import BaseRenderObject
 from .scene import Scene
 from .utils import max_bounding_box
-from .webgpu_api import js
 
 
 def Draw(

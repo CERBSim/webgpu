@@ -231,8 +231,15 @@ class JsProxy:
         self._id = id
         self._parent_id = parent_id
 
+    def __getitem__(self, key):
+        return self.__getattr__(key)
+
     def __getattr__(self, key):
-        if key.startswith("__"):
+        if (
+            isinstance(key, str)
+            and key.startswith("__")
+            and not key.startswith("__vue")
+        ):
             return super().__getattr__(key)
         return remote.get_prop(self._id, key)
 

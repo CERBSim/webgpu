@@ -116,7 +116,8 @@ class Scene:
             return
         # print("render")
         # print("canvas", self.canvas.canvas)
-        # js.console.log("canvas", self.canvas.canvas)
+        # from . import proxy
+        # proxy.js.console.log("canvas", self.canvas.canvas)
         # print("canvas size ", self.canvas.canvas.width, self.canvas.canvas.height)
         # print(
         #     "texture size",

@@ -10,6 +10,7 @@ from .render_object import *
 from .scene import Scene
 from .triangles import *
 from .webgpu_api import *
+from .utils import init_device_sync
 
 
 def create_package_zip(module_name="webgpu"):
@@ -39,34 +40,6 @@ def create_package_zip(module_name="webgpu"):
                     zipf.write(file_path, arcname)
 
         return open(output_filename, "rb").read()
-
-
-def init_device_sync():
-    if not proxy.js.navigator.gpu:
-        proxy.js.alert("WebGPU is not supported")
-        sys.exit(1)
-
-    reqAdapter = proxy.js.navigator.gpu.requestAdapter
-    options = RequestAdapterOptions(
-        powerPreference=PowerPreference.low_power,
-    ).toJS()
-    adapter = reqAdapter(options)
-    if not adapter:
-        proxy.js.alert("WebGPU is not supported")
-        sys.exit(1)
-    one_gig = 1024**3
-    utils._device = Device(
-        adapter.requestDevice(
-            [],
-            Limits(
-                maxBufferSize=one_gig - 16,
-                maxStorageBufferBindingSize=one_gig - 16,
-            ),
-            None,
-            "WebGPU device",
-        )
-    )
-    return utils._device
 
 
 _id_counter = itertools.count()
