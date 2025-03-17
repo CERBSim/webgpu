@@ -278,7 +278,7 @@ def create_render_proxy(func):
     return {"__python_proxy_type__": "render", "id": id}
 
 
-_is_exporting = "JPY_SESSION_NAME" not in os.environ
+_is_exporting = "WEBGPU_EXPORT" in os.environ
 
 remote: JsRemote = None
 
