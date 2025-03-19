@@ -22,7 +22,7 @@ class Folder:
             func(*args)
             self.scene.render()
 
-        self.gui.add({label: value}, label, *args).onChange(proxy.create_proxy(f))
+        return self.gui.add({label: value}, label, *args).onChange(proxy.create_proxy(f))
 
     def checkbox(
         self,
@@ -30,7 +30,7 @@ class Folder:
         value: bool,
         func: Callable[[bool], None],
     ):
-        self.add(label, value, func)
+        return self.add(label, value, func)
 
     def value(
         self,
@@ -38,7 +38,7 @@ class Folder:
         value: object,
         func: Callable[[object], None],
     ):
-        self.add(label, value, func)
+        return self.add(label, value, func)
 
     def dropdown(
         self,
@@ -50,7 +50,7 @@ class Folder:
         if value is None:
             value = list(values.keys())[0]
 
-        self.add(label, value, func, values)
+        return self.add(label, value, func, values)
 
     def slider(
         self,
@@ -64,7 +64,7 @@ class Folder:
         if step is None:
             step = (max - min) / 100
 
-        self.add(label, value, func, min, max, step)
+        return self.add(label, value, func, min, max, step)
 
 
 class LilGUI(Folder):
