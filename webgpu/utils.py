@@ -4,32 +4,24 @@ from pathlib import Path
 
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
-from . import proxy
+from . import platform
 
 _device: Device = None
-
-try:
-    import pyodide.ffi
-
-    _is_pyodide = True
-except:
-    _is_pyodide = False
-
 
 def init_device_sync():
     global _device
 
-    if not proxy.js.navigator.gpu:
-        proxy.js.alert("WebGPU is not supported")
+    if not platform.js.navigator.gpu:
+        platform.js.alert("WebGPU is not supported")
         sys.exit(1)
 
-    reqAdapter = proxy.js.navigator.gpu.requestAdapter
+    reqAdapter = platform.js.navigator.gpu.requestAdapter
     options = RequestAdapterOptions(
         powerPreference=PowerPreference.low_power,
     ).toJS()
     adapter = reqAdapter(options)
     if not adapter:
-        proxy.js.alert("WebGPU is not supported")
+        platform.js.alert("WebGPU is not supported")
         sys.exit(1)
     one_gig = 1024**3
     _device = Device(

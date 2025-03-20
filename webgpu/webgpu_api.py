@@ -1,103 +1,9 @@
-import base64
 import sys
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
-from . import proxy
-
-try:
-    import js
-    import pyodide.ffi
-    from pyodide.ffi import JsProxy, create_proxy
-
-    def _default_converter(value, a, b):
-        if isinstance(value, BaseWebGPUHandle):
-            return pyodide.ffi.to_js(value.handle)
-        if isinstance(value, BaseWebGPUObject):
-            return value.__dict__
-
-    def _convert(d):
-        if d is None:
-            return None
-        if isinstance(d, BaseWebGPUHandle):
-            return d.handle
-        if isinstance(d, BaseWebGPUObject):
-            return _convert(d.__dict__) if d.__dict__ else None
-        if isinstance(d, Mapping):
-            if not d:
-                return None
-            ret = {}
-            for key in d:
-                value = _convert(d[key])
-                if value is not None:
-                    ret[key] = value
-            return ret
-
-        if isinstance(d, list):
-            return [_convert(value) for value in d]
-
-        return d
-
-    def toJS(value):
-        value = _convert(value)
-        ret = pyodide.ffi.to_js(
-            value,
-            dict_converter=js.Object.fromEntries,
-            default_converter=_default_converter,
-            create_pyproxies=False,
-        )
-        return ret
-
-except ImportError:
-    # Mocks for linting
-    from . import proxy
-    from .proxy import JsProxy, create_proxy
-
-    def _convert(d):
-        if d is None:
-            return None
-        if isinstance(d, JsProxy):
-            return d._to_js()
-        if isinstance(d, BaseWebGPUHandle):
-            return d.handle
-        if isinstance(d, BaseWebGPUObject):
-            return _convert(d.__dict__) if d.__dict__ else None
-        if isinstance(d, Mapping):
-            if not d:
-                return None
-            ret = {}
-            for key in d:
-                value = _convert(d[key])
-                if value is not None:
-                    ret[key] = value
-            return ret
-
-        if isinstance(d, memoryview):
-            return {
-                "__python_proxy_type__": "bytes",
-                "data": base64.b64encode(d).decode(),
-            }
-
-        if isinstance(d, list):
-            return [_convert(value) for value in d]
-        if isinstance(d, tuple):
-            return tuple((_convert(value) for value in d))
-
-        return d
-
-    def toJS(value):
-        c = _convert(value)
-        return c
-
-    proxy.convert = toJS
-
-    # TODO: JsPromise
-    class pyodide:
-        class ffi:
-            class JsPromise:
-                pass
-
+from . import platform
+from .platform import is_pyodide, JsProxy, toJS, create_proxy, JsPromise
 
 class BaseWebGPUHandle:
     handle: JsProxy
@@ -963,11 +869,11 @@ async def requestAdapter(
     forceFallbackAdapter: bool = False,
     xrCompatible: bool = False,
 ) -> "Adapter":
-    if not proxy.js.navigator.gpu:
-        proxy.js.alert("WebGPU is not supported")
+    if not platform.js.navigator.gpu:
+        platform.js.alert("WebGPU is not supported")
         sys.exit(1)
 
-    reqAdapter = proxy.js.navigator.gpu.requestAdapter
+    reqAdapter = platform.js.navigator.gpu.requestAdapter
     options = RequestAdapterOptions(
         featureLevel=featureLevel,
         powerPreference=powerPreference,
@@ -981,7 +887,7 @@ async def requestAdapter(
     except:
         pass
     if not handle:
-        proxy.js.alert("WebGPU is not supported")
+        platform.js.alert("WebGPU is not supported")
         sys.exit(1)
     return Adapter(handle)
 
@@ -1574,7 +1480,7 @@ class Queue(BaseWebGPUHandle):
     def submit(self, commands: list[CommandBuffer] = []) -> None:
         return self.handle.submit(commands)
 
-    def onSubmittedWorkDone(self) -> pyodide.ffi.JsPromise:
+    def onSubmittedWorkDone(self) -> JsPromise:
         return self.handle.onSubmittedWorkDone()
 
     def writeBuffer(
@@ -1850,3 +1756,4 @@ class Texture(BaseWebGPUHandle):
 
     def __del__(self):
         self.destroy()
+

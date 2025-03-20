@@ -1,16 +1,17 @@
 import itertools
-import time
 import os
-from pathlib import Path
+import base64
+import pickle
 
-from . import proxy, utils
+from . import platform, utils
 from .canvas import Canvas
 from .lilgui import LilGUI
+from .link import js_code as _link_js_code
 from .render_object import *
 from .scene import Scene
 from .triangles import *
-from .webgpu_api import *
 from .utils import init_device_sync
+from .webgpu_api import *
 
 
 def create_package_zip(module_name="webgpu"):
@@ -79,13 +80,13 @@ def _init_html(scene, width, height):
 
 
 def _draw_scene(scene: Scene, width, height, id_):
-    html_canvas = proxy.js.document.getElementById(f"{id_}canvas")
+    html_canvas = platform.js.document.getElementById(f"{id_}canvas")
 
     while html_canvas is None:
-        html_canvas = proxy.js.document.getElementById(f"{id_}canvas")
+        html_canvas = platform.js.document.getElementById(f"{id_}canvas")
     html_canvas.width = width
     html_canvas.height = height
-    gui_element = proxy.js.document.getElementById(f"{id_}lilgui")
+    gui_element = platform.js.document.getElementById(f"{id_}lilgui")
 
     canvas = Canvas(utils.get_device(), html_canvas)
     scene.gui = LilGUI(gui_element, scene)
@@ -94,9 +95,6 @@ def _draw_scene(scene: Scene, width, height, id_):
 
 
 def _DrawPyodide(b64_data: str):
-    import base64
-    import pickle
-
     data = base64.b64decode(b64_data.encode("utf-8"))
     id_, scene, width, height = pickle.loads(data)
 
@@ -114,8 +112,6 @@ def _DrawHTML(
     The scene object is unpickled and drawn within a pyodide instance in the browser when the html is opened
     """
     from IPython.display import Javascript, display
-    import base64
-    import pickle
 
     scene, id_ = _init_html(scene, width, height)
 
@@ -136,35 +132,30 @@ def Draw(
     return scene
 
 
-_proxy_js_code = (Path(__file__).parent / "proxy.js").read_text()
-
-if not proxy._is_pyodide:
+if not platform.is_pyodide:
     from IPython.display import Javascript, display
 
-    if proxy._is_exporting:
+    is_exporting = "WEBGPU_EXPORTING" in os.environ
+
+    if is_exporting:
         Draw = _DrawHTML
         webgpu_module = create_package_zip("webgpu")
         webgpu_module_b64 = base64.b64encode(webgpu_module).decode("utf-8")
-        js_code = _proxy_js_code
+        js_code = _link_js_code
         js_code += f"\nconst _webgpu_code = '{webgpu_module_b64}';"
         js_code += f"\nwindow.pyodide_ready = init_pyodide(_webgpu_code);"
         display(Javascript(js_code))
     else:
         # Not exporting and not running in pyodide -> Start a websocket server and wait for the client to connect
-        proxy.init()
-
-        time.sleep(0.1)
-
-        port = proxy.remote._websocket_port
-        host = "ws://localhost"
+        port = platform.websocket_server.port
+        host = f"ws://localhost:{port}"
         js_code = (
-            _proxy_js_code
-            + f"const remote = new Remote({{port: {port}, host: '{host}'  }});"
+            _link_js_code
+            + f"WebsocketLink('{host}');"
         )
 
         display(Javascript(js_code))
 
-        while not proxy.remote._connected_clients:
-            time.sleep(1 / 60)
+        platform.init()
 
         device = init_device_sync()

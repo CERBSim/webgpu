@@ -1,10 +1,35 @@
+from threading import Timer
+import time
+
 from .canvas import Canvas
-from . import proxy
 from .render_object import BaseRenderObject, RenderOptions
-from .utils import _is_pyodide, max_bounding_box
+from .utils import is_pyodide, max_bounding_box
 from .webgpu_api import *
+from .platform import create_proxy
+from . import platform
 import math
 
+_TARGET_FPS = 60
+
+def debounce(render_function):
+    # Render only once every 1/_TARGET_FPS seconds
+    def debounced(*args, **kwargs):
+        if debounced.timer is not None:
+            # we already have a render scheduled, so do nothing
+            return
+
+        def f():
+            # clear the timer, so we can schedule a new one with the next function call
+            debounced.timer = None
+            debounced.t_last = time.time()
+            render_function(*args, **kwargs)
+
+        t_wait = max(1/_TARGET_FPS - (time.time() - debounced.t_last), 0)
+        debounced.timer = Timer(t_wait, f)
+        debounced.timer.start()
+    debounced.timer = None
+    debounced.t_last = time.time()
+    return debounced
 
 class Scene:
     canvas: Canvas = None
@@ -26,10 +51,12 @@ class Scene:
         self._id = id
         self.render_objects = render_objects
 
-        if _is_pyodide:
+        if is_pyodide:
             _scenes_by_id[id] = self
             if canvas is not None:
                 self.init(canvas)
+
+        self.t_last = 0
 
     def __repr__(self):
         return ""
@@ -62,10 +89,10 @@ class Scene:
             camera.transform.rotate(20, 0)
 
 
-        self._js_render = proxy.create_proxy(self._render_direct)
+        self._js_render = create_proxy(self._render_direct)
         camera.register_callbacks(canvas.input_handler, self.render)
         self.options.update_buffers()
-        if _is_pyodide:
+        if is_pyodide:
             _scenes_by_id[self.id] = self
 
     def redraw(self):
@@ -78,7 +105,7 @@ class Scene:
         self.render()
         return
 
-        if _is_pyodide:
+        if is_pyodide:
             import js
 
             js.requestAnimationFrame(self._js_render)
@@ -95,7 +122,7 @@ class Scene:
             )
 
     def _render(self):
-        proxy.js.requestAnimationFrame(self._js_render)
+        platform.js.requestAnimationFrame(self._js_render)
 
     def _render_direct(self, t=0):
         encoder = self.device.createCommandEncoder()
@@ -110,8 +137,9 @@ class Scene:
         )
         self.device.queue.submit([encoder.finish()])
 
+    @debounce
     def render(self, t=0):
-        if _is_pyodide:
+        if is_pyodide:
             self._render()
             return
         # print("render")
@@ -131,15 +159,15 @@ class Scene:
 
         self.device.queue.submit([encoder.finish()])
 
-        if not _is_pyodide:
-            proxy.js.patchedRequestAnimationFrame(
-                self.canvas.device.handle._id,
-                self.canvas.context._id,
-                self.canvas.target_texture._id,
+        if not is_pyodide:
+            platform.js.patchedRequestAnimationFrame(
+                self.canvas.device.handle,
+                self.canvas.context,
+                self.canvas.target_texture,
             )
 
 
-if _is_pyodide:
+if is_pyodide:
     _scenes_by_id: dict[str, Scene] = {}
 
     def get_scene(id: str) -> Scene:

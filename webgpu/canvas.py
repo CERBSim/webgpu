@@ -1,7 +1,7 @@
 from .input_handler import InputHandler
 from .utils import get_device, to_js
 from .webgpu_api import *
-from . import proxy
+from . import platform
 
 
 def init_webgpu(html_canvas):
@@ -23,7 +23,7 @@ class Canvas:
 
         self.render_function = None
         self.device = device
-        self.format = proxy.js.navigator.gpu.getPreferredCanvasFormat()
+        self.format = platform.js.navigator.gpu.getPreferredCanvasFormat()
         self.color_target = ColorTargetState(
             format=self.format,
             blend=BlendState(
@@ -43,7 +43,6 @@ class Canvas:
         self.canvas = canvas
 
         self.context = canvas.getContext("webgpu")
-        proxy.js.console.log("context", self.context)
         self.context.configure(
             toJS(
                 {

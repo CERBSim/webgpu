@@ -4,7 +4,7 @@ from typing import Callable
 from .camera import Camera
 from .canvas import Canvas
 from .light import Light
-from .utils import BaseBinding, _is_pyodide, create_bind_group, get_device
+from .utils import BaseBinding, is_pyodide, create_bind_group, get_device
 from .webgpu_api import (
     CommandEncoder,
     CompareFunction,
@@ -20,7 +20,7 @@ _render_objects = {}
 
 
 def _add_render_object(obj):
-    if not _is_pyodide:
+    if not is_pyodide:
         _id = str(uuid.uuid4())
         _render_objects[_id] = obj
         obj._id = _id
@@ -60,7 +60,7 @@ class RedrawObject:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        if _is_pyodide:
+        if is_pyodide:
             _render_objects[self._id] = self
 
 
