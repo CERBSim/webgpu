@@ -20,9 +20,10 @@ def debounce(render_function):
 
         def f():
             # clear the timer, so we can schedule a new one with the next function call
-            debounced.timer = None
-            debounced.t_last = time.time()
+            t = time.time()
             render_function(*args, **kwargs)
+            debounced.timer = None
+            debounced.t_last = t
 
         t_wait = max(1/_TARGET_FPS - (time.time() - debounced.t_last), 0)
         debounced.timer = Timer(t_wait, f)
