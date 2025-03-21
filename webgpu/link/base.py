@@ -206,10 +206,10 @@ class LinkBase:
             }
 
         if isinstance(data, dict):
-            return {k: self._dump_data(v) for k, v in data.items()}
+            return {k: self._dump_data(data[k]) for k in list(data.keys())}
 
         if isinstance(data, Mapping):
-            return {k: self._dump_data(v) for k, v in data.items()}
+            return {k: self._dump_data(data[k]) for k in list(data.keys())}
 
         if isinstance(data, (list, tuple)):
             return [self._dump_data(v) for v in data]

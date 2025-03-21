@@ -81,7 +81,8 @@ class WebsocketLinkServer(WebsocketLinkBase):
             self._connection = websocket
             self._event_is_connected.set()
             async for message in websocket:
-                self._on_message(json.loads(message))
+                thread = threading.Thread(target=self._on_message, args=(json.loads(message),))
+                thread.start()
         finally:
             self._connection = None
 
