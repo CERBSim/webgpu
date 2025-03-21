@@ -49,7 +49,7 @@ class WebsocketLinkClient(WebsocketLinkBase):
                     self._connection = websocket
                     self._event_is_connected.set()
                     async for message in websocket:
-                        self._on_message(json.loads(message))
+                        self._on_message(message)
                 except websockets.exceptions.ConnectionClosed:
                     continue
                 except Exception:
@@ -64,7 +64,7 @@ class WebsocketLinkClient(WebsocketLinkBase):
 
 class WebsocketLinkServer(WebsocketLinkBase):
     _stop: asyncio.Future
-    _port: int
+    _port: int = 0
 
     def __init__(self):
         super().__init__()
@@ -81,7 +81,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
             self._connection = websocket
             self._event_is_connected.set()
             async for message in websocket:
-                thread = threading.Thread(target=self._on_message, args=(json.loads(message),))
+                thread = threading.Thread(target=self._on_message, args=(message,))
                 thread.start()
         finally:
             self._connection = None
@@ -91,7 +91,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
             while True:
                 try:
                     async with websockets.serve(
-                        self._websocket_handler, "", self._port
+                        self._websocket_handler, "", self._port, max_queue=128
                     ):
                         # print("server running on port", self._port)
                         await self._stop

@@ -98,7 +98,7 @@ class RenderOptions:
         self.render_function = render_function
         self.canvas = canvas
         self.light = Light(self.device)
-        self.camera = Camera(self.device)
+        self.camera = Camera(canvas)
 
     @property
     def device(self) -> Device:
@@ -123,7 +123,7 @@ class RenderOptions:
         )
 
         render_pass_encoder.setViewport(
-            0, 0, self.canvas.canvas.width, self.canvas.canvas.height, 0.0, 1.0
+            0, 0, self.canvas.width, self.canvas.height, 0.0, 1.0
         )
 
         return render_pass_encoder

@@ -82,13 +82,16 @@ class Transform:
 
 
 class Camera:
-    def __init__(self, device):
-        self.device = device
-        self.uniforms = CameraUniforms(device)
+    def __init__(self, canvas):
+        self.canvas = canvas
+        self.uniforms = CameraUniforms(canvas.device)
         self.transform = Transform()
         self._render_function = None
         self._is_moving = False
         self._is_rotating = False
+
+        canvas.on_resize(self._update_uniforms)
+
 
     def get_bindings(self) -> list[BaseBinding]:
         return self.uniforms.get_bindings()
@@ -143,7 +146,7 @@ class Camera:
         near = 0.1
         far = 10
         fov = 45
-        aspect = 1.0
+        aspect = self.canvas.width / self.canvas.height
 
         zoom = 1.0
         top = near * (np.tan(np.radians(fov) / 2)) * zoom

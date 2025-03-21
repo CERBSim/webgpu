@@ -119,6 +119,8 @@ class Font:
         self.uniforms = FontUniforms(canvas.device)
         self.set_font_size(size)
 
+        self.canvas.on_resize(self.update)
+
     def get_bindings(self):
         return [
             TextureBinding(Binding.FONT_TEXTURE, self._texture, dim=2),
@@ -136,8 +138,11 @@ class Font:
         char_height = self._texture.height
         self.uniforms.width = char_width
         self.uniforms.height = char_height
-        self.uniforms.width_normalized = 2.0 * char_width / self.canvas.canvas.width
-        self.uniforms.height_normalized = 2.0 * char_height / self.canvas.canvas.height
+        self.update()
+
+    def update(self):
+        self.uniforms.width_normalized = 2.0 * self.uniforms.width / self.canvas.width
+        self.uniforms.height_normalized = 2.0 * self.uniforms.height / self.canvas.height
         self.uniforms.update_buffer()
 
 

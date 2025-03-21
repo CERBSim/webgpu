@@ -1,5 +1,7 @@
+from typing import Callable
+
 from .input_handler import InputHandler
-from .utils import get_device, to_js
+from .utils import get_device
 from .webgpu_api import *
 from . import platform
 
@@ -19,7 +21,14 @@ class Canvas:
     multisample_texture: Texture
     multisample: MultisampleState
 
+    width: int = 0
+    height: int = 0
+
+    _on_resize_callbacks: list[Callable] = []
+
     def __init__(self, device, canvas, multisample_count=4):
+
+        self._on_resize_callbacks = []
 
         self.render_function = None
         self.device = device
@@ -55,33 +64,64 @@ class Canvas:
             )
         )
 
+        self.multisample = MultisampleState(count=multisample_count)
+        self.depth_format = TextureFormat.depth24plus
+        self.input_handler = InputHandler(canvas)
+
+        self.resize()
+
+        platform.js.webgpuOnResize(canvas, create_proxy(self.resize, True))
+
+
+    def on_resize(self, func: Callable):
+        self._on_resize_callbacks.append(func)
+
+    def resize(self, *args):
+        canvas = self.canvas
+        rect = canvas.getBoundingClientRect()
+        width = int(rect.width)
+        height = int(rect.height)
+
+        if width == self.width and height == self.height:
+            return False
+
+        if width == 0 or height == 0:
+            return False
+
+        canvas.width = width
+        canvas.height = height
+
+        self.width = width
+        self.height = height
+
+        device = self.device
         self.target_texture = device.createTexture(
-            size=[canvas.width, canvas.height, 1],
+            size=[width, height, 1],
             sampleCount=1,
             format=self.format,
             usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
             label="target",
         )
         self.multisample_texture = device.createTexture(
-            size=[canvas.width, canvas.height, 1],
-            sampleCount=multisample_count,
+            size=[width, height, 1],
+            sampleCount=self.multisample.count,
             format=self.format,
             usage=TextureUsage.RENDER_ATTACHMENT,
             label="multisample",
         )
-        self.multisample = MultisampleState(count=multisample_count)
-        self.depth_format = TextureFormat.depth24plus
 
         self.depth_texture = device.createTexture(
-            size=[canvas.width, canvas.height, 1],
+            size=[width, height, 1],
             format=self.depth_format,
             usage=TextureUsage.RENDER_ATTACHMENT,
             label="depth_texture",
-            sampleCount=multisample_count,
+            sampleCount=self.multisample.count,
         )
-        self.input_handler = InputHandler(canvas)
 
         self.target_texture_view = self.target_texture.createView()
+
+        for func in self._on_resize_callbacks:
+            func()
 
     def color_attachments(self, loadOp: LoadOp):
         return [

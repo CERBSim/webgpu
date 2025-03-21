@@ -3,18 +3,18 @@
 function serializeEvent(event) {
   event.preventDefault();
   const keys = [
-    'button',
-    'altKey',
-    'metaKey',
-    'ctrlKey',
-    'shiftKey',
-    'x',
-    'y',
-    'deltaX',
-    'deltaY',
-    'deltaMode',
-    'movementX',
-    'movementY',
+    "button",
+    "altKey",
+    "metaKey",
+    "ctrlKey",
+    "shiftKey",
+    "x",
+    "y",
+    "deltaX",
+    "deltaY",
+    "deltaMode",
+    "movementX",
+    "movementY",
   ];
   return Object.fromEntries(keys.map((k) => [k, event[k]]));
 }
@@ -29,15 +29,17 @@ function encodeB64(buffer) {
 
 function isPrimitive(value) {
   return (
-    value === null || (typeof value !== 'object' && typeof value !== 'function')
+    value === null || (typeof value !== "object" && typeof value !== "function")
   );
 }
 
 function isPrimitiveDict(obj) {
   if (obj === window) return false;
   if (obj === navigator) return false;
+  if (obj.domElement) return false;
 
-  if (typeof obj !== 'object' || obj === null) return false;
+  if (typeof obj !== "object" || obj === null) return false;
+  //console.log("isPrimitiveDict", obj);
   if (Array.isArray(obj)) {
     return obj.every(isPrimitiveDict);
   }
@@ -57,27 +59,35 @@ function isPrimitiveDict(obj) {
   return true;
 }
 
-function createProxy(link, id, parent_id) {
+function createProxy(link, id, parent_id, ignore_return_value = false) {
   const target = function (...args) {
-    return link.call(id, args, parent_id);
+    return link.call({ id, args, parent_id }, ignore_return_value);
   };
   target.handleEvent = async (eventType, event) => {
-    return link.call(id, [eventType, event], parent_id, '_handle');
+    return link.call(
+      {
+        id,
+        args: [eventType, event],
+        parent_id,
+        prop: "_handle",
+      },
+      ignore_return_value,
+    );
   };
   target.callFunction = (self, arg) => {
-    return link.call(id, [arg], parent_id);
+    return link.call({ id, args: [arg], parent_id }, ignore_return_value);
   };
   const handler = {
     get: function (obj, prop) {
-      if (prop === '_parent_id') return parent_id;
-      if (prop === '_id') return id;
-      if (prop === '_link') return link;
-      if (prop === 'handleEvent') return target.handleEvent;
-      if (prop === 'call') {
+      if (prop === "_parent_id") return parent_id;
+      if (prop === "_id") return id;
+      if (prop === "_link") return link;
+      if (prop === "handleEvent") return target.handleEvent;
+      if (prop === "call") {
         return target.callFunction;
       }
-      if (prop === 'then') return Reflect.get(...arguments);
-      if (prop.startsWith('__')) return Reflect.get(...arguments);
+      if (prop === "then") return Reflect.get(...arguments);
+      if (prop.startsWith("__")) return Reflect.get(...arguments);
 
       return link.getProp(id, prop);
     },
@@ -86,7 +96,7 @@ function createProxy(link, id, parent_id) {
     },
 
     apply: function (obj, thisArg, args) {
-      return link.call(id, args, parent_id);
+      return link.call({ id, args, parent_id }, ignore_return_value);
     },
   };
   return new Proxy(target, handler);
@@ -117,8 +127,8 @@ class CrossLink {
         setTimeout(() => {
           reject(
             new Error(
-              `Timeout, request ${request_id}, data: ${JSON.stringify(data)}`
-            )
+              `Timeout, request ${request_id}, data: ${JSON.stringify(data)}`,
+            ),
           );
         }, 5000);
       });
@@ -130,16 +140,16 @@ class CrossLink {
   }
 
   async getProp(id, prop) {
-    return await this._sendRequestAwaitResponse({ type: 'get', id, prop });
+    return await this._sendRequestAwaitResponse({ type: "get", id, prop });
   }
 
   async getItem(id, key) {
-    return await this._sendRequestAwaitResponse({ type: 'get', id, key });
+    return await this._sendRequestAwaitResponse({ type: "get", id, key });
   }
 
   async setProp(id, prop, value) {
     this.connection.send({
-      type: 'set',
+      type: "set",
       id,
       prop,
       value: this._dumpData(value),
@@ -148,21 +158,21 @@ class CrossLink {
 
   async setItem(id, key, value) {
     this.connection.send({
-      type: 'set',
+      type: "set",
       id,
       key,
       value: this._dumpData(value),
     });
   }
 
-  async call(id, args = [], parent_id = undefined, prop = undefined) {
-    return await this._sendRequestAwaitResponse({
-      type: 'call',
-      id,
-      parent_id,
-      args: this._dumpData(args),
-      prop,
-    });
+  async call(data, ignore_return_value = false) {
+    data.args = this._dumpData(data.args);
+    data.type = "call";
+
+    if (ignore_return_value) {
+    }
+    return await this.connection.send(JSON.stringify(data));
+    return await this._sendRequestAwaitResponse(data);
   }
 
   expose(name, obj) {
@@ -181,7 +191,7 @@ class CrossLink {
     if (data instanceof ArrayBuffer)
       return {
         __is_crosslink_type__: true,
-        type: 'bytes',
+        type: "bytes",
         value: encodeB64(data),
       };
 
@@ -210,7 +220,7 @@ class CrossLink {
     this.objects[id] = data;
     return {
       __is_crosslink_type__: true,
-      type: 'proxy',
+      type: "proxy",
       id,
     };
   }
@@ -219,19 +229,24 @@ class CrossLink {
     if (value === null || value === undefined) return undefined;
     if (!value.__is_crosslink_type__) return value;
 
-    if (value.type == 'bytes') return decodeB64(value.value);
-    if (value.type == 'object') return this.objects[value.id];
-    if (value.type == 'proxy')
-      return createProxy(this, value.id, value.parent_id);
+    if (value.type == "bytes") return decodeB64(value.value);
+    if (value.type == "object") return this.objects[value.id];
+    if (value.type == "proxy")
+      return createProxy(
+        this,
+        value.id,
+        value.parent_id,
+        value.ignore_return_value,
+      );
 
-    console.error('Cannot load value, unknown value type:', value);
+    console.error("Cannot load value, unknown value type:", value);
   }
 
   _loadData(data) {
     if (
       data === undefined ||
       data === null ||
-      typeof data !== 'object' ||
+      typeof data !== "object" ||
       data.__is_crosslink_type__
     )
       return this._loadValue(data);
@@ -251,10 +266,10 @@ class CrossLink {
 
     this.connection.send(
       JSON.stringify({
-        type: 'response',
+        type: "response",
         request_id,
         value,
-      })
+      }),
     );
   }
 
@@ -267,45 +282,45 @@ class CrossLink {
     let response = null;
 
     switch (data.type) {
-      case 'call':
+      case "call":
         const args = this._loadData(data.args);
         const self = data.parent_id ? this.objects[data.parent_id] : undefined;
         response = obj.apply(self, args);
         break;
-      case 'get_keys':
+      case "get_keys":
         response = Object.keys(obj);
         break;
-      case 'get':
+      case "get":
         if (data.prop) response = obj[data.prop];
         else if (data.key) response = obj[data.key];
         else response = obj;
         if (response && (data.prop || data.key)) {
           response = this._dumpData(response);
-          if (typeof response === 'object') response.parent_id = data.id;
+          if (typeof response === "object") response.parent_id = data.id;
         }
         break;
-      case 'set':
+      case "set":
         const value = this._loadData(data.value);
         if (data.prop) obj[data.prop] = value;
         if (data.key) obj[data.key] = value;
         break;
-      case 'delete':
+      case "delete":
         this.objects[data.id] = undefined;
         break;
-      case 'response':
+      case "response":
         this.requests[request_id](this._loadData(data.value));
         return;
       default:
-        console.error('Unknown message type:', data, data.type);
+        console.error("Unknown message type:", data, data.type);
     }
 
-    if (request_id !== undefined && data.type !== 'response') {
+    if (request_id !== undefined && data.type !== "response") {
       this.sendResponse(response, request_id);
     }
   }
 }
 
-export function WebsocketLink(url) {
+function WebsocketLink(url) {
   const socket = new WebSocket(url);
   return new CrossLink({
     send: (data) => socket.send(data),
@@ -314,17 +329,17 @@ export function WebsocketLink(url) {
   });
 }
 
-export function WebworkerLink(worker) {
+function WebworkerLink(worker) {
   return new CrossLink({
     send: (data) => worker.postMessage(data),
-    onMessage: (callback) => worker.addEventListener('message', callback),
-    onOpen: (callback) => worker.addEventListener('connect', callback),
+    onMessage: (callback) => worker.addEventListener("message", callback),
+    onOpen: (callback) => worker.addEventListener("connect", callback),
   });
 }
 
 window.createLilGUI = async (args) => {
   if (window.lil === undefined) {
-    const url = 'https://cdn.jsdelivr.net/npm/lil-gui@0.20';
+    const url = "https://cdn.jsdelivr.net/npm/lil-gui@0.20";
     if (window.define === undefined) {
       await import(url);
     } else {
@@ -339,6 +354,17 @@ window.createLilGUI = async (args) => {
   return new window.lil.GUI(args);
 };
 
+window.webgpuOnResize = (canvas, callback) => {
+  let timeout = null;
+
+  const resizeObserver = new ResizeObserver((entries) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(callback, 100);
+  });
+
+  resizeObserver.observe(canvas);
+};
+
 window.patchedRequestAnimationFrame = (device, context, target) => {
   // context.getCurrentTexture() is only guaranteed to be valid during the requestAnimationFrame callback
   // Thus, in order to render from python asynchroniously, we are always rendering into a separate texture
@@ -350,8 +376,11 @@ window.patchedRequestAnimationFrame = (device, context, target) => {
     encoder.copyTextureToTexture(
       { texture: target },
       { texture: current },
-      { width: current.width, height: current.height }
+      { width: current.width, height: current.height },
     );
+
+    if (current.width != target.width || current.height != target.height)
+      return;
 
     device.queue.submit([encoder.finish()]);
   });

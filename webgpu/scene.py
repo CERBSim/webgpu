@@ -96,6 +96,8 @@ class Scene:
         if is_pyodide:
             _scenes_by_id[self.id] = self
 
+        canvas.on_resize(self.render)
+
     def redraw(self):
         import time
 
@@ -134,12 +136,14 @@ class Scene:
         encoder.copyTextureToTexture(
             TexelCopyTextureInfo(self.canvas.target_texture),
             TexelCopyTextureInfo(self.canvas.context.getCurrentTexture()),
-            [self.canvas.canvas.width, self.canvas.canvas.height, 1],
+            [self.canvas.width, self.canvas.height, 1],
         )
         self.device.queue.submit([encoder.finish()])
 
     @debounce
     def render(self, t=0):
+        # self.canvas.resize()
+
         if is_pyodide:
             self._render()
             return

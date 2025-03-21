@@ -109,7 +109,7 @@ class LinkBase:
         self._objects[id_] = obj
         return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
 
-    def create_proxy(self, func):
+    def create_proxy(self, func, ignore_return_value=False):
         def wrapper(*args):
             asyncio.run_coroutine_threadsafe(
                 self._callback_queue.put((func, args)), self._callback_loop
@@ -117,7 +117,7 @@ class LinkBase:
 
         id_ = id(wrapper)
         self._objects[id_] = wrapper
-        return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
+        return {"__is_crosslink_type__": True, "type": "proxy", "id": id_, "ignore_return_value": ignore_return_value}
 
     def _send_response(self, request_id, data):
         return self._send_data(
@@ -142,7 +142,9 @@ class LinkBase:
             obj = obj[data["key"]]
         return obj
 
-    def _on_message(self, data):
+    def _on_message(self, message: str):
+        data = json.loads(message)
+        # print("got message", data)
         try:
             msg_type = data.get("type", None)
             request_id = data.get("request_id", None)
@@ -184,9 +186,12 @@ class LinkBase:
             if request_id is not None:
                 self._send_response(request_id, response)
         except Exception as e:
+            from webapp_client.utils import print_exception
             print("error in on_message", data, type(e), str(e))
+            print_exception(e)
 
     def _dump_data(self, data):
+        # print('dumping data', data)
         from .proxy import Proxy
 
         type_ = type(data)
@@ -223,6 +228,7 @@ class LinkBase:
             }
 
         # complex type - store it in objects and only send its id
+        # print("complex type", data)
         id_ = id(data)
         self._objects[id_] = data
         return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
@@ -252,9 +258,11 @@ class LinkBase:
     def _send_data(self, data):
         """Send data to the remote environment,
         if request_id is set, (blocking-)wait for the response and return it"""
+        # print("send data", data)
 
         request_id = data.get("request_id", None)
         type = data.get("type", None)
+        # print("send response", data)
         message = json.dumps(data)
         event = None
         if type != "response" and request_id is not None:
