@@ -38,6 +38,7 @@ class Clipping(BaseRenderObject):
         self.center = center
         self.normal = normal
         self.radius = radius
+        self.callbacks = []
 
     def update(self, pnt=None, normal=None, mode=None):
         if pnt is not None:
@@ -99,27 +100,41 @@ class Clipping(BaseRenderObject):
     def enable_clipping(self, value):
         self.mode = self.Mode.PLANE if value else self.Mode.DISABLED
         self.update()
+        for cb in self.callbacks:
+            cb()
 
     def set_x_value(self, value):
         self.center[0] = value
         self.update()
+        for cb in self.callbacks:
+            cb()
 
     def set_y_value(self, value):
         self.center[1] = value
         self.update()
+        for cb in self.callbacks:
+            cb()
 
     def set_z_value(self, value):
         self.center[2] = value
         self.update()
+        for cb in self.callbacks:
+            cb()
 
     def set_nx_value(self, value):
         self.normal[0] = value
         self.update()
+        for cb in self.callbacks:
+            cb()
 
     def set_ny_value(self, value):
         self.normal[1] = value
         self.update()
+        for cb in self.callbacks:
+            cb()
 
     def set_nz_value(self, value):
         self.normal[2] = value
         self.update()
+        for cb in self.callbacks:
+            cb()

@@ -59,6 +59,7 @@ class UniformBase(ct.Structure):
         self._buffer = device.createBuffer(
             size=len(bytes(self)),
             usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST,
+            label=type(self).__name__,
         )
 
         size = len(bytes(self))
