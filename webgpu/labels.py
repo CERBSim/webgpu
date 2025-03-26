@@ -39,7 +39,10 @@ class Labels(RenderObject):
         self.h_align = h_align
         self.v_align = v_align
 
-    def update(self):
+    def update(self, timestamp):
+        if timestamp == self._timestamp:
+            return
+        self._timestamp = timestamp
         n_chars = sum(len(label) for label in self.labels)
         n_labels = len(self.labels)
         self.n_vertices = 6

@@ -46,11 +46,10 @@ class Colorbar(RenderObject):
         self.sampler = None
         self.autoupdate = True
 
-    def update(self, minval=None, maxval=None):
-        if minval is not None:
-            self.minval = minval
-        if maxval is not None:
-            self.maxval = maxval
+    def update(self, timestamp):
+        if timestamp == self._timestamp:
+            return
+        self._timestamp = timestamp
         if self.uniforms is None:
             self.uniforms = ColormapUniforms(self.device)
         self.uniforms.min = self.minval

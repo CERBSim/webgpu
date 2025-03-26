@@ -74,9 +74,10 @@ class Scene:
         self.canvas = canvas
         self.options = RenderOptions(self.canvas, self.render)
 
+        timestamp = time.time()
         for obj in self.render_objects:
             obj.options = self.options
-            obj.update()
+            obj.update(timestamp=timestamp)
 
         pmin, pmax = max_bounding_box([o.get_bounding_box() for o in self.render_objects])
         camera = self.options.camera

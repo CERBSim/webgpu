@@ -3,6 +3,7 @@ from webgpu.utils import read_shader_file
 
 from .uniforms import UniformBase, ct
 
+import time
 
 class Binding:
     CLIPPING = 1
@@ -40,13 +41,10 @@ class Clipping(BaseRenderObject):
         self.radius = radius
         self.callbacks = []
 
-    def update(self, pnt=None, normal=None, mode=None):
-        if pnt is not None:
-            self.center = pnt
-        if normal is not None:
-            self.normal = normal
-        if mode is not None:
-            self.mode = mode
+    def update(self, timestamp):
+        if timestamp == self._timestamp:
+            return
+        self._timestamp = timestamp
         if not hasattr(self, "uniforms"):
             self.uniforms = ClippingUniforms(self.device)
         import numpy as np
@@ -80,7 +78,8 @@ class Clipping(BaseRenderObject):
         return None
 
     def __del__(self):
-        self.uniforms._buffer.destroy()
+        if hasattr(self, "uniforms"):
+            self.uniforms._buffer.destroy()
 
     def add_options_to_gui(self, gui):
         folder = gui.folder("Clipping", closed=True)
@@ -99,42 +98,42 @@ class Clipping(BaseRenderObject):
 
     def enable_clipping(self, value):
         self.mode = self.Mode.PLANE if value else self.Mode.DISABLED
-        self.update()
+        self.update(time.time())
         for cb in self.callbacks:
             cb()
 
     def set_x_value(self, value):
         self.center[0] = value
-        self.update()
+        self.update(time.time())
         for cb in self.callbacks:
             cb()
 
     def set_y_value(self, value):
         self.center[1] = value
-        self.update()
+        self.update(time.time())
         for cb in self.callbacks:
             cb()
 
     def set_z_value(self, value):
         self.center[2] = value
-        self.update()
+        self.update(time.time())
         for cb in self.callbacks:
             cb()
 
     def set_nx_value(self, value):
         self.normal[0] = value
-        self.update()
+        self.update(time.time())
         for cb in self.callbacks:
             cb()
 
     def set_ny_value(self, value):
         self.normal[1] = value
-        self.update()
+        self.update(time.time())
         for cb in self.callbacks:
             cb()
 
     def set_nz_value(self, value):
         self.normal[2] = value
-        self.update()
+        self.update(time.time())
         for cb in self.callbacks:
             cb()
