@@ -44,6 +44,27 @@ class LinkBase:
     def expose(self, name: str, obj):
         self._objects[str(name)] = obj
 
+    def call_method(self, id=None, prop=None, args=[]):
+        return self._send_data(
+            {
+                "request_id": next(self._request_id),
+                "prop": prop,
+                "type": "call",
+                "id": id,
+                "args": self._dump_data(args),
+            }
+        )
+
+    def call_method_ignore_return(self, id=None, prop=None, args=[]):
+        self._send_data(
+            {
+                "prop": prop,
+                "type": "call",
+                "id": id,
+                "args": self._dump_data(args),
+            }
+        )
+
     def call(self, id, args=[], parent_id=None):
         return self._send_data(
             {
@@ -117,7 +138,12 @@ class LinkBase:
 
         id_ = id(wrapper)
         self._objects[id_] = wrapper
-        return {"__is_crosslink_type__": True, "type": "proxy", "id": id_, "ignore_return_value": ignore_return_value}
+        return {
+            "__is_crosslink_type__": True,
+            "type": "proxy",
+            "id": id_,
+            "ignore_return_value": ignore_return_value,
+        }
 
     def _send_response(self, request_id, data):
         return self._send_data(
@@ -161,8 +187,9 @@ class LinkBase:
                     return
 
                 case "call":
-                    args = data["args"]
                     func = self._get_obj(data)
+                    args = self._load_data(data["args"])
+                    # print("call", func, args)
                     response = func(*args)
 
                 case "get":
@@ -187,6 +214,7 @@ class LinkBase:
                 self._send_response(request_id, response)
         except Exception as e:
             from webapp_client.utils import print_exception
+
             print("error in on_message", data, type(e), str(e))
             print_exception(e)
 
@@ -236,6 +264,11 @@ class LinkBase:
     def _load_data(self, data):
         """Parse the result of a message from the remote environment"""
         from .proxy import Proxy
+
+        # print("load data", data, type(data))
+
+        if isinstance(data, list):
+            return [self._load_data(v) for v in data]
 
         if not isinstance(data, dict):
             return data

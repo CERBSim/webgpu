@@ -34,7 +34,15 @@ class Proxy:
 
     def __getattr__(self, key):
         if (
-            key in ["_id", "_parent_id", "_link"]
+            key
+            in [
+                "_id",
+                "_parent_id",
+                "_link",
+                "_call",
+                "_call_method_ignore_return",
+                "_call_method",
+            ]
             or isinstance(key, str)
             and key.startswith("__")
         ):
@@ -49,6 +57,12 @@ class Proxy:
 
     def __call__(self, *args):
         return self._link.call(self._id, list(args), self._parent_id)
+
+    def _call_method(self, prop, args=[]):
+        return self._link.call_method(self._id, prop, args)
+
+    def _call_method_ignore_return(self, prop, args=[]):
+        return self._link.call_method_ignore_return(self._id, prop, args)
 
     def _to_js(self):
         return {
