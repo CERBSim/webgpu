@@ -89,6 +89,8 @@ def init():
 
     from .link.base import LinkBase
     from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject
-    LinkBase.register_serializer(BaseWebGPUHandle, lambda v: v.handle)
-    LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__  or None)
 
+    LinkBase.register_serializer(BaseWebGPUHandle, lambda v: v.handle)
+    LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
+
+    websocket_server._start_handling_messages.set()

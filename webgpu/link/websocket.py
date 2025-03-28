@@ -12,10 +12,12 @@ class WebsocketLinkBase(LinkBase):
     _websocket_thread: threading.Thread
     _connection: websockets.asyncio.client.ClientConnection
     _event_is_connected: threading.Event
+    _start_handling_messages: threading.Event
 
     def __init__(self):
         super().__init__()
         self._event_is_connected = threading.Event()
+        self._start_handling_messages = threading.Event()
         self._send_loop = asyncio.new_event_loop()
 
         self._websocket_thread = threading.Thread(target=self._connect)
@@ -48,6 +50,7 @@ class WebsocketLinkClient(WebsocketLinkBase):
                     # print("client connected")
                     self._connection = websocket
                     self._event_is_connected.set()
+                    self._start_handling_messages.wait()
                     async for message in websocket:
                         self._on_message(message)
                 except websockets.exceptions.ConnectionClosed:
