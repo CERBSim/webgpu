@@ -96,10 +96,30 @@ class Pyodide:
     def __setattr__(self, key, value):
         pass
 
+def find_shader_file(file_name, module_file) -> Path:
+    for path in [module_file, __file__]:
+        file_path = Path(path).parent / "shaders" / file_name
+        if file_path.exists():
+            return file_path
+
+    raise FileNotFoundError(f"Shader file {file_name} not found")
 
 def read_shader_file(file_name, module_file) -> str:
-    shader_dir = Path(module_file).parent / "shaders"
-    return (shader_dir / file_name).read_text()
+    code = find_shader_file(file_name, module_file).read_text()
+    if not "#import" in code:
+        return code
+    lines = code.split("\n")
+    code = ""
+    for line in lines:
+        if line.startswith("#import"):
+            imported_file = line.split()[1] + ".wgsl"
+            code += f"// start file {imported_file}\n"
+            code += read_shader_file(imported_file, module_file) + "\n"
+            code += f"// end file {imported_file}\n"
+        else:
+            code += line + "\n"
+    (Path("/tmp") / file_name).write_text(code)
+    return code
 
 
 def encode_bytes(data: bytes) -> str:
