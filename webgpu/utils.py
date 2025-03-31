@@ -10,6 +10,8 @@ _device: Device = None
 
 def init_device_sync():
     global _device
+    if _device is not None:
+        return _device
 
     if not platform.js.navigator.gpu:
         platform.js.alert("WebGPU is not supported")
