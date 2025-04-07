@@ -16,7 +16,7 @@ websocket_server = None
 
 try:
     import js
-    from pyodide.ffi import create_proxy, JsPromise
+    from pyodide.ffi import create_proxy, JsPromise, JsProxy
 
     is_pyodide = True
 
@@ -94,3 +94,4 @@ def init():
     LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
 
     websocket_server._start_handling_messages.set()
+

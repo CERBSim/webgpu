@@ -8,7 +8,7 @@ import websockets.asyncio.client
 from .base import LinkBase
 
 
-class WebsocketLinkBase(LinkBase):
+class WebsocketLinkBase(LinkBaseAsync):
     _websocket_thread: threading.Thread
     _connection: websockets.asyncio.client.ClientConnection
     _event_is_connected: threading.Event

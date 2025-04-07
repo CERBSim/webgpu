@@ -10,15 +10,12 @@ from typing import Callable
 class LinkBase:
     _request_id: itertools.count
     _requests: dict
-
     _objects: dict
 
-    _send_loop: asyncio.AbstractEventLoop
-    _callback_loop: asyncio.AbstractEventLoop
-    _callback_queue: asyncio.Queue
-    _callback_thread: threading.Thread
-
     _serializers: dict[type, Callable] = {}
+
+    def _send_data(self, data):
+        raise NotImplementedError
 
     @staticmethod
     def register_serializer(type_, serializer):
@@ -28,21 +25,6 @@ class LinkBase:
         self._request_id = itertools.count()
         self._requests = {}
         self._objects = {}
-
-        self._send_loop = asyncio.new_event_loop()
-        self._callback_loop = asyncio.new_event_loop()
-        self._callback_queue = asyncio.Queue()
-
-        self._callback_thread = threading.Thread(
-            target=self._start_callback_thread, daemon=True
-        )
-        self._callback_thread.start()
-
-    def wait_for_connection(self):
-        raise NotImplementedError
-
-    def expose(self, name: str, obj):
-        self._objects[str(name)] = obj
 
     def call_method(self, id=None, prop=None, args=[]):
         return self._send_data(
@@ -130,96 +112,7 @@ class LinkBase:
         self._objects[id_] = obj
         return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
 
-    def create_proxy(self, func, ignore_return_value=False):
-        def wrapper(*args):
-            asyncio.run_coroutine_threadsafe(
-                self._callback_queue.put((func, args)), self._callback_loop
-            )
-
-        id_ = id(wrapper)
-        self._objects[id_] = wrapper
-        return {
-            "__is_crosslink_type__": True,
-            "type": "proxy",
-            "id": id_,
-            "ignore_return_value": ignore_return_value,
-        }
-
-    def _send_response(self, request_id, data):
-        return self._send_data(
-            {
-                "request_id": request_id,
-                "type": "response",
-                "value": self._dump_data(data),
-            }
-        )
-
-    def _get_obj(self, data):
-        obj = self._objects
-        id_ = data.get("id", None)
-        prop = data.get("prop", None)
-        key = data.get("key", None)
-
-        if id_ is not None:
-            obj = obj[data["id"]]
-        if prop is not None:
-            obj = obj.__getattribute__(data["prop"])
-        if key is not None:
-            obj = obj[data["key"]]
-        return obj
-
-    def _on_message(self, message: str):
-        data = json.loads(message)
-        # print("got message", data)
-        try:
-            msg_type = data.get("type", None)
-            request_id = data.get("request_id", None)
-
-            response = None
-
-            match msg_type:
-                case "response":
-                    event = self._requests[request_id]
-                    self._requests[request_id] = self._load_data(
-                        data.get("value", None)
-                    )
-                    event.set()
-                    return
-
-                case "call":
-                    func = self._get_obj(data)
-                    args = self._load_data(data["args"])
-                    # print("call", func, args)
-                    response = func(*args)
-
-                case "get":
-                    response = self._get_obj(data)
-
-                case "get_keys":
-                    response = []
-
-                case "set":
-                    prop = data.pop("prop", None)
-                    key = data.pop("key", None)
-                    obj = self._get_obj(data)
-                    if prop is not None:
-                        obj.__setattr__(prop, data["value"])
-                    elif key is not None:
-                        obj[key] = self._load_data(data["value"])
-
-                case _:
-                    print("unknown message type", msg_type)
-
-            if request_id is not None:
-                self._send_response(request_id, response)
-        except Exception as e:
-            from webapp_client.utils import print_exception
-
-            print("error in on_message", data, type(e), str(e))
-            print_exception(e)
-
     def _dump_data(self, data):
-        # print('dumping data', data)
         from .proxy import Proxy
 
         type_ = type(data)
@@ -287,6 +180,141 @@ class LinkBase:
             return base64.b64decode(data["value"])
 
         raise Exception(f"Unknown result type: {data}")
+
+    def expose(self, name: str, obj):
+        self._objects[str(name)] = obj
+
+    def create_proxy(self, func, ignore_return_value=False):
+        raise NotImplementedError
+
+    def _send_response(self, request_id, data):
+        return self._send_data(
+            {
+                "request_id": request_id,
+                "type": "response",
+                "value": self._dump_data(data),
+            }
+        )
+
+    def _get_obj(self, data):
+        obj = self._objects
+        id_ = data.get("id", None)
+        prop = data.get("prop", None)
+        key = data.get("key", None)
+
+        if id_ is not None:
+            obj = obj[data["id"]]
+        if prop is not None:
+            obj = obj.__getattribute__(str(data["prop"]))
+        if key is not None:
+            obj = obj[data["key"]]
+        return obj
+
+    def _on_message(self, message: str):
+        data = json.loads(message)
+        try:
+            msg_type = data.get("type", None)
+            request_id = data.get("request_id", None)
+
+            response = None
+
+            match msg_type:
+                case "response":
+                    event = self._requests[request_id]
+                    self._requests[request_id] = self._load_data(
+                        data.get("value", None)
+                    )
+                    event.set()
+                    return
+
+                case "call":
+                    func = self._get_obj(data)
+                    args = self._load_data(data["args"])
+                    # print("call", func, args)
+                    response = func(*args)
+
+                case "get":
+                    response = self._get_obj(data)
+
+                case "get_keys":
+                    response = []
+
+                case "set":
+                    prop = data.pop("prop", None)
+                    key = data.pop("key", None)
+                    obj = self._get_obj(data)
+                    if prop is not None:
+                        obj.__setattr__(prop, data["value"])
+                    elif key is not None:
+                        obj[key] = self._load_data(data["value"])
+
+                case _:
+                    print("unknown message type", msg_type)
+
+            if request_id is not None:
+                self._send_response(request_id, response)
+        except Exception as e:
+            from webapp_client.utils import print_exception
+
+            print("error in on_message", data, type(e), str(e))
+            print_exception(e)
+
+
+class LinkSync(LinkBase):
+    def __init__(self, send_message):
+        super().__init__()
+        self._send_message = send_message
+
+    def create_proxy(self, func, ignore_return_value=False):
+        id_ = id(func)
+        self._objects[id_] = func
+        return {
+            "__is_crosslink_type__": True,
+            "type": "proxy",
+            "id": id_,
+            "ignore_return_value": ignore_return_value,
+        }
+
+    def _send_data(self, data):
+        if data["type"] != "response":
+            data.pop("request_id", None)
+        self._send_message(json.dumps(data))
+
+
+class LinkBaseAsync(LinkBase):
+    _send_loop: asyncio.AbstractEventLoop
+    _callback_loop: asyncio.AbstractEventLoop
+    _callback_queue: asyncio.Queue
+    _callback_thread: threading.Thread
+
+    def __init__(self):
+        super().__init__()
+        self._send_loop = asyncio.new_event_loop()
+        self._callback_loop = asyncio.new_event_loop()
+        self._callback_queue = asyncio.Queue()
+
+        self._callback_thread = threading.Thread(
+            target=self._start_callback_thread, daemon=True
+        )
+        self._callback_thread.start()
+
+    def wait_for_connection(self):
+        raise NotImplementedError
+
+    def create_proxy(self, func, ignore_return_value=False):
+        def wrapper(*args):
+            asyncio.run_coroutine_threadsafe(
+                self._callback_queue.put((func, args)), self._callback_loop
+            )
+
+        id_ = id(wrapper)
+        self._objects[id_] = wrapper
+        return {
+            "__is_crosslink_type__": True,
+            "type": "proxy",
+            "id": id_,
+            "ignore_return_value": ignore_return_value,
+        }
 
     def _send_data(self, data):
         """Send data to the remote environment,
