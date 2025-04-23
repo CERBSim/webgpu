@@ -72,7 +72,6 @@ class Canvas:
 
         # platform.js.webgpuOnResize(canvas, create_proxy(self.resize, True))
 
-
     def on_resize(self, func: Callable):
         self._on_resize_callbacks.append(func)
 

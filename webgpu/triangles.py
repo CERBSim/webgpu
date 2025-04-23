@@ -31,7 +31,11 @@ class TriangulationRenderer(RenderObject):
         self._bounding_box = ps.min(axis=0), ps.max(axis=0)
         self.n_instances = len(self.points) // 9
 
-    def update(self):
+    def update(self, timestamp):
+        if timestamp == self._timestamp:
+            return
+        self._timestamp = timestamp
+
         self.point_buffer = buffer_from_array(self.points)
         self.normal_buffer = buffer_from_array(self.normals)
         self.create_render_pipeline()

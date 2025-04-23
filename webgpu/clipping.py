@@ -5,6 +5,7 @@ from .uniforms import UniformBase, ct
 
 import time
 
+
 class Binding:
     CLIPPING = 1
 

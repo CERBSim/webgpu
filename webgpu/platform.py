@@ -16,6 +16,7 @@ websocket_server = None
 
 try:
     import js
+    import pyodide.ffi
     from pyodide.ffi import create_proxy, JsPromise, JsProxy
 
     is_pyodide = True
@@ -78,6 +79,13 @@ if not is_pyodide:
         pass
 
 
+if is_pyodide:
+    from .link.base import LinkBase
+    import json
+
+    LinkBase.register_serializer(JsProxy, lambda v: json.loads(js.JSON.stringify(v)))
+
+
 def init():
     global js
     if is_pyodide or js is not None:
@@ -85,7 +93,6 @@ def init():
 
     websocket_server.wait_for_connection()
     js = websocket_server.get(None, None)
-    js.console.log("Python-Javascript websocket connection initialized")
 
     from .link.base import LinkBase
     from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject
@@ -94,4 +101,3 @@ def init():
     LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
 
     websocket_server._start_handling_messages.set()
-

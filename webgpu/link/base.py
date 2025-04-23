@@ -210,6 +210,61 @@ class LinkBase:
             obj = obj[data["key"]]
         return obj
 
+    async def _on_message_async(self, message: str):
+        data = json.loads(message)
+        try:
+            msg_type = data.get("type", None)
+            request_id = data.get("request_id", None)
+
+            response = None
+
+            match msg_type:
+                case "response":
+                    event = self._requests[request_id]
+                    self._requests[request_id] = self._load_data(
+                        data.get("value", None)
+                    )
+                    event.set()
+                    return
+
+                case "call":
+                    func = self._get_obj(data)
+                    args = self._load_data(data["args"])
+                    # print("call", func, args)
+                    response = func(*args)
+                    try:
+                        response = await response
+                    except TypeError:
+                        pass
+                    except Exception as e:
+                        print("error in call", type(e), str(e))
+
+                case "get":
+                    response = self._get_obj(data)
+
+                case "get_keys":
+                    response = []
+
+                case "set":
+                    prop = data.pop("prop", None)
+                    key = data.pop("key", None)
+                    obj = self._get_obj(data)
+                    if prop is not None:
+                        obj.__setattr__(prop, data["value"])
+                    elif key is not None:
+                        obj[key] = self._load_data(data["value"])
+
+                case _:
+                    print("unknown message type", msg_type)
+
+            if request_id is not None:
+                self._send_response(request_id, response)
+        except Exception as e:
+            from webapp_client.utils import print_exception
+
+            print("error in on_message", data, type(e), str(e))
+            print_exception(e)
+
     def _on_message(self, message: str):
         data = json.loads(message)
         try:

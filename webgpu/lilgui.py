@@ -22,7 +22,9 @@ class Folder:
             func(*args)
             self.scene.render()
 
-        return self.gui.add({label: value}, label, *args).onChange(platform.create_proxy(f))
+        return self.gui.add({label: value}, label, *args).onChange(
+            platform.create_proxy(f)
+        )
 
     def checkbox(
         self,

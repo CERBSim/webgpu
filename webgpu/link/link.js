@@ -3,18 +3,18 @@
 function serializeEvent(event) {
   event.preventDefault();
   const keys = [
-    "button",
-    "altKey",
-    "metaKey",
-    "ctrlKey",
-    "shiftKey",
-    "x",
-    "y",
-    "deltaX",
-    "deltaY",
-    "deltaMode",
-    "movementX",
-    "movementY",
+    'button',
+    'altKey',
+    'metaKey',
+    'ctrlKey',
+    'shiftKey',
+    'x',
+    'y',
+    'deltaX',
+    'deltaY',
+    'deltaMode',
+    'movementX',
+    'movementY',
   ];
   return Object.fromEntries(keys.map((k) => [k, event[k]]));
 }
@@ -29,17 +29,16 @@ function encodeB64(buffer) {
 
 function isPrimitive(value) {
   return (
-    value === null || (typeof value !== "object" && typeof value !== "function")
+    value === null || (typeof value !== 'object' && typeof value !== 'function')
   );
 }
 
 function isPrimitiveDict(obj) {
+  if (obj.$children) return false;
   if (obj === window) return false;
   if (obj === navigator) return false;
-  if (obj.domElement) return false;
 
-  if (typeof obj !== "object" || obj === null) return false;
-  //console.log("isPrimitiveDict", obj);
+  if (typeof obj !== 'object' || obj === null) return false;
   if (Array.isArray(obj)) {
     return obj.every(isPrimitiveDict);
   }
@@ -59,35 +58,35 @@ function isPrimitiveDict(obj) {
   return true;
 }
 
-function createProxy(link, id, parent_id, ignore_return_value = false) {
+function createProxy(link, id, parent_id) {
   const target = function (...args) {
-    return link.call({ id, args, parent_id }, ignore_return_value);
+    return link.call(id, args, parent_id);
   };
   target.handleEvent = async (eventType, event) => {
-    return link.call(
-      {
-        id,
-        args: [eventType, event],
-        parent_id,
-        prop: "_handle",
-      },
-      ignore_return_value,
-    );
+    return link.call(id, [eventType, event], parent_id, '_handle');
   };
   target.callFunction = (self, arg) => {
-    return link.call({ id, args: [arg], parent_id }, ignore_return_value);
+    return link.call(id, [arg], parent_id);
+  };
+  target.callMethod = async (prop, arg) => {
+    return await link.callMethod(id, prop, [arg]);
+  };
+  target.callMethodIgnoreResult = (prop, arg) => {
+    link.callMethodIgnoreResult(id, prop, [arg]);
   };
   const handler = {
     get: function (obj, prop) {
-      if (prop === "_parent_id") return parent_id;
-      if (prop === "_id") return id;
-      if (prop === "_link") return link;
-      if (prop === "handleEvent") return target.handleEvent;
-      if (prop === "call") {
+      if (prop === '_parent_id') return parent_id;
+      if (prop === '_id') return id;
+      if (prop === '_link') return link;
+      if (prop === 'handleEvent') return target.handleEvent;
+      if (prop === 'call') {
         return target.callFunction;
       }
-      if (prop === "then") return Reflect.get(...arguments);
-      if (prop.startsWith("__")) return Reflect.get(...arguments);
+      if (prop === 'then') return Reflect.get(...arguments);
+      if (prop.startsWith('__')) return Reflect.get(...arguments);
+      if (prop === 'callMethodIgnoreResult') return Reflect.get(...arguments);
+      if (prop === 'callMethod') return Reflect.get(...arguments);
 
       return link.getProp(id, prop);
     },
@@ -96,7 +95,7 @@ function createProxy(link, id, parent_id, ignore_return_value = false) {
     },
 
     apply: function (obj, thisArg, args) {
-      return link.call({ id, args, parent_id }, ignore_return_value);
+      return link.call(id, args, parent_id);
     },
   };
   return new Proxy(target, handler);
@@ -113,11 +112,15 @@ class CrossLink {
     this.connection = connection;
     this.connection.onMessage((data) => this.onMessage(data));
     this.connected = new Promise((resolve) => {
-      this.connection.onOpen(resolve);
+      this.connection.onOpen(() => {
+        console.log('connection open');
+        resolve();
+      });
     });
   }
 
   async _sendRequestAwaitResponse(data) {
+    //console.log('sending request', data);
     const request_id = this.requestCounter++;
     data.request_id = request_id;
     try {
@@ -127,10 +130,10 @@ class CrossLink {
         setTimeout(() => {
           reject(
             new Error(
-              `Timeout, request ${request_id}, data: ${JSON.stringify(data)}`,
-            ),
+              `Timeout, request ${request_id}, data: ${JSON.stringify(data)}`
+            )
           );
-        }, 5000);
+        }, 10000);
       });
       // const t = Date.now() - requestData.sent;
       return result;
@@ -140,46 +143,67 @@ class CrossLink {
   }
 
   async getProp(id, prop) {
-    return await this._sendRequestAwaitResponse({ type: "get", id, prop });
+    return await this._sendRequestAwaitResponse({ type: 'get', id, prop });
   }
 
   async getItem(id, key) {
-    return await this._sendRequestAwaitResponse({ type: "get", id, key });
+    return await this._sendRequestAwaitResponse({ type: 'get', id, key });
   }
 
   async setProp(id, prop, value) {
     this.connection.send({
-      type: "set",
+      type: 'set',
       id,
       prop,
-      value: this._dumpData(value),
+      value: await this._dumpData(value),
     });
   }
 
   async setItem(id, key, value) {
     this.connection.send({
-      type: "set",
+      type: 'set',
       id,
       key,
-      value: this._dumpData(value),
+      value: await this._dumpData(value),
     });
   }
 
-  async call(data, ignore_return_value = false) {
-    data.args = this._dumpData(data.args);
-    data.type = "call";
+  async call(id, args = [], parent_id = undefined, prop = undefined) {
+    return await this._sendRequestAwaitResponse({
+      type: 'call',
+      id,
+      parent_id,
+      args: await this._dumpData(args),
+      prop,
+    });
+  }
 
-    if (ignore_return_value) {
-    }
-    return await this.connection.send(JSON.stringify(data));
-    return await this._sendRequestAwaitResponse(data);
+  async callMethod(id, prop, args = []) {
+    return await this._sendRequestAwaitResponse({
+      type: 'call',
+      id,
+      args: await this._dumpData(args),
+      prop,
+    });
+  }
+
+  async callMethodIgnoreResult(id, prop, args = []) {
+    return await this.connection.send(
+      JSON.stringify({
+        type: 'call',
+        id,
+        args: await this._dumpData(args),
+        prop,
+      })
+    );
   }
 
   expose(name, obj) {
     this.objects[name] = obj;
   }
 
-  _dumpData(data) {
+  async _dumpData(data) {
+    //console.log("dumping data", data);
     if (data === null) return undefined;
 
     if (isPrimitive(data)) return data;
@@ -191,36 +215,35 @@ class CrossLink {
     if (data instanceof ArrayBuffer)
       return {
         __is_crosslink_type__: true,
-        type: "bytes",
+        type: 'bytes',
         value: encodeB64(data),
       };
 
-    if (data.constructor === Array)
-      return data.map((item) => this._dumpData(item));
+    if (data.constructor === Array) {
+      const result = [];
+      for (let item of data) result.push(await this._dumpData(item));
+      return result;
+    }
 
     if (data.__is_crosslink_type__) return data;
 
     if (isPrimitiveDict(data)) {
       return data;
     }
-    /*
     if (data.constructor === Object) {
-      console.log("have object", data, data.constructor);
       const result = {};
-      Object.keys(data).map((key) => {
-        result[key] = this._dumpData(data[key]);
+      Object.keys(data).map(async (key) => {
+        result[key] = await this._dumpData(data[key]);
       });
       return result;
     }
-    */
 
     // complex type - store it in objects only send its id
-    //console.log('storing object', data);
     const id = this.counter++;
     this.objects[id] = data;
     return {
       __is_crosslink_type__: true,
-      type: "proxy",
+      type: 'proxy',
       id,
     };
   }
@@ -229,24 +252,19 @@ class CrossLink {
     if (value === null || value === undefined) return undefined;
     if (!value.__is_crosslink_type__) return value;
 
-    if (value.type == "bytes") return decodeB64(value.value);
-    if (value.type == "object") return this.objects[value.id];
-    if (value.type == "proxy")
-      return createProxy(
-        this,
-        value.id,
-        value.parent_id,
-        value.ignore_return_value,
-      );
+    if (value.type == 'bytes') return decodeB64(value.value);
+    if (value.type == 'object') return this.objects[value.id];
+    if (value.type == 'proxy')
+      return createProxy(this, value.id, value.parent_id);
 
-    console.error("Cannot load value, unknown value type:", value);
+    console.error('Cannot load value, unknown value type:', value);
   }
 
   _loadData(data) {
     if (
       data === undefined ||
       data === null ||
-      typeof data !== "object" ||
+      typeof data !== 'object' ||
       data.__is_crosslink_type__
     )
       return this._loadValue(data);
@@ -262,65 +280,77 @@ class CrossLink {
       return;
     }
 
-    const value = this._dumpData(await Promise.resolve(data));
+    const value = await this._dumpData(await Promise.resolve(data));
+    //console.log('encoded data', value);
 
     this.connection.send(
       JSON.stringify({
-        type: "response",
+        type: 'response',
         request_id,
         value,
-      }),
+      })
     );
   }
 
-  onMessage(event) {
+  async onMessage(event) {
     const data = JSON.parse(event.data);
     const request_id = data.request_id;
 
-    const obj = data.id ? this.objects[data.id] : window;
+    let obj = data.id ? this.objects[data.id] : window;
+    // console.log('onMessage', data, obj);
 
     let response = null;
 
     switch (data.type) {
-      case "call":
+      case 'call':
         const args = this._loadData(data.args);
-        const self = data.parent_id ? this.objects[data.parent_id] : undefined;
+        let self = null;
+        if (data.prop) {
+          self = this.objects[data.id];
+          obj = self[data.prop];
+        } else {
+          self = this.objects[data.parent_id];
+        }
+
+        // console.log('calling', 'data', data, 'obj', obj, 'self', self, 'args', args);
+
         response = obj.apply(self, args);
         break;
-      case "get_keys":
+      case 'get_keys':
         response = Object.keys(obj);
         break;
-      case "get":
+      case 'get':
         if (data.prop) response = obj[data.prop];
         else if (data.key) response = obj[data.key];
         else response = obj;
         if (response && (data.prop || data.key)) {
-          response = this._dumpData(response);
-          if (typeof response === "object") response.parent_id = data.id;
+          response = await this._dumpData(response);
+          if (typeof response === 'object') response.parent_id = data.id;
         }
         break;
-      case "set":
+      case 'set':
         const value = this._loadData(data.value);
         if (data.prop) obj[data.prop] = value;
         if (data.key) obj[data.key] = value;
         break;
-      case "delete":
+      case 'delete':
         this.objects[data.id] = undefined;
         break;
-      case "response":
+      case 'response':
         this.requests[request_id](this._loadData(data.value));
         return;
       default:
-        console.error("Unknown message type:", data, data.type);
+        console.error('Unknown message type:', data, data.type);
     }
 
-    if (request_id !== undefined && data.type !== "response") {
+    if (request_id !== undefined && data.type !== 'response') {
+      response = await response;
       this.sendResponse(response, request_id);
     }
   }
 }
 
-function WebsocketLink(url) {
+export function WebsocketLink(url) {
   const socket = new WebSocket(url);
   return new CrossLink({
     send: (data) => socket.send(data),
@@ -329,17 +359,33 @@ function WebsocketLink(url) {
   });
 }
 
-function WebworkerLink(worker) {
+export function WebworkerLink(worker) {
+  // wait for first message, which means the worker has loaded and is ready
+  const workerReady = new Promise((resolve) => {
+    worker.addEventListener(
+      'message',
+      (event) => {
+        resolve();
+      },
+      { once: true }
+    );
+  });
   return new CrossLink({
     send: (data) => worker.postMessage(data),
-    onMessage: (callback) => worker.addEventListener("message", callback),
-    onOpen: (callback) => worker.addEventListener("connect", callback),
+    onMessage: async (callback) => {
+      await workerReady;
+      worker.addEventListener('message', callback);
+    },
+    onOpen: async (callback) => {
+      await workerReady;
+      callback();
+    },
   });
 }
 
 window.createLilGUI = async (args) => {
   if (window.lil === undefined) {
-    const url = "https://cdn.jsdelivr.net/npm/lil-gui@0.20";
+    const url = 'https://cdn.jsdelivr.net/npm/lil-gui@0.20';
     if (window.define === undefined) {
       await import(url);
     } else {
@@ -354,17 +400,6 @@ window.createLilGUI = async (args) => {
   return new window.lil.GUI(args);
 };
 
-window.webgpuOnResize = (canvas, callback) => {
-  let timeout = null;
-
-  const resizeObserver = new ResizeObserver((entries) => {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(callback, 100);
-  });
-
-  resizeObserver.observe(canvas);
-};
-
 window.patchedRequestAnimationFrame = (device, context, target) => {
   // context.getCurrentTexture() is only guaranteed to be valid during the requestAnimationFrame callback
   // Thus, in order to render from python asynchroniously, we are always rendering into a separate texture
@@ -376,11 +411,8 @@ window.patchedRequestAnimationFrame = (device, context, target) => {
     encoder.copyTextureToTexture(
       { texture: target },
       { texture: current },
-      { width: current.width, height: current.height },
+      { width: current.width, height: current.height }
     );
-
-    if (current.width != target.width || current.height != target.height)
-      return;
 
     device.queue.submit([encoder.finish()]);
   });

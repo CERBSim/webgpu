@@ -92,7 +92,6 @@ class Camera:
 
         canvas.on_resize(self._update_uniforms)
 
-
     def get_bindings(self) -> list[BaseBinding]:
         return self.uniforms.get_bindings()
 

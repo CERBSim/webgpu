@@ -5,6 +5,7 @@ from enum import Enum, IntFlag
 from . import platform
 from .platform import is_pyodide, JsProxy, toJS, create_proxy, JsPromise
 
+
 class BaseWebGPUHandle:
     handle: JsProxy
 
@@ -1756,4 +1757,3 @@ class Texture(BaseWebGPUHandle):
 
     def __del__(self):
         self.destroy()
-

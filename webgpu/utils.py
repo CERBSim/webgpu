@@ -8,6 +8,7 @@ from . import platform
 
 _device: Device = None
 
+
 def init_device_sync():
     global _device
     if _device is not None:
@@ -98,6 +99,7 @@ class Pyodide:
     def __setattr__(self, key, value):
         pass
 
+
 def find_shader_file(file_name, module_file) -> Path:
     for path in [module_file, __file__]:
         file_path = Path(path).parent / "shaders" / file_name
@@ -105,6 +107,7 @@ def find_shader_file(file_name, module_file) -> Path:
             return file_path
 
     raise FileNotFoundError(f"Shader file {file_name} not found")
+
 
 def read_shader_file(file_name, module_file) -> str:
     code = find_shader_file(file_name, module_file).read_text()

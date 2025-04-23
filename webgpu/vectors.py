@@ -30,9 +30,13 @@ class BaseVectorRenderObject(RenderObject):
         super().__init__(label=label)
         self.colormap = Colormap()
 
-    def update(self):
+    def update(self, timestamp):
+        if timestamp == self._timestamp:
+            return
+        self._timestamp = timestamp
+
         self.colormap.options = self.options
-        self.colormap.update()
+        self.colormap.update(timestamp)
 
     def get_bindings(self):
         return [
@@ -70,8 +74,12 @@ class VectorRenderer(BaseVectorRenderObject):
             self.bounding_box[1] - self.bounding_box[0]
         )
 
-    def update(self):
-        super().update()
+    def update(self, timestamp):
+        if timestamp == self._timestamp:
+            return
+
+        super().update(timestamp)
+
         self._buffers = {
             "points": buffer_from_array(self.points),
             "vectors": buffer_from_array(self.vectors),
@@ -85,7 +93,7 @@ class VectorRenderer(BaseVectorRenderObject):
         )
         if self.colormap.autoupdate:
             self.colormap.set_min_max(min_vec, max_vec, set_autoupdate=False)
-        self.colormap.update()
+        self.colormap.update(timestamp)
         self.n_instances = len(self.points) // 3
         self.create_render_pipeline()
 

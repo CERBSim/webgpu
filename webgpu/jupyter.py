@@ -152,10 +152,7 @@ if not platform.is_pyodide:
             time.sleep(0.1)
         port = platform.websocket_server.port
         host = f"ws://localhost:{port}"
-        js_code = (
-            _link_js_code
-            + f"WebsocketLink('{host}');"
-        )
+        js_code = _link_js_code + f"WebsocketLink('{host}');"
 
         display(Javascript(js_code))
 

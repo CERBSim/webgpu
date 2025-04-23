@@ -11,6 +11,7 @@ import math
 
 _TARGET_FPS = 60
 
+
 def debounce(render_function):
     # Render only once every 1/_TARGET_FPS seconds
     def debounced(*args, **kwargs):
@@ -25,12 +26,14 @@ def debounce(render_function):
             debounced.timer = None
             debounced.t_last = t
 
-        t_wait = max(1/_TARGET_FPS - (time.time() - debounced.t_last), 0)
+        t_wait = max(1 / _TARGET_FPS - (time.time() - debounced.t_last), 0)
         debounced.timer = Timer(t_wait, f)
         debounced.timer.start()
+
     debounced.timer = None
     debounced.t_last = time.time()
     return debounced
+
 
 class Scene:
     canvas: Canvas = None
@@ -79,17 +82,20 @@ class Scene:
             obj.options = self.options
             obj.update(timestamp=timestamp)
 
-        pmin, pmax = max_bounding_box([o.get_bounding_box() for o in self.render_objects])
+        pmin, pmax = max_bounding_box(
+            [o.get_bounding_box() for o in self.render_objects]
+        )
         camera = self.options.camera
         camera.transform._center = 0.5 * (pmin + pmax)
+
         def norm(v):
-            return math.sqrt(v[0]**2 + v[1]**2 + v[2]**2)
+            return math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+
         camera.transform._scale = 2 / norm(pmax - pmin)
         if not (pmin[2] == 0 and pmax[2] == 0):
             camera.transform.rotate(270, 0)
-            camera.transform.rotate(0,-20)
+            camera.transform.rotate(0, -20)
             camera.transform.rotate(20, 0)
-
 
         self._js_render = create_proxy(self._render_direct)
         camera.register_callbacks(canvas.input_handler, self.render)

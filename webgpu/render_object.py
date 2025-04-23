@@ -16,6 +16,7 @@ from .webgpu_api import (
     VertexState,
 )
 
+
 class RenderOptions:
     viewport: tuple[int, int, int, int, float, float]
     canvas: Canvas

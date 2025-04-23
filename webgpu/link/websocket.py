@@ -5,7 +5,7 @@ import threading
 import websockets
 import websockets.asyncio.client
 
-from .base import LinkBase
+from .base import LinkBaseAsync
 
 
 class WebsocketLinkBase(LinkBaseAsync):
