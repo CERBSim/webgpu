@@ -123,7 +123,6 @@ def read_shader_file(file_name, module_file) -> str:
             code += f"// end file {imported_file}\n"
         else:
             code += line + "\n"
-    (Path("/tmp") / file_name).write_text(code)
     return code
 
 
