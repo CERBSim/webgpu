@@ -138,7 +138,8 @@ class Scene:
         encoder = self.device.createCommandEncoder()
 
         for obj in self.render_objects:
-            obj.render(encoder)
+            if obj.active:
+                obj.render(encoder)
 
         encoder.copyTextureToTexture(
             TexelCopyTextureInfo(self.canvas.target_texture),
@@ -167,7 +168,8 @@ class Scene:
         encoder = self.device.createCommandEncoder()
 
         for obj in self.render_objects:
-            obj.render(encoder)
+            if obj.active:
+                obj.render(encoder)
 
         self.device.queue.submit([encoder.finish()])
 

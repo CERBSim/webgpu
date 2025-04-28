@@ -61,6 +61,7 @@ class BaseRenderObject:
     options: RenderOptions
     label: str = ""
     _timestamp: float = -1
+    active: bool = True
 
     def __init__(self, label=None):
         if label is None:
