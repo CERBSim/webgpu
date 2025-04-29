@@ -5,7 +5,7 @@
 
 struct VectorOptions {
  length: f32,
- padding1: f32,
+ scale_with_vector_length: u32,
  padding2: f32,
  padding3: f32
 };
@@ -53,10 +53,10 @@ fn vertex_main(@builtin(vertex_index) index: u32,
     @builtin(instance_index) instance: u32) -> VectorFragmentInput {
     let point = get_point(instance);
     let vector = get_vector(instance);
-    if length(vector) < 0.0001 {
-        return VectorFragmentInput(vec4<f32>(0., 0., 0., 0.),
-            0., vec3<f32>(0., 0., 0.));
-    }
+    // if length(vector) < 0.0001 {
+    //     return VectorFragmentInput(vec4<f32>(0., 0., 0., 0.),
+    //         0., vec3<f32>(0., 0., 0.));
+    // }
     let cp = cone_points[cone_strip[index]];
     let v = normalize(vector);
     let z_axis = vec3<f32>(0., 0., 1.);
@@ -87,6 +87,9 @@ fn vertex_main(@builtin(vertex_index) index: u32,
     }
     var rotated = rotation_matrix * cp;
     rotated = rotated * 0.2 * vec_options.length;
+    if(vec_options.scale_with_vector_length != 0u) {
+      rotated = rotated * length(vector);
+    }
     let position = point + rotated;
     let view_position = cameraMapPoint(position);
     let cone_normals = array<vec3f, 7>(-normalize(Cross(cone_points[1] - cone_points[0],

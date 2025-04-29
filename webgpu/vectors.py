@@ -16,7 +16,7 @@ class VectorUniform(UniformBase):
     _binding = Binding.OPTIONS
     _fields_ = [
         ("size", ct.c_float),
-        ("_padding1", ct.c_float),
+        ("scale_veclen", ct.c_uint32),
         ("_padding2", ct.c_float),
         ("_padding3", ct.c_float),
     ]
@@ -63,8 +63,10 @@ class BaseVectorRenderObject(RenderObject):
 
 
 class VectorRenderer(BaseVectorRenderObject):
-    def __init__(self, points, vectors, size=None):
+    def __init__(self, points, vectors, size=None,
+                 scale_with_vector_length=False):
         super().__init__(label="VectorField")
+        self.scale_with_vector_length = scale_with_vector_length
         self.points = np.asarray(points, dtype=np.float32).reshape(-1)
         self.vectors = np.asarray(vectors, dtype=np.float32).reshape(-1)
         self.bounding_box = self.points.reshape(-1, 3).min(axis=0), self.points.reshape(
@@ -86,6 +88,7 @@ class VectorRenderer(BaseVectorRenderObject):
         }
         self.vec_uniforms = VectorUniform(self.device)
         self.vec_uniforms.size = self.size
+        self.vec_uniforms.scale_veclen = self.scale_with_vector_length
         self.vec_uniforms.update_buffer()
         min_vec, max_vec = (
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).min(),
@@ -93,7 +96,7 @@ class VectorRenderer(BaseVectorRenderObject):
         )
         if self.colormap.autoupdate:
             self.colormap.set_min_max(min_vec, max_vec, set_autoupdate=False)
-        self.colormap.update(timestamp)
+            self.colormap.update(timestamp+1)
         self.n_instances = len(self.points) // 3
         self.create_render_pipeline()
 
