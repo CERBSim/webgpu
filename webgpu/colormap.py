@@ -1,4 +1,4 @@
-from webgpu.webgpu_api import (
+from .webgpu_api import (
     TexelCopyBufferLayout,
     TexelCopyTextureInfo,
     Texture,

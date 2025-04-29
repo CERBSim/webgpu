@@ -1,9 +1,9 @@
 import numpy as np
 
-from webgpu import BufferBinding, Colormap, RenderObject, read_shader_file
-from webgpu.uniforms import UniformBase, ct
-from webgpu.utils import buffer_from_array
-from webgpu.webgpu_api import PrimitiveTopology
+from . import BufferBinding, Colormap, RenderObject, read_shader_file
+from .uniforms import UniformBase, ct
+from .utils import buffer_from_array
+from .webgpu_api import PrimitiveTopology
 
 
 class Binding:
