@@ -188,7 +188,7 @@ class LinkBase:
         raise NotImplementedError
 
     def destroy_proxy(self, proxy):
-        del self._objects[proxy['id']]
+        del self._objects[proxy["id"]]
 
     def _send_response(self, request_id, data):
         return self._send_data(

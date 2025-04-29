@@ -63,8 +63,7 @@ class BaseVectorRenderObject(RenderObject):
 
 
 class VectorRenderer(BaseVectorRenderObject):
-    def __init__(self, points, vectors, size=None,
-                 scale_with_vector_length=False):
+    def __init__(self, points, vectors, size=None, scale_with_vector_length=False):
         super().__init__(label="VectorField")
         self.scale_with_vector_length = scale_with_vector_length
         self.points = np.asarray(points, dtype=np.float32).reshape(-1)
@@ -96,7 +95,7 @@ class VectorRenderer(BaseVectorRenderObject):
         )
         if self.colormap.autoupdate:
             self.colormap.set_min_max(min_vec, max_vec, set_autoupdate=False)
-            self.colormap.update(timestamp+1)
+            self.colormap.update(timestamp + 1)
         self.n_instances = len(self.points) // 3
         self.create_render_pipeline()
 
