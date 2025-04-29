@@ -20,10 +20,8 @@ from .webgpu_api import (
 class RenderOptions:
     viewport: tuple[int, int, int, int, float, float]
     canvas: Canvas
-    render_function: Callable
 
-    def __init__(self, canvas, render_function):
-        self.render_function = render_function
+    def __init__(self, canvas):
         self.canvas = canvas
         self.light = Light(self.device)
         self.camera = Camera(canvas)

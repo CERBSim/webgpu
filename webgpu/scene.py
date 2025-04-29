@@ -5,7 +5,7 @@ from .canvas import Canvas
 from .render_object import BaseRenderObject, RenderOptions
 from .utils import is_pyodide, max_bounding_box
 from .webgpu_api import *
-from .platform import create_proxy
+from .platform import create_proxy, destroy_proxy
 from . import platform
 import math
 
@@ -75,7 +75,7 @@ class Scene:
 
     def init(self, canvas):
         self.canvas = canvas
-        self.options = RenderOptions(self.canvas, self.render)
+        self.options = RenderOptions(self.canvas)
 
         timestamp = time.time()
         for obj in self.render_objects:
@@ -179,6 +179,21 @@ class Scene:
                 self.canvas.context,
                 self.canvas.target_texture,
             )
+
+    def cleanup(self):
+        for obj in self.render_objects:
+            obj.options = None
+
+        self.options.camera.unregister_callbacks(self.canvas.input_handler)
+        self.options.camera._render_function = None
+        self.canvas.input_handler.unregister_callbacks()
+        destroy_proxy(self._js_render)
+        del self._js_render
+        self.canvas._on_resize_callbacks.remove(self.render)
+        self.canvas = None
+
+        if is_pyodide:
+            del _scenes_by_id[self.id]
 
 
 if is_pyodide:

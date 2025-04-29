@@ -11,6 +11,7 @@ from collections.abc import Mapping
 
 is_pyodide = False
 create_proxy = None
+destroy_proxy = None
 js = None
 websocket_server = None
 
@@ -18,6 +19,9 @@ try:
     import js
     import pyodide.ffi
     from pyodide.ffi import create_proxy, JsPromise, JsProxy
+
+    def destroy_proxy(proxy):
+        proxy.destroy()
 
     is_pyodide = True
 
@@ -74,6 +78,7 @@ if not is_pyodide:
     toJS = lambda x: x
     websocket_server = WebsocketLinkServer()
     create_proxy = websocket_server.create_proxy
+    destroy_proxy = websocket_server.destroy_proxy
 
     class JsPromise:
         pass

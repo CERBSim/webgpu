@@ -109,6 +109,13 @@ class Camera:
         input_handler.on_mousemove(self._on_mousemove)
         input_handler.on_wheel(self._on_wheel)
 
+    def unregister_callbacks(self, input_handler):
+        input_handler.unregister("mousedown", self._on_mousedown)
+        input_handler.unregister("mouseup", self._on_mouseup)
+        input_handler.unregister("mouseout", self._on_mouseup)
+        input_handler.unregister("mousemove", self._on_mousemove)
+        input_handler.unregister("wheel", self._on_wheel)
+
     def _on_mousedown(self, ev):
         if ev["button"] == 0:
             self._is_rotating = True

@@ -1,6 +1,7 @@
 from typing import Callable
 
 from .utils import to_js
+from .platform import is_pyodide
 
 
 class InputHandler:
@@ -46,7 +47,8 @@ class InputHandler:
         for event in self._callbacks:
             for func in self._callbacks[event]:
                 self.html_canvas.removeEventListener(event, func)
-                func.destroy()
+                if is_pyodide:
+                    func.destroy()
         self._callbacks = {}
 
     def _handle_js_event(self, event_type):

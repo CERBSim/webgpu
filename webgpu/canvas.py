@@ -30,7 +30,6 @@ class Canvas:
 
         self._on_resize_callbacks = []
 
-        self.render_function = None
         self.device = device
         self.format = platform.js.navigator.gpu.getPreferredCanvasFormat()
         self.color_target = ColorTargetState(
