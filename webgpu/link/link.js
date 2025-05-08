@@ -400,6 +400,18 @@ window.createLilGUI = async (args) => {
   return new window.lil.GUI(args);
 };
 
+window.importPackage=async (url) => {
+  if (window.define === undefined) {
+    await import(url);
+  } else {
+    await new Promise(async (resolve) => {
+      require([url], (module) => {
+        resolve(module);
+      });
+    });
+  }
+}
+
 window.patchedRequestAnimationFrame = (device, context, target) => {
   // context.getCurrentTexture() is only guaranteed to be valid during the requestAnimationFrame callback
   // Thus, in order to render from python asynchroniously, we are always rendering into a separate texture

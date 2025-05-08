@@ -69,7 +69,7 @@ class InputHandler:
         return wrapper
 
     def register_callbacks(self):
-        from .webgpu_api import create_proxy
+        from .platform import create_proxy
 
         self.unregister_callbacks()
         options = to_js({"capture": True})

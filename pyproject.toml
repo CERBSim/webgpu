@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webgpu"
-version = "0.0.1"
+version = "0.0.2.dev0"
 description = "A Python based WebGPU API using pyodide"
 authors = [
     { name = "Matthias Hochsteger", email = "mhochsteger@cerbsim.com" }

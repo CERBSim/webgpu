@@ -5,7 +5,6 @@ from .canvas import Canvas
 from .render_object import BaseRenderObject, RenderOptions
 from .utils import is_pyodide, max_bounding_box
 from .webgpu_api import *
-from .platform import create_proxy, destroy_proxy
 from . import platform
 import math
 
@@ -97,7 +96,7 @@ class Scene:
             camera.transform.rotate(0, -20)
             camera.transform.rotate(20, 0)
 
-        self._js_render = create_proxy(self._render_direct)
+        self._js_render = platform.create_proxy(self._render_direct)
         camera.register_callbacks(canvas.input_handler, self.render)
         self.options.update_buffers()
         if is_pyodide:
@@ -187,7 +186,7 @@ class Scene:
         self.options.camera.unregister_callbacks(self.canvas.input_handler)
         self.options.camera._render_function = None
         self.canvas.input_handler.unregister_callbacks()
-        destroy_proxy(self._js_render)
+        platform.destroy_proxy(self._js_render)
         del self._js_render
         self.canvas._on_resize_callbacks.remove(self.render)
         self.canvas = None

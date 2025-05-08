@@ -7,6 +7,12 @@ from collections.abc import Mapping
 from typing import Callable
 
 
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
 class LinkBase:
     _request_id: itertools.count
     _requests: dict
@@ -26,36 +32,29 @@ class LinkBase:
         self._requests = {}
         self._objects = {}
 
-    def call_method(self, id=None, prop=None, args=[]):
+    def _call_data(self, id, prop, args, ignore_result=False):
+        return {
+            "request_id": next(self._request_id) if not ignore_result else None,
+            "prop": prop,
+            "type": "call",
+            "id": id,
+            "args": self._dump_data(args),
+        }
+
+    def call_new(self, id=None, prop=None, args=[], ignore_result=False):
         return self._send_data(
-            {
-                "request_id": next(self._request_id),
-                "prop": prop,
-                "type": "call",
-                "id": id,
-                "args": self._dump_data(args),
-            }
+            self._call_data(id, prop, args, ignore_result) | {"type": "new"}
         )
+
+    def call_method(self, id=None, prop=None, args=[], ignore_result=False):
+        return self._send_data(self._call_data(id, prop, args, ignore_result))
 
     def call_method_ignore_return(self, id=None, prop=None, args=[]):
-        self._send_data(
-            {
-                "prop": prop,
-                "type": "call",
-                "id": id,
-                "args": self._dump_data(args),
-            }
-        )
+        return self.call(id, prop, args, ignore_result=True)
 
-    def call(self, id, args=[], parent_id=None):
+    def call(self, id, args=[], parent_id=None, ignore_result=False):
         return self._send_data(
-            {
-                "request_id": next(self._request_id),
-                "id": id,
-                "type": "call",
-                "parent_id": parent_id,
-                "args": self._dump_data(args),
-            }
+            self._call_data(id, None, args, ignore_result) | {"parent_id": parent_id}
         )
 
     def set_item(self, id, key, value):
@@ -167,7 +166,7 @@ class LinkBase:
             return data
 
         if not data.get("__is_crosslink_type__", False):
-            return {k: self._load_data(v) for k, v in data.items()}
+            return AttrDict({k: self._load_data(v) for k, v in data.items()})
 
         if data["type"] == "object":
             return self._objects[data["id"]]
@@ -191,13 +190,16 @@ class LinkBase:
         del self._objects[proxy["id"]]
 
     def _send_response(self, request_id, data):
-        return self._send_data(
-            {
+        if type(data) is bytes:
+            data = request_id.to_bytes(4, "big") + data
+        else:
+            data = {
                 "request_id": request_id,
                 "type": "response",
                 "value": self._dump_data(data),
             }
-        )
+
+        self._send_data(data)
 
     def _get_obj(self, data):
         obj = self._objects
@@ -208,7 +210,7 @@ class LinkBase:
         if id_ is not None:
             obj = obj[data["id"]]
         if prop is not None:
-            obj = obj.__getattribute__(str(data["prop"]))
+            obj = obj.__getattribute__(prop)
         if key is not None:
             obj = obj[data["key"]]
         return obj
@@ -233,7 +235,6 @@ class LinkBase:
                 case "call":
                     func = self._get_obj(data)
                     args = self._load_data(data["args"])
-                    # print("call", func, args)
                     response = func(*args)
                     try:
                         response = await response
@@ -266,6 +267,8 @@ class LinkBase:
             from webapp_client.utils import print_exception
 
             print("error in on_message", data, type(e), str(e))
+            if "id" in data and data["id"] in self._objects:
+                print("object", data["id"], self._objects[data["id"]])
             print_exception(e)
 
     def _on_message(self, message: str):
@@ -318,10 +321,12 @@ class LinkBase:
             print_exception(e)
 
 
-class LinkSync(LinkBase):
-    def __init__(self, send_message):
+class PyodideLink(LinkBase):
+    def __init__(self, send_message, size_buffer, result_buffer):
         super().__init__()
         self._send_message = send_message
+        self._size_buffer = size_buffer
+        self._result_buffer = result_buffer
 
     def create_proxy(self, func, ignore_return_value=False):
         id_ = id(func)
@@ -334,9 +339,26 @@ class LinkSync(LinkBase):
         }
 
     def _send_data(self, data):
-        if data["type"] != "response":
-            data.pop("request_id", None)
-        self._send_message(json.dumps(data))
+        if type(data) is bytes:
+            self._send_message(data)
+        else:
+            if (
+                data.get("request_id", None) is not None
+                and data["type"] != "response"
+                and not data.get("ignore_return_value", False)
+            ):
+                import js
+
+                js.Atomics.store(self._size_buffer, 0, 0)
+                self._send_message(json.dumps(data))
+                js.Atomics.wait(self._size_buffer, 0, 0, 10000)
+                n = self._size_buffer[0]
+                res = bytes(self._result_buffer.slice(0, n))
+                s = res.decode("utf-8")
+                data = json.loads(s)
+                return self._load_data(data.get("value", None))
+            else:
+                self._send_message(json.dumps(data))
 
 
 class LinkBaseAsync(LinkBase):

@@ -14,11 +14,12 @@ create_proxy = None
 destroy_proxy = None
 js = None
 websocket_server = None
+link = None
 
 try:
-    import js
+    import js as pyodide_js
     import pyodide.ffi
-    from pyodide.ffi import create_proxy, JsPromise, JsProxy
+    from pyodide.ffi import JsPromise, JsProxy, create_proxy
 
     def destroy_proxy(proxy):
         proxy.destroy()
@@ -61,7 +62,7 @@ try:
         value = _convert(value)
         ret = pyodide.ffi.to_js(
             value,
-            dict_converter=js.Object.fromEntries,
+            dict_converter=pyodide_js.Object.fromEntries,
             default_converter=_default_converter,
             create_pyproxies=False,
         )
@@ -72,29 +73,36 @@ except ImportError:
 
 if not is_pyodide:
     from .link.proxy import Proxy as JsProxy
-
     from .link.websocket import WebsocketLinkServer
 
     toJS = lambda x: x
-    websocket_server = WebsocketLinkServer()
-    create_proxy = websocket_server.create_proxy
-    destroy_proxy = websocket_server.destroy_proxy
 
     class JsPromise:
         pass
 
 
 if is_pyodide:
-    from .link.base import LinkBase
     import json
 
-    LinkBase.register_serializer(JsProxy, lambda v: json.loads(js.JSON.stringify(v)))
+    from .link.base import LinkBase
+
+    LinkBase.register_serializer(
+        JsProxy, lambda v: json.loads(pyodide_js.JSON.stringify(v))
+    )
 
 
-def init():
-    global js
+def init(before_wait_for_connection=None):
+    global js, create_proxy, destroy_proxy, websocket_server, link
     if is_pyodide or js is not None:
         return
+
+    websocket_server = WebsocketLinkServer()
+    create_proxy = websocket_server.create_proxy
+    destroy_proxy = websocket_server.destroy_proxy
+    link = websocket_server
+
+    if before_wait_for_connection:
+        before_wait_for_connection(websocket_server)
 
     websocket_server.wait_for_connection()
     js = websocket_server.get(None, None)
@@ -106,3 +114,18 @@ def init():
     LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
 
     websocket_server._start_handling_messages.set()
+
+
+def init_pyodide(link_):
+    global link
+    link = link_
+    print("init pyodide with link")
+    global js
+    js = link.get(None, None)
+    print("JS:", js)
+
+    from .link.base import LinkBase
+    from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject
+
+    LinkBase.register_serializer(BaseWebGPUHandle, lambda v: v.handle)
+    LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
