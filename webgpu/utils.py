@@ -353,7 +353,34 @@ class ReadBuffer:
         data = self.read_buffer.handle.getMappedRange(0, self.read_buffer.size)
         res = np.frombuffer(data, dtype=dtype)
         self.read_buffer.unmap()
+        self.read_buffer.destroy()
         return res
+
+
+def read_texture(texture, bytes_per_pixel=4):
+    import numpy as np
+
+    bytes_per_row = (texture.width * bytes_per_pixel + 255) // 256 * 256
+    size = bytes_per_row * texture.height
+    device = get_device()
+    buffer = device.createBuffer(
+        size=size,
+        usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
+    )
+    encoder = device.createCommandEncoder()
+    encoder.copyTextureToBuffer(
+        TexelCopyTextureInfo(texture),
+        TexelCopyBufferInfo(buffer, 0, bytes_per_row),
+        [texture.width, texture.height, 1],
+    )
+    device.queue.submit([encoder.finish()])
+    buffer.handle.mapAsync(MapMode.READ, 0, size)
+    data = buffer.handle.getMappedRange(0, size)
+    data = np.frombuffer(data, dtype=np.uint8).reshape((texture.height, -1, bytes_per_pixel))
+    data = data[:, : texture.width, :]
+    buffer.unmap()
+    buffer.destroy()
+    return data
 
 
 def max_bounding_box(boxes):

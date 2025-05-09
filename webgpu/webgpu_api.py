@@ -942,8 +942,10 @@ class TexelCopyBufferLayout(BaseWebGPUObject):
 
 @dataclass
 class TexelCopyBufferInfo(BaseWebGPUObject):
-    layout: TexelCopyBufferLayout
     buffer: "Buffer"
+    offset: int = 0
+    bytesPerRow: int | None = None
+    rowsPerImage: int | None = None
 
 
 @dataclass
