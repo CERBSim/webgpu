@@ -100,13 +100,14 @@ class Canvas:
             usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
             label="target",
         )
-        self.multisample_texture = device.createTexture(
-            size=[width, height, 1],
-            sampleCount=self.multisample.count,
-            format=self.format,
-            usage=TextureUsage.RENDER_ATTACHMENT,
-            label="multisample",
-        )
+        if self.multisample.count > 1:
+            self.multisample_texture = device.createTexture(
+                size=[width, height, 1],
+                sampleCount=self.multisample.count,
+                format=self.format,
+                usage=TextureUsage.RENDER_ATTACHMENT,
+                label="multisample",
+            )
 
         self.depth_texture = device.createTexture(
             size=[width, height, 1],
@@ -122,11 +123,15 @@ class Canvas:
             func()
 
     def color_attachments(self, loadOp: LoadOp):
+        have_multisample = self.multisample.count > 1
         return [
             RenderPassColorAttachment(
-                view=self.multisample_texture.createView(),
-                resolveTarget=self.target_texture_view,
-                # view=self.context.getCurrentTexture().createView(),
+                view=(
+                    self.multisample_texture.createView()
+                    if have_multisample
+                    else self.target_texture_view
+                ),
+                resolveTarget=self.target_texture_view if have_multisample else None,
                 clearValue=Color(1, 1, 1, 1),
                 loadOp=loadOp,
             )

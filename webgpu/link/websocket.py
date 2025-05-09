@@ -94,7 +94,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
             while True:
                 try:
                     async with websockets.serve(
-                        self._websocket_handler, "", self._port, max_size=2*1024**3
+                        self._websocket_handler, "", self._port, max_size=2 * 1024**3
                     ):
                         # print("server running on port", self._port)
                         await self._stop
