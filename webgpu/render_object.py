@@ -4,7 +4,7 @@ from typing import Callable
 from .camera import Camera
 from .canvas import Canvas
 from .light import Light
-from .utils import BaseBinding, is_pyodide, create_bind_group, get_device
+from .utils import BaseBinding, create_bind_group, get_device, is_pyodide
 from .webgpu_api import (
     CommandEncoder,
     CompareFunction,
@@ -48,9 +48,7 @@ class RenderOptions:
             **kwargs,
         )
 
-        render_pass_encoder.setViewport(
-            0, 0, self.canvas.width, self.canvas.height, 0.0, 1.0
-        )
+        render_pass_encoder.setViewport(0, 0, self.canvas.width, self.canvas.height, 0.0, 1.0)
 
         return render_pass_encoder
 
@@ -133,9 +131,7 @@ class RenderObject(BaseRenderObject):
         layout, self.group = create_bind_group(self.device, self.get_bindings())
         self.pipeline = self.device.createRenderPipeline(
             self.device.createPipelineLayout([layout]),
-            vertex=VertexState(
-                module=shader_module, entryPoint=self.vertex_entry_point
-            ),
+            vertex=VertexState(module=shader_module, entryPoint=self.vertex_entry_point),
             fragment=FragmentState(
                 module=shader_module,
                 entryPoint=self.fragment_entry_point,

@@ -2,9 +2,9 @@ import base64
 import zlib
 from pathlib import Path
 
+from . import platform
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
-from . import platform
 
 _device: Device = None
 
@@ -78,9 +78,7 @@ async def init_device() -> Device:
     js.console.log("device limits\n", limits)
     js.console.log("adapter info\n", adapter.info)
 
-    print(
-        f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB"
-    )
+    print(f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB")
     print(f"max buffer size {limits.maxBufferSize / one_meg:.2f} MB")
 
     return _device
@@ -270,9 +268,7 @@ def create_bind_group(device, bindings: list, label=""):
 class TimeQuery:
     def __init__(self, device):
         self.device = device
-        self.query_set = self.device.createQuerySet(
-            to_js({"type": "timestamp", "count": 2})
-        )
+        self.query_set = self.device.createQuerySet(to_js({"type": "timestamp", "count": 2}))
         self.buffer = self.device.createBuffer(
             size=16,
             usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
@@ -307,9 +303,7 @@ def reload_package(package_name):
     return reloaded_modules
 
 
-def run_compute_shader(
-    encoder, code, bindings, n_workgroups, label="compute", entry_point="main"
-):
+def run_compute_shader(encoder, code, bindings, n_workgroups, label="compute", entry_point="main"):
     from webgpu.utils import create_bind_group, get_device
 
     device = get_device()

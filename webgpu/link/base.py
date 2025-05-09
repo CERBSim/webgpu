@@ -42,9 +42,7 @@ class LinkBase:
         }
 
     def call_new(self, id=None, prop=None, args=[], ignore_result=False):
-        return self._send_data(
-            self._call_data(id, prop, args, ignore_result) | {"type": "new"}
-        )
+        return self._send_data(self._call_data(id, prop, args, ignore_result) | {"type": "new"})
 
     def call_method(self, id=None, prop=None, args=[], ignore_result=False):
         return self._send_data(self._call_data(id, prop, args, ignore_result))
@@ -226,9 +224,7 @@ class LinkBase:
             match msg_type:
                 case "response":
                     event = self._requests[request_id]
-                    self._requests[request_id] = self._load_data(
-                        data.get("value", None)
-                    )
+                    self._requests[request_id] = self._load_data(data.get("value", None))
                     event.set()
                     return
 
@@ -282,9 +278,7 @@ class LinkBase:
             match msg_type:
                 case "response":
                     event = self._requests[request_id]
-                    self._requests[request_id] = self._load_data(
-                        data.get("value", None)
-                    )
+                    self._requests[request_id] = self._load_data(data.get("value", None))
                     event.set()
                     return
 
@@ -373,9 +367,7 @@ class LinkBaseAsync(LinkBase):
         self._callback_loop = asyncio.new_event_loop()
         self._callback_queue = asyncio.Queue()
 
-        self._callback_thread = threading.Thread(
-            target=self._start_callback_thread, daemon=True
-        )
+        self._callback_thread = threading.Thread(target=self._start_callback_thread, daemon=True)
         self._callback_thread.start()
 
     def wait_for_connection(self):

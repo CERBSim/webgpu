@@ -85,9 +85,7 @@ class Labels(RenderObject):
             v_align = self.v_align if isinstance(self.v_align, str) else self.v_align[i]
             align = align_map[h_align] + 4 * align_map[v_align]
             apply_camera = (
-                self.apply_camera
-                if isinstance(self.apply_camera, bool)
-                else self.apply_camera[i]
+                self.apply_camera if isinstance(self.apply_camera, bool) else self.apply_camera[i]
             )
 
             if len(pos) == 2:

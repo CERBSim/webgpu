@@ -1,6 +1,6 @@
+import base64
 import itertools
 import os
-import base64
 import pickle
 import time
 
@@ -36,9 +36,7 @@ def create_package_zip(module_name="webgpu"):
             for root, _, files in os.walk(package_dir):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(
-                        file_path, start=os.path.dirname(package_dir)
-                    )
+                    arcname = os.path.relpath(file_path, start=os.path.dirname(package_dir))
                     zipf.write(file_path, arcname)
 
         return open(output_filename, "rb").read()

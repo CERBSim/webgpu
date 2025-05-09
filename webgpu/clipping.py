@@ -1,9 +1,8 @@
-from .render_object import BaseRenderObject
-from .utils import read_shader_file
-
-from .uniforms import UniformBase, ct
-
 import time
+
+from .render_object import BaseRenderObject
+from .uniforms import UniformBase, ct
+from .utils import read_shader_file
 
 
 class Binding:
@@ -84,9 +83,7 @@ class Clipping(BaseRenderObject):
 
     def add_options_to_gui(self, gui):
         folder = gui.folder("Clipping", closed=True)
-        folder.checkbox(
-            "enabled", self.mode != self.Mode.DISABLED, self.enable_clipping
-        )
+        folder.checkbox("enabled", self.mode != self.Mode.DISABLED, self.enable_clipping)
         folder.value("x", self.center[0], self.set_x_value)
         folder.value("y", self.center[1], self.set_y_value)
         folder.value("z", self.center[2], self.set_z_value)

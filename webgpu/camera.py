@@ -26,9 +26,7 @@ class Transform:
         self._scale = 1
 
     def translate(self, dx=0.0, dy=0.0, dz=0.0):
-        translation = np.array(
-            [[1, 0, 0, dx], [0, 1, 0, dy], [0, 0, 1, dz], [0, 0, 0, 1]]
-        )
+        translation = np.array([[1, 0, 0, dx], [0, 1, 0, dy], [0, 0, 1, dz], [0, 0, 0, 1]])
         self._mat = translation @ self._mat
 
     def scale(self, s):

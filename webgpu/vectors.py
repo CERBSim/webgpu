@@ -68,12 +68,10 @@ class VectorRenderer(BaseVectorRenderObject):
         self.scale_with_vector_length = scale_with_vector_length
         self.points = np.asarray(points, dtype=np.float32).reshape(-1)
         self.vectors = np.asarray(vectors, dtype=np.float32).reshape(-1)
-        self.bounding_box = self.points.reshape(-1, 3).min(axis=0), self.points.reshape(
-            -1, 3
-        ).max(axis=0)
-        self.size = size or 1 / 10 * np.linalg.norm(
-            self.bounding_box[1] - self.bounding_box[0]
+        self.bounding_box = self.points.reshape(-1, 3).min(axis=0), self.points.reshape(-1, 3).max(
+            axis=0
         )
+        self.size = size or 1 / 10 * np.linalg.norm(self.bounding_box[1] - self.bounding_box[0])
 
     def update(self, timestamp):
         if timestamp == self._timestamp:

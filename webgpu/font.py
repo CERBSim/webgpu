@@ -142,9 +142,7 @@ class Font:
 
     def update(self):
         self.uniforms.width_normalized = 2.0 * self.uniforms.width / self.canvas.width
-        self.uniforms.height_normalized = (
-            2.0 * self.uniforms.height / self.canvas.height
-        )
+        self.uniforms.height_normalized = 2.0 * self.uniforms.height / self.canvas.height
         self.uniforms.update_buffer()
 
 

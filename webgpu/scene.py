@@ -1,12 +1,12 @@
-from threading import Timer
+import math
 import time
+from threading import Timer
 
+from . import platform
 from .canvas import Canvas
 from .render_object import BaseRenderObject, RenderOptions
 from .utils import is_pyodide, max_bounding_box
 from .webgpu_api import *
-from . import platform
-import math
 
 _TARGET_FPS = 60
 
@@ -81,9 +81,7 @@ class Scene:
             obj.options = self.options
             obj.update(timestamp=timestamp)
 
-        pmin, pmax = max_bounding_box(
-            [o.get_bounding_box() for o in self.render_objects]
-        )
+        pmin, pmax = max_bounding_box([o.get_bounding_box() for o in self.render_objects])
         camera = self.options.camera
         camera.transform._center = 0.5 * (pmin + pmax)
 
@@ -126,9 +124,7 @@ class Scene:
             for obj in self.render_objects:
                 obj.redraw(timestamp=ts)
 
-            run_code_in_pyodide(
-                f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')"
-            )
+            run_code_in_pyodide(f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')")
 
     def _render(self):
         platform.js.requestAnimationFrame(self._js_render)

@@ -1,7 +1,7 @@
 from typing import Callable
 
-from .utils import to_js
 from .platform import is_pyodide
+from .utils import to_js
 
 
 class InputHandler:

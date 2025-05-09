@@ -13,9 +13,7 @@ class Binding:
 class TriangulationRenderer(RenderObject):
     n_vertices: int = 3
 
-    def __init__(
-        self, points, normals=None, color=(0.0, 1.0, 0.0, 1.0), label="Triangulation"
-    ):
+    def __init__(self, points, normals=None, color=(0.0, 1.0, 0.0, 1.0), label="Triangulation"):
         super().__init__(label=label)
         self.color = color
         self.points = np.asarray(points, dtype=np.float32).reshape(-1)

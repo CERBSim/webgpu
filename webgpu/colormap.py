@@ -1,3 +1,7 @@
+from .labels import Labels
+from .render_object import MultipleRenderObject, RenderObject
+from .uniforms import Binding, UniformBase, ct
+from .utils import SamplerBinding, TextureBinding, format_number, read_shader_file
 from .webgpu_api import (
     TexelCopyBufferLayout,
     TexelCopyTextureInfo,
@@ -5,11 +9,6 @@ from .webgpu_api import (
     TextureFormat,
     TextureUsage,
 )
-
-from .labels import Labels
-from .render_object import MultipleRenderObject, RenderObject
-from .uniforms import Binding, UniformBase, ct
-from .utils import SamplerBinding, TextureBinding, format_number, read_shader_file
 
 
 class ColormapUniforms(UniformBase):
@@ -154,8 +153,7 @@ class Colormap(MultipleRenderObject):
         self.labels.labels = [
             format_number(v)
             for v in [
-                self.colorbar.minval
-                + i / 4 * (self.colorbar.maxval - self.colorbar.minval)
+                self.colorbar.minval + i / 4 * (self.colorbar.maxval - self.colorbar.minval)
                 for i in range(6)
             ]
         ]

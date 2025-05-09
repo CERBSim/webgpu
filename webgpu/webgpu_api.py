@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
 from . import platform
-from .platform import is_pyodide, JsProxy, toJS, create_proxy, JsPromise
+from .platform import JsPromise, JsProxy, create_proxy, is_pyodide, toJS
 
 
 class BaseWebGPUHandle:
@@ -1136,9 +1136,7 @@ class CommandEncoder(BaseWebGPUHandle):
         destination: TexelCopyTextureInfo,
         copySize: list,
     ) -> None:
-        return self.handle.copyBufferToTexture(
-            source.toJS(), destination.toJS(), copySize
-        )
+        return self.handle.copyBufferToTexture(source.toJS(), destination.toJS(), copySize)
 
     def copyTextureToBuffer(
         self,
@@ -1146,9 +1144,7 @@ class CommandEncoder(BaseWebGPUHandle):
         destination: TexelCopyBufferInfo,
         copySize: list,
     ) -> None:
-        return self.handle.copyTextureToBuffer(
-            source.toJS(), destination.toJS(), copySize
-        )
+        return self.handle.copyTextureToBuffer(source.toJS(), destination.toJS(), copySize)
 
     def copyTextureToTexture(
         self,
@@ -1156,9 +1152,7 @@ class CommandEncoder(BaseWebGPUHandle):
         destination: TexelCopyTextureInfo,
         copySize: list,
     ) -> None:
-        return self.handle.copyTextureToTexture(
-            source.toJS(), destination.toJS(), copySize
-        )
+        return self.handle.copyTextureToTexture(source.toJS(), destination.toJS(), copySize)
 
     def clearBuffer(self, buffer: Buffer, offset: int = 0, size: int = 0) -> None:
         return self.handle.clearBuffer(buffer.handle, offset, size)
@@ -1212,16 +1206,10 @@ class ComputePassEncoder(BaseWebGPUHandle):
         workgroupCountY: int = 0,
         workgroupCountZ: int = 0,
     ) -> None:
-        return self.handle.dispatchWorkgroups(
-            workgroupCountX, workgroupCountY, workgroupCountZ
-        )
+        return self.handle.dispatchWorkgroups(workgroupCountX, workgroupCountY, workgroupCountZ)
 
-    def dispatchWorkgroupsIndirect(
-        self, indirectBuffer: Buffer, indirectOffset: int = 0
-    ) -> None:
-        return self.handle.dispatchWorkgroupsIndirect(
-            indirectBuffer.handle, indirectOffset
-        )
+    def dispatchWorkgroupsIndirect(self, indirectBuffer: Buffer, indirectOffset: int = 0) -> None:
+        return self.handle.dispatchWorkgroupsIndirect(indirectBuffer.handle, indirectOffset)
 
     def end(self) -> None:
         return self.handle.end()
@@ -1280,9 +1268,7 @@ class Device(BaseWebGPUHandle):
         label: str = "",
     ) -> CommandEncoder:
         return CommandEncoder(
-            self.handle.createCommandEncoder(
-                CommandEncoderDescriptor(label=label).toJS()
-            )
+            self.handle.createCommandEncoder(CommandEncoderDescriptor(label=label).toJS())
         )
 
     async def createComputePipelineAsync(
@@ -1319,16 +1305,12 @@ class Device(BaseWebGPUHandle):
         label: str = "",
     ) -> PipelineLayout:
         return self.handle.createPipelineLayout(
-            PipelineLayoutDescriptor(
-                bindGroupLayouts=bindGroupLayouts, label=label
-            ).toJS()
+            PipelineLayoutDescriptor(bindGroupLayouts=bindGroupLayouts, label=label).toJS()
         )
 
     def createQuerySet(self, count: int, label: str = "") -> "QuerySet":
         return self.handle.createQuerySet(
-            QuerySetDescriptor(
-                type=QueryType.occlusion, count=count, label=label
-            ).toJS()
+            QuerySetDescriptor(type=QueryType.occlusion, count=count, label=label).toJS()
         )
 
     def createRenderPipeline(
@@ -1376,9 +1358,7 @@ class Device(BaseWebGPUHandle):
         )
 
     def createRenderBundleEncoder(self, label: str = "") -> "RenderBundleEncoder":
-        return self.handle.createRenderBundleEncoder(
-            RenderBundleDescriptor(label=label).toJS()
-        )
+        return self.handle.createRenderBundleEncoder(RenderBundleDescriptor(label=label).toJS())
 
     def createSampler(
         self,
@@ -1551,9 +1531,7 @@ class RenderBundleEncoder(BaseWebGPUHandle):
     def drawIndirect(self, indirectBuffer: Buffer, indirectOffset: int = 0) -> None:
         return self.handle.drawIndirect(indirectBuffer.handle, indirectOffset)
 
-    def drawIndexedIndirect(
-        self, indirectBuffer: Buffer, indirectOffset: int = 0
-    ) -> None:
+    def drawIndexedIndirect(self, indirectBuffer: Buffer, indirectOffset: int = 0) -> None:
         return self.handle.drawIndexedIndirect(indirectBuffer.handle, indirectOffset)
 
     def insertDebugMarker(self, markerLabel: str = "") -> None:
@@ -1630,9 +1608,7 @@ class RenderPassEncoder(BaseWebGPUHandle):
     def drawIndirect(self, indirectBuffer: Buffer, indirectOffset: int = 0) -> None:
         return self.handle.drawIndirect(indirectBuffer.handle, indirectOffset)
 
-    def drawIndexedIndirect(
-        self, indirectBuffer: Buffer, indirectOffset: int = 0
-    ) -> None:
+    def drawIndexedIndirect(self, indirectBuffer: Buffer, indirectOffset: int = 0) -> None:
         return self.handle.drawIndexedIndirect(indirectBuffer.handle, indirectOffset)
 
     def executeBundles(self, bundles: list["RenderBundle"] = []) -> None:
@@ -1664,9 +1640,7 @@ class RenderPassEncoder(BaseWebGPUHandle):
     ) -> None:
         return self.handle.setViewport(x, y, width, height, minDepth, maxDepth)
 
-    def setScissorRect(
-        self, x: int = 0, y: int = 0, width: int = 0, height: int = 0
-    ) -> None:
+    def setScissorRect(self, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> None:
         return self.handle.setScissorRect(x, y, width, height)
 
     def setVertexBuffer(
@@ -1712,9 +1686,7 @@ class ShaderModule(BaseWebGPUHandle):
 
 
 class Texture(BaseWebGPUHandle):
-    def createView(
-        self, descriptor: TextureViewDescriptor | None = None
-    ) -> "TextureView":
+    def createView(self, descriptor: TextureViewDescriptor | None = None) -> "TextureView":
         if descriptor is None:
             return TextureView(self.handle.createView())
         return TextureView(self.handle.createView(descriptor.toJS()))

@@ -1,9 +1,9 @@
 from typing import Callable
 
+from . import platform
 from .input_handler import InputHandler
 from .utils import get_device
 from .webgpu_api import *
-from . import platform
 
 
 def init_webgpu(html_canvas):

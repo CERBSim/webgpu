@@ -86,9 +86,7 @@ if is_pyodide:
 
     from .link.base import LinkBase
 
-    LinkBase.register_serializer(
-        JsProxy, lambda v: json.loads(pyodide_js.JSON.stringify(v))
-    )
+    LinkBase.register_serializer(JsProxy, lambda v: json.loads(pyodide_js.JSON.stringify(v)))
 
 
 def init(before_wait_for_connection=None):
