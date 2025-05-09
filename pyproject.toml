@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=60", "wheel", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "webgpu"
-version = "0.0.2.dev0"
+dynamic = ["version"]
 description = "A Python based WebGPU API using pyodide"
 authors = [
     { name = "Matthias Hochsteger", email = "mhochsteger@cerbsim.com" }
 ]
 license = { text = " LGPLv2+" }
-keywords = ["WebGPU", "compute shaders", "graphics", "Python", "pyodide"]
+keywords = ["webgpu", "compute shaders", "graphics", "python", "pyodide", "wgsl"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)",
@@ -19,5 +19,19 @@ classifiers = [
 readme = "README.md"
 requires-python = ">=3.8"
 
+[tool.setuptools_scm]
+version_file = "webgpu/_version.py"
+local_scheme = "no-local-version"
+
 [tool.setuptools.package-data]
 "webgpu" = ["shaders/*.wgsl", "fonts.json"]
+
+[tool.isort]
+profile = "black"
+src_paths = ["webgpu", "examples"]
+skip_glob = ["**/_version.py"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+include = '\.pyi?$'
