@@ -9,11 +9,10 @@ description = "A Python based WebGPU API using pyodide"
 authors = [
     { name = "Matthias Hochsteger", email = "mhochsteger@cerbsim.com" }
 ]
-license = { text = " LGPLv2+" }
+license = "LGPL-2.1-or-later"
 keywords = ["webgpu", "compute shaders", "graphics", "python", "pyodide", "wgsl"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)",
     "Operating System :: OS Independent"
 ]
 readme = "README.md"
