@@ -16,7 +16,7 @@ struct ShapeVertexOut {
     @location(1) value: f32,
 };
 
-@vertexfn cylinder_vertex_main(
+@vertex fn cylinder_vertex_main(
     vert: ShapeVertexIn,
     @builtin(instance_index) instance_index: u32,
 ) -> ShapeVertexOut {
@@ -35,7 +35,7 @@ struct ShapeVertexOut {
     return out;
 }
 
-@fragmentfn shape_fragment_main(
+@fragment fn shape_fragment_main(
     input: ShapeVertexOut,
 ) -> @location(0) vec4f {
     let color = getColor(input.value);
