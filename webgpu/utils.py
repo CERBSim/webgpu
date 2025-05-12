@@ -337,9 +337,11 @@ def run_compute_shader(
         device.queue.submit([encoder.finish()])
 
 
-def buffer_from_array(array, usage=BufferUsage.STORAGE | BufferUsage.COPY_DST):
+def buffer_from_array(array, usage=BufferUsage.STORAGE, label="") -> Buffer:
     device = get_device()
-    buffer = device.createBuffer(array.size * array.itemsize, usage=usage)
+    buffer = device.createBuffer(
+        array.size * array.itemsize, usage=usage | BufferUsage.COPY_DST, label=label
+    )
     device.queue.writeBuffer(buffer, 0, array.tobytes())
     return buffer
 

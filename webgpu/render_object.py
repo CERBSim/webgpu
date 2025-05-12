@@ -1,11 +1,11 @@
-import uuid
 from typing import Callable
 
 from .camera import Camera
 from .canvas import Canvas
 from .light import Light
-from .utils import BaseBinding, create_bind_group, get_device, is_pyodide
+from .utils import BaseBinding, create_bind_group, get_device
 from .webgpu_api import (
+    Buffer,
     CommandEncoder,
     CompareFunction,
     DepthStencilState,
@@ -13,6 +13,7 @@ from .webgpu_api import (
     FragmentState,
     PrimitiveState,
     PrimitiveTopology,
+    VertexBufferLayout,
     VertexState,
 )
 
@@ -53,6 +54,18 @@ class RenderOptions:
         return render_pass_encoder
 
 
+def check_timestamp(callback: Callable):
+    """Decorator to handle updates for render objects. The function is only called if the timestamp has changed."""
+
+    def wrapper(self, timestamp, *args, **kwargs):
+        if timestamp == self._timestamp:
+            return
+        callback(self, timestamp, *args, **kwargs)
+        self._timestamp = timestamp
+
+    return wrapper
+
+
 class BaseRenderObject:
     options: RenderOptions
     label: str = ""
@@ -68,10 +81,8 @@ class BaseRenderObject:
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0])
 
+    @check_timestamp
     def update(self, timestamp):
-        if timestamp == self._timestamp:
-            return
-        self._timestamp = timestamp
         self.create_render_pipeline()
 
     @property
@@ -125,13 +136,19 @@ class RenderObject(BaseRenderObject):
     depthBias: int = 0
     vertex_entry_point: str = "vertex_main"
     fragment_entry_point: str = "fragment_main"
+    vertex_buffer_layouts: list[VertexBufferLayout] = []
+    vertex_buffer: Buffer | None = None
 
     def create_render_pipeline(self) -> None:
         shader_module = self.device.createShaderModule(self.get_shader_code())
         layout, self.group = create_bind_group(self.device, self.get_bindings())
         self.pipeline = self.device.createRenderPipeline(
             self.device.createPipelineLayout([layout]),
-            vertex=VertexState(module=shader_module, entryPoint=self.vertex_entry_point),
+            vertex=VertexState(
+                module=shader_module,
+                entryPoint=self.vertex_entry_point,
+                buffers=self.vertex_buffer_layouts,
+            ),
             fragment=FragmentState(
                 module=shader_module,
                 entryPoint=self.fragment_entry_point,
@@ -151,5 +168,7 @@ class RenderObject(BaseRenderObject):
         render_pass = self.options.begin_render_pass(encoder)
         render_pass.setPipeline(self.pipeline)
         render_pass.setBindGroup(0, self.group)
+        if self.vertex_buffer is not None:
+            render_pass.setVertexBuffer(0, self.vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
