@@ -303,7 +303,9 @@ def reload_package(package_name):
     return reloaded_modules
 
 
-def run_compute_shader(encoder, code, bindings, n_workgroups, label="compute", entry_point="main"):
+def run_compute_shader(
+    code, bindings, n_workgroups, label="compute", entry_point="main", encoder=None
+):
     from webgpu.utils import create_bind_group, get_device
 
     device = get_device()
@@ -320,11 +322,19 @@ def run_compute_shader(encoder, code, bindings, n_workgroups, label="compute", e
         label,
     )
 
+    create_encoder = not bool(encoder)
+
+    if create_encoder:
+        encoder = device.createCommandEncoder()
+
     pass_encoder = encoder.beginComputePass()
     pass_encoder.setPipeline(pipeline)
     pass_encoder.setBindGroup(0, bind_group)
     pass_encoder.dispatchWorkgroups(*n_workgroups)
     pass_encoder.end()
+
+    if create_encoder:
+        device.queue.submit([encoder.finish()])
 
 
 def buffer_from_array(array, usage=BufferUsage.STORAGE | BufferUsage.COPY_DST):
@@ -355,6 +365,36 @@ class ReadBuffer:
         self.read_buffer.unmap()
         self.read_buffer.destroy()
         return res
+
+
+def read_buffer(buffer, dtype=None, offset=0, size=0):
+    """Reads a buffer and returns it as a numpy array. If dtype is not specified, return bytes object"""
+    device = get_device()
+    size = size or buffer.size - offset
+
+    need_extra_buffer = not (buffer.usage & BufferUsage.MAP_READ)
+    tmp_buffer = buffer
+    if need_extra_buffer:
+        tmp_buffer = device.createBuffer(
+            size=buffer.size,
+            usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
+        )
+        encoder = device.createCommandEncoder()
+        encoder.copyBufferToBuffer(buffer, offset, tmp_buffer, 0, size)
+        device.queue.submit([encoder.finish()])
+
+    tmp_buffer.handle.mapAsync(MapMode.READ, 0, buffer.size)
+    data = tmp_buffer.handle.getMappedRange(0, buffer.size)
+
+    if dtype:
+        import numpy as np
+
+        data = np.frombuffer(data, dtype=dtype)
+
+    tmp_buffer.unmap()
+    if need_extra_buffer:
+        tmp_buffer.destroy()
+    return data
 
 
 def read_texture(texture, bytes_per_pixel=4):

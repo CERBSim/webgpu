@@ -2,8 +2,8 @@
 
 The UniformBase class are derived from ctypes.Structure to ensure correct memory layout.
 
-CAUTION: 
-- The Binding numbers must match the numbers defined in the shader code. 
+CAUTION:
+- The Binding numbers must match the numbers defined in the shader code.
 - Uniforms structs must match exactly the memory layout defined in the shader code.
 - The size of each struct must be a multiple of 16 bytes.
 """

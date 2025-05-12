@@ -117,10 +117,8 @@ def init(before_wait_for_connection=None):
 def init_pyodide(link_):
     global link
     link = link_
-    print("init pyodide with link")
     global js
     js = link.get(None, None)
-    print("JS:", js)
 
     from .link.base import LinkBase
     from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject

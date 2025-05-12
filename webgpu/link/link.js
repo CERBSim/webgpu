@@ -24,7 +24,12 @@ function decodeB64(data) {
 }
 
 function encodeB64(buffer) {
-  return btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));
+  const u8 = new Uint8Array(buffer);
+  let str = '';
+  for (let i = 0; i < u8.length; i++) {
+    str += String.fromCharCode(u8[i]);
+  }
+  return btoa(str);
 }
 
 function isPrimitive(value) {
@@ -34,7 +39,6 @@ function isPrimitive(value) {
 }
 
 function isPrimitiveDict(obj) {
-  if (obj.$children) return false;
   if (obj === window) return false;
   if (obj === navigator) return false;
 
@@ -42,6 +46,9 @@ function isPrimitiveDict(obj) {
   if (Array.isArray(obj)) {
     return obj.every(isPrimitiveDict);
   }
+
+  if (obj.$children) return false;
+  if (obj.constructor !== Object) return false;
 
   for (let key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
@@ -53,8 +60,6 @@ function isPrimitiveDict(obj) {
     }
   }
 
-  if (obj.constructor !== Object) return false;
-
   return true;
 }
 
@@ -63,16 +68,16 @@ function createProxy(link, id, parent_id) {
     return link.call(id, args, parent_id);
   };
   target.handleEvent = async (eventType, event) => {
-    return link.call(id, [eventType, event], parent_id, '_handle');
+    return link.callIgnoreResult(id, [eventType, event], parent_id);
   };
   target.callFunction = (self, arg) => {
     return link.call(id, [arg], parent_id);
   };
-  target.callMethod = async (prop, arg) => {
-    return await link.callMethod(id, prop, [arg]);
+  target.callMethod = async (prop, args) => {
+    return await link.callMethod(id, prop, args);
   };
-  target.callMethodIgnoreResult = (prop, arg) => {
-    link.callMethodIgnoreResult(id, prop, [arg]);
+  target.callMethodIgnoreResult = (prop, args) => {
+    link.callMethodIgnoreResult(id, prop, args);
   };
   const handler = {
     get: function (obj, prop) {
@@ -87,11 +92,13 @@ function createProxy(link, id, parent_id) {
       if (prop.startsWith('__')) return Reflect.get(...arguments);
       if (prop === 'callMethodIgnoreResult') return Reflect.get(...arguments);
       if (prop === 'callMethod') return Reflect.get(...arguments);
+      if (prop === '_is_webapp_proxy') return true;
 
       return link.getProp(id, prop);
     },
     set: function (obj, prop, value) {
       link.setProp(id, prop, value);
+      return true;
     },
 
     apply: function (obj, thisArg, args) {
@@ -113,6 +120,8 @@ class CrossLink {
     this.connection.onMessage((data) => this.onMessage(data));
     this.connected = new Promise((resolve) => {
       this.connection.onOpen(() => {
+        this.expose('importPackage', window.importPackage);
+        this.expose('addStyleFile', window.addStyleFile);
         console.log('connection open');
         resolve();
       });
@@ -120,20 +129,19 @@ class CrossLink {
   }
 
   async _sendRequestAwaitResponse(data) {
-    //console.log('sending request', data);
     const request_id = this.requestCounter++;
     data.request_id = request_id;
     try {
       const result = await new Promise((resolve, reject) => {
         this.requests[request_id] = resolve;
-        this.connection.send(JSON.stringify(data));
+        this.connection.send(data);
         setTimeout(() => {
           reject(
             new Error(
               `Timeout, request ${request_id}, data: ${JSON.stringify(data)}`
             )
           );
-        }, 10000);
+        }, 20000);
       });
       // const t = Date.now() - requestData.sent;
       return result;
@@ -168,6 +176,15 @@ class CrossLink {
     });
   }
 
+  async callIgnoreResult(id, args = [], parent_id = undefined) {
+    return await this.connection.send({
+      type: 'call',
+      id,
+      parent_id,
+      args: await this._dumpData(args),
+    });
+  }
+
   async call(id, args = [], parent_id = undefined, prop = undefined) {
     return await this._sendRequestAwaitResponse({
       type: 'call',
@@ -188,14 +205,12 @@ class CrossLink {
   }
 
   async callMethodIgnoreResult(id, prop, args = []) {
-    return await this.connection.send(
-      JSON.stringify({
-        type: 'call',
-        id,
-        args: await this._dumpData(args),
-        prop,
-      })
-    );
+    return await this.connection.send({
+      type: 'call',
+      id,
+      args: await this._dumpData(args),
+      prop,
+    });
   }
 
   expose(name, obj) {
@@ -203,10 +218,14 @@ class CrossLink {
   }
 
   async _dumpData(data) {
-    //console.log("dumping data", data);
     if (data === null) return undefined;
-
-    if (isPrimitive(data)) return data;
+    if (data === undefined) return undefined;
+    if (data._is_webapp_proxy) {
+      return {
+        type: 'object',
+        id: data._id,
+      };
+    }
 
     if (data instanceof MouseEvent) return serializeEvent(data);
     if (data instanceof Event) return serializeEvent(data);
@@ -218,6 +237,8 @@ class CrossLink {
         type: 'bytes',
         value: encodeB64(data),
       };
+
+    if (isPrimitive(data)) return data;
 
     if (data.constructor === Array) {
       const result = [];
@@ -232,9 +253,11 @@ class CrossLink {
     }
     if (data.constructor === Object) {
       const result = {};
-      Object.keys(data).map(async (key) => {
-        result[key] = await this._dumpData(data[key]);
-      });
+      await Promise.all(
+        Object.keys(data).map(async (key) => {
+          result[key] = await this._dumpData(data[key]);
+        })
+      );
       return result;
     }
 
@@ -249,6 +272,7 @@ class CrossLink {
   }
 
   _loadValue(value) {
+    if (value instanceof ArrayBuffer) return value;
     if (value === null || value === undefined) return undefined;
     if (!value.__is_crosslink_type__) return value;
 
@@ -276,25 +300,35 @@ class CrossLink {
   }
 
   async sendResponse(data, request_id, parent_id) {
-    if (request_id === undefined) {
+    if (request_id === undefined || request_id === null) {
       return;
     }
 
     const value = await this._dumpData(await Promise.resolve(data));
     //console.log('encoded data', value);
 
-    this.connection.send(
-      JSON.stringify({
-        type: 'response',
-        request_id,
-        value,
-      })
-    );
+    this.connection.send({
+      type: 'response',
+      request_id,
+      value,
+    });
   }
 
   async onMessage(event) {
-    const data = JSON.parse(event.data);
-    const request_id = data.request_id;
+    let data = event.data;
+    let request_id = undefined;
+
+    if (event.data instanceof ArrayBuffer) {
+      console.log('received binary data', event.data);
+      request_id = new Uint32Array(event.data, 0, 1)[0];
+      data = {
+        value: event.data.slice(4),
+        type: 'response',
+      };
+    } else {
+      data = JSON.parse(event.data);
+      request_id = data.request_id;
+    }
 
     let obj = data.id ? this.objects[data.id] : window;
     // console.log('onMessage', data, obj);
@@ -303,6 +337,7 @@ class CrossLink {
 
     switch (data.type) {
       case 'call':
+      case 'new':
         const args = this._loadData(data.args);
         let self = null;
         if (data.prop) {
@@ -312,9 +347,11 @@ class CrossLink {
           self = this.objects[data.parent_id];
         }
 
-        // console.log('calling', 'data', data, 'obj', obj, 'self', self, 'args', args);
-
-        response = obj.apply(self, args);
+        if (data.type === 'call') {
+          response = obj.apply(self, args);
+        } else {
+          response = Reflect.construct(obj, args);
+        }
         break;
       case 'get_keys':
         response = Object.keys(obj);
@@ -345,15 +382,21 @@ class CrossLink {
 
     if (request_id !== undefined && data.type !== 'response') {
       response = await response;
-      this.sendResponse(response, request_id);
+      if (data.result_callback) {
+        const callback = this._loadData(data.result_callback);
+        await callback(response);
+      } else {
+        this.sendResponse(response, request_id);
+      }
     }
   }
 }
 
 export function WebsocketLink(url) {
   const socket = new WebSocket(url);
+  socket.binaryType = 'arraybuffer';
   return new CrossLink({
-    send: (data) => socket.send(data),
+    send: (data) => socket.send(JSON.stringify(data)),
     onMessage: (callback) => (socket.onmessage = callback),
     onOpen: (callback) => (socket.onopen = callback),
   });
@@ -361,6 +404,16 @@ export function WebsocketLink(url) {
 
 export function WebworkerLink(worker) {
   // wait for first message, which means the worker has loaded and is ready
+  const buffer = new SharedArrayBuffer(1024 * 1024 * 100);
+  const size_buffer = new Int32Array(buffer, 0, 1);
+  const result_buffer = new Uint8Array(buffer, 4);
+  worker.postMessage(buffer);
+  worker.postMessage(
+    JSON.stringify({
+      type: 'settings',
+      value: { base_url: window.__webapp_router_base },
+    })
+  );
   const workerReady = new Promise((resolve) => {
     worker.addEventListener(
       'message',
@@ -371,7 +424,17 @@ export function WebworkerLink(worker) {
     );
   });
   return new CrossLink({
-    send: (data) => worker.postMessage(data),
+    send: (data) => {
+      if (data.type === 'response') {
+        const str = JSON.stringify(data);
+        const bytes = new TextEncoder().encode(str);
+        result_buffer.set(bytes);
+        Atomics.store(size_buffer, 0, bytes.length);
+        Atomics.notify(size_buffer, 0, 1);
+        return;
+      }
+      worker.postMessage(JSON.stringify(data));
+    },
     onMessage: async (callback) => {
       await workerReady;
       worker.addEventListener('message', callback);
@@ -400,17 +463,34 @@ window.createLilGUI = async (args) => {
   return new window.lil.GUI(args);
 };
 
-window.importPackage=async (url) => {
+window.addStyleFile = async (url) => {
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = url;
+  document.body.appendChild(link);
+};
+
+window.importPackage = async (url) => {
   if (window.define === undefined) {
-    await import(url);
+    const p = await new Promise(async (resolve) => {
+      const script = document.createElement('script');
+      script.src = url;
+      script.onload = () => {
+        console.log('script loaded');
+        resolve();
+      };
+      document.body.appendChild(script);
+    });
+    return p;
   } else {
-    await new Promise(async (resolve) => {
+    const p = await new Promise(async (resolve) => {
       require([url], (module) => {
         resolve(module);
       });
     });
+    return p;
   }
-}
+};
 
 window.patchedRequestAnimationFrame = (device, context, target) => {
   // context.getCurrentTexture() is only guaranteed to be valid during the requestAnimationFrame callback
