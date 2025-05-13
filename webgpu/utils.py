@@ -420,6 +420,11 @@ def read_texture(texture, bytes_per_pixel=4):
     data = buffer.handle.getMappedRange(0, size)
     data = np.frombuffer(data, dtype=np.uint8).reshape((texture.height, -1, bytes_per_pixel))
     data = data[:, : texture.width, :]
+
+    # Convert to RGBA
+    if texture.format == "bgra8unorm":
+        data = data[:, :, [2, 1, 0, 3]]
+
     buffer.unmap()
     buffer.destroy()
     return data
