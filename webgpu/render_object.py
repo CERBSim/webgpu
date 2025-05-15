@@ -79,7 +79,7 @@ class BaseRenderObject:
             self.label = label
 
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
-        return ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0])
+        return None
 
     @check_timestamp
     def update(self, timestamp):
