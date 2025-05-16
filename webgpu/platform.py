@@ -88,6 +88,12 @@ if is_pyodide:
 
     LinkBase.register_serializer(JsProxy, lambda v: json.loads(pyodide_js.JSON.stringify(v)))
 
+_funcs_after_init = []
+def execute_when_init(func):
+    if js is not None:
+        func(js)
+    else:
+        _funcs_after_init.append(func)
 
 def init(before_wait_for_connection=None):
     global js, create_proxy, destroy_proxy, websocket_server, link
@@ -112,7 +118,8 @@ def init(before_wait_for_connection=None):
     LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
 
     websocket_server._start_handling_messages.set()
-
+    for func in _funcs_after_init:
+        func(js)
 
 def init_pyodide(link_):
     global link
