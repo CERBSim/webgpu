@@ -90,8 +90,8 @@ class Camera:
 
         canvas.on_resize(self._update_uniforms)
 
-    def get_bindings(self) -> list[BaseBinding]:
-        return self.uniforms.get_bindings()
+    def get_bindings(self, options) -> list[BaseBinding]:
+        return self.uniforms.get_bindings(options)
 
     def get_shader_code(self):
         return read_shader_file("camera.wgsl")

@@ -1,6 +1,6 @@
 import numpy as np
 
-from .render_object import RenderObject
+from .renderer import Renderer, RenderOptions
 from .utils import BufferBinding, buffer_from_array, read_shader_file
 
 
@@ -10,7 +10,7 @@ class Binding:
     INDICES = 92
 
 
-class TriangulationRenderer(RenderObject):
+class TriangulationRenderer(Renderer):
     n_vertices: int = 3
 
     def __init__(self, points, normals=None, color=(0.0, 1.0, 0.0, 1.0), label="Triangulation"):
@@ -29,14 +29,9 @@ class TriangulationRenderer(RenderObject):
         self._bounding_box = ps.min(axis=0), ps.max(axis=0)
         self.n_instances = len(self.points) // 9
 
-    def update(self, timestamp):
-        if timestamp == self._timestamp:
-            return
-        self._timestamp = timestamp
-
+    def update(self, options: RenderOptions):
         self.point_buffer = buffer_from_array(self.points)
         self.normal_buffer = buffer_from_array(self.normals)
-        self.create_render_pipeline()
 
     def get_bounding_box(self):
         return self._bounding_box
@@ -50,17 +45,11 @@ fn getColor(vertId: u32, trigId: u32) -> vec4f {{
         )
 
     def get_shader_code(self) -> str:
-        return (
-            read_shader_file("triangulation.wgsl")
-            + self.options.camera.get_shader_code()
-            + self.options.light.get_shader_code()
-            + self.get_color_shader()
-        )
+        return read_shader_file("triangulation.wgsl") + self.get_color_shader()
 
-    def get_bindings(self):
+    def get_bindings(self, options: RenderOptions) -> list[BufferBinding]:
         return [
-            *self.options.camera.get_bindings(),
-            *self.options.light.get_bindings(),
+            *options.get_bindings(),
             BufferBinding(Binding.VERTICES, self.point_buffer),
             BufferBinding(Binding.NORMALS, self.normal_buffer),
         ]

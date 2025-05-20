@@ -22,6 +22,8 @@ from .webgpu_api import (
 class RenderOptions:
     viewport: tuple[int, int, int, int, float, float]
     canvas: Canvas
+    command_encoder: CommandEncoder
+    timestamp: float
 
     def __init__(self, canvas):
         self.canvas = canvas
@@ -37,14 +39,14 @@ class RenderOptions:
 
     def get_bindings(self):
         return [
-            *self.light.get_bindings(),
-            *self.camera.get_bindings(),
+            *self.light.get_bindings(self),
+            *self.camera.get_bindings(self),
         ]
 
-    def begin_render_pass(self, command_encoder: CommandEncoder, **kwargs):
-        load_op = command_encoder.getLoadOp()
+    def begin_render_pass(self, **kwargs):
+        load_op = self.command_encoder.getLoadOp()
 
-        render_pass_encoder = command_encoder.beginRenderPass(
+        render_pass_encoder = self.command_encoder.beginRenderPass(
             self.canvas.color_attachments(load_op),
             self.canvas.depth_stencil_attachment(load_op),
             **kwargs,
@@ -58,17 +60,16 @@ class RenderOptions:
 def check_timestamp(callback: Callable):
     """Decorator to handle updates for render objects. The function is only called if the timestamp has changed."""
 
-    def wrapper(self, timestamp, *args, **kwargs):
-        if timestamp == self._timestamp:
+    def wrapper(self, options, *args, **kwargs):
+        if options.timestamp == self._timestamp:
             return
-        callback(self, timestamp, *args, **kwargs)
-        self._timestamp = timestamp
+        callback(self, options, *args, **kwargs)
+        self._timestamp = options.timestamp
 
     return wrapper
 
 
-class BaseRenderObject:
-    options: RenderOptions
+class BaseRenderer:
     label: str = ""
     _timestamp: float = -1
     active: bool = True
@@ -82,25 +83,25 @@ class BaseRenderObject:
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return None
 
+    def update(self, options: RenderOptions) -> None:
+        pass
+
     @check_timestamp
-    def update(self, timestamp):
-        self.create_render_pipeline()
+    def _update_and_create_render_pipeline(self, options: RenderOptions) -> None:
+        self.update(options)
+        self.create_render_pipeline(options)
 
     @property
     def device(self) -> Device:
         return get_device()
 
-    @property
-    def canvas(self) -> Canvas:
-        return self.options.canvas
+    def create_render_pipeline(self, options: RenderOptions) -> None:
+        pass
 
-    def create_render_pipeline(self) -> None:
+    def render(self, options: RenderOptions) -> None:
         raise NotImplementedError
 
-    def render(self, encoder: CommandEncoder):
-        raise NotImplementedError
-
-    def get_bindings(self) -> list[BaseBinding]:
+    def get_bindings(self, options: RenderOptions) -> list[BaseBinding]:
         raise NotImplementedError
 
     def get_shader_code(self) -> str:
@@ -113,26 +114,21 @@ class BaseRenderObject:
         pass
 
 
-class MultipleRenderObject(BaseRenderObject):
+class MultipleRenderer(BaseRenderer):
     def __init__(self, render_objects):
         self.render_objects = render_objects
 
-    def update(self, timestamp):
+    def update(self, options: RenderOptions) -> None:
         for r in self.render_objects:
-            r.options = self.options
-            r.update(timestamp=timestamp)
+            r.update(options)
 
-    def redraw(self, timestamp=None):
+    def render(self, options: RenderOptions) -> None:
         for r in self.render_objects:
-            r.redraw(timestamp=timestamp)
-
-    def render(self, encoder):
-        for r in self.render_objects:
-            r.render(encoder)
+            r.render(options)
 
 
-class RenderObject(BaseRenderObject):
-    """Base class for render objects"""
+class Renderer(BaseRenderer):
+    """Base class for renderer classes"""
 
     n_vertices: int = 0
     n_instances: int = 1
@@ -143,9 +139,9 @@ class RenderObject(BaseRenderObject):
     vertex_buffer_layouts: list[VertexBufferLayout] = []
     vertex_buffer: Buffer | None = None
 
-    def create_render_pipeline(self) -> None:
+    def create_render_pipeline(self, options: RenderOptions) -> None:
         shader_module = self.device.createShaderModule(self._get_preprocessed_shader_code())
-        layout, self.group = create_bind_group(self.device, self.get_bindings())
+        layout, self.group = create_bind_group(self.device, self.get_bindings(options))
         self.pipeline = self.device.createRenderPipeline(
             self.device.createPipelineLayout([layout]),
             vertex=VertexState(
@@ -156,23 +152,26 @@ class RenderObject(BaseRenderObject):
             fragment=FragmentState(
                 module=shader_module,
                 entryPoint=self.fragment_entry_point,
-                targets=[self.options.canvas.color_target],
+                targets=[options.canvas.color_target],
             ),
             primitive=PrimitiveState(topology=self.topology),
             depthStencil=DepthStencilState(
-                format=self.options.canvas.depth_format,
+                format=options.canvas.depth_format,
                 depthWriteEnabled=True,
                 depthCompare=CompareFunction.less,
                 depthBias=self.depthBias,
             ),
-            multisample=self.options.canvas.multisample,
+            multisample=options.canvas.multisample,
         )
 
-    def render(self, encoder: CommandEncoder) -> None:
-        render_pass = self.options.begin_render_pass(encoder)
+    def render(self, options: RenderOptions) -> None:
+        render_pass = options.begin_render_pass()
         render_pass.setPipeline(self.pipeline)
         render_pass.setBindGroup(0, self.group)
         if self.vertex_buffer is not None:
             render_pass.setVertexBuffer(0, self.vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
+
+    def get_bindings(self, options: RenderOptions) -> list[BaseBinding]:
+        return options.get_bindings()

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .render_object import RenderObject, check_timestamp
+from .renderer import RenderOptions, Renderer
 from .colormap import Colormap
 from .utils import (
     BufferBinding,
@@ -130,7 +130,7 @@ _VALUES_BINDING_NUMBER = 101
 _POSITIONS_BINDING_NUMBER = 102
 
 
-class ShapeRenderObject(RenderObject):
+class ShapeRenderer(Renderer):
     def __init__(
         self, shape_data: ShapeData, positions: np.ndarray, values: np.ndarray, label=None
     ):
@@ -144,10 +144,8 @@ class ShapeRenderObject(RenderObject):
         self.vertex_entry_point = "cylinder_vertex_main"
         self.fragment_entry_point = "shape_fragment_main"
 
-    @check_timestamp
-    def update(self, timestamp):
-        self.colormap.options = self.options
-        self.colormap.update(timestamp)
+    def update(self, options: RenderOptions):
+        self.colormap.update(options)
         buffers = self.shape_data.create_buffers()
         self.vertex_buffer = buffers["vertex_data"]
         self.triangle_buffer = buffers["triangles"]
@@ -171,15 +169,13 @@ class ShapeRenderObject(RenderObject):
             )
         ]
 
-        super().update(timestamp)
-
     def get_shader_code(self) -> str:
         return read_shader_file("shapes.wgsl")
 
-    def get_bindings(self):
+    def get_bindings(self, options):
         return [
-            *self.options.get_bindings(),
-            *self.colormap.get_bindings(),
+            *options.get_bindings(),
+            *self.colormap.get_bindings(options),
             BufferBinding(
                 _VALUES_BINDING_NUMBER,
                 self.values_buffer,
@@ -192,8 +188,8 @@ class ShapeRenderObject(RenderObject):
             ),
         ]
 
-    def render(self, encoder: CommandEncoder) -> None:
-        render_pass = self.options.begin_render_pass(encoder)
+    def render(self, options: RenderOptions) -> None:
+        render_pass = options.begin_render_pass()
         render_pass.setPipeline(self.pipeline)
         render_pass.setBindGroup(0, self.group)
         render_pass.setVertexBuffer(0, self.vertex_buffer)

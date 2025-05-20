@@ -5,6 +5,7 @@ import zlib
 
 from .uniforms import Binding, UniformBase, ct
 from .utils import Device, TextureBinding, read_shader_file
+from .renderer import RenderOptions
 from .webgpu_api import *
 
 
@@ -121,10 +122,10 @@ class Font:
 
         self.canvas.on_resize(self.update)
 
-    def get_bindings(self):
+    def get_bindings(self, options: RenderOptions):
         return [
             TextureBinding(Binding.FONT_TEXTURE, self._texture, dim=2),
-            *self.uniforms.get_bindings(),
+            *self.uniforms.get_bindings(options),
         ]
 
     def get_shader_code(self):

@@ -1,5 +1,5 @@
 from .labels import Labels
-from .render_object import MultipleRenderObject, RenderObject
+from .renderer import MultipleRenderer, Renderer, RenderOptions
 from .uniforms import Binding, UniformBase, ct
 from .utils import SamplerBinding, TextureBinding, format_number, read_shader_file
 from .webgpu_api import (
@@ -25,7 +25,7 @@ class ColormapUniforms(UniformBase):
     ]
 
 
-class Colorbar(RenderObject):
+class Colorbar(Renderer):
     texture: Texture
     vertex_entry_point: str = "colormap_vertex"
     fragment_entry_point: str = "colormap_fragment"
@@ -45,10 +45,7 @@ class Colorbar(RenderObject):
         self.sampler = None
         self.autoupdate = True
 
-    def update(self, timestamp):
-        if timestamp == self._timestamp:
-            return
-        self._timestamp = timestamp
+    def update(self, options: RenderOptions):
         if self.uniforms is None:
             self.uniforms = ColormapUniforms(self.device)
         self.uniforms.min = self.minval
@@ -70,7 +67,7 @@ class Colorbar(RenderObject):
 
         if self.texture is None:
             self.set_colormap("matlab:jet")
-        self.create_render_pipeline()
+        self.create_render_pipeline(options)
 
     def get_bounding_box(self):
         return None
@@ -91,11 +88,11 @@ class Colorbar(RenderObject):
             self.uniforms.max = maxval
             self.uniforms.update_buffer()
 
-    def get_bindings(self):
+    def get_bindings(self, options: RenderOptions):
         return [
             TextureBinding(Binding.COLORMAP_TEXTURE, self.texture),
             SamplerBinding(Binding.COLORMAP_SAMPLER, self.sampler),
-            *self.uniforms.get_bindings(),
+            *self.uniforms.get_bindings(options),
         ]
 
     def get_shader_code(self):
@@ -124,7 +121,7 @@ class Colorbar(RenderObject):
         )
 
 
-class Colormap(MultipleRenderObject):
+class Colormap(MultipleRenderer):
     def __init__(self):
         self.colorbar = Colorbar()
         self.labels = Labels([], [], font_size=14, h_align="center", v_align="top")
@@ -138,8 +135,8 @@ class Colormap(MultipleRenderObject):
     def get_shader_code(self):
         return self.colorbar.get_shader_code()
 
-    def get_bindings(self):
-        return self.colorbar.get_bindings()
+    def get_bindings(self, options: RenderOptions):
+        return self.colorbar.get_bindings(options)
 
     @autoupdate.setter
     def autoupdate(self, value):

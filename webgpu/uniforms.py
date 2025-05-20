@@ -71,7 +71,7 @@ class UniformBase(ct.Structure):
     def update_buffer(self):
         self.device.queue.writeBuffer(self._buffer, 0, bytes(self))
 
-    def get_bindings(self) -> list[BaseBinding]:
+    def get_bindings(self, options) -> list[BaseBinding]:
         return [UniformBinding(self._binding, self._buffer)]
 
     def __del__(self):

@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import BufferBinding, Colormap, RenderObject, read_shader_file
+from . import BufferBinding, Colormap, Renderer, read_shader_file
 from .uniforms import UniformBase, ct
 from .utils import buffer_from_array
 from .webgpu_api import PrimitiveTopology
@@ -22,7 +22,7 @@ class VectorUniform(UniformBase):
     ]
 
 
-class BaseVectorRenderObject(RenderObject):
+class BaseVectorRenderer(Renderer):
     topology = PrimitiveTopology.triangle_strip
     n_vertices = 10
 
@@ -62,7 +62,7 @@ class BaseVectorRenderObject(RenderObject):
         super().render(encoder)
 
 
-class VectorRenderer(BaseVectorRenderObject):
+class VectorRenderer(BaseVectorRenderer):
     def __init__(self, points, vectors, size=None, scale_with_vector_length=False):
         super().__init__(label="VectorField")
         self.scale_with_vector_length = scale_with_vector_length

@@ -3,7 +3,7 @@ import pickle
 
 from .draw import Draw as DrawPyodide
 from .lilgui import LilGUI
-from .render_object import RenderObject, _render_objects
+from .renderer import Renderer, _render_objects
 from .scene import Scene
 from .utils import _is_pyodide, reload_package
 
@@ -195,12 +195,12 @@ draw();
     """
 
     def Draw(
-        scene: Scene | list[RenderObject] | RenderObject,
+        scene: Scene | list[Renderer] | Renderer,
         width=608,
         height=608,
         modules=[],
     ):
-        if isinstance(scene, RenderObject):
+        if isinstance(scene, Renderer):
             scene = [scene]
         if isinstance(scene, list):
             scene = Scene(scene)

@@ -8,7 +8,7 @@ from . import platform, utils
 from .canvas import Canvas
 from .lilgui import LilGUI
 from .link import js_code as _link_js_code
-from .render_object import *
+from .renderer import *
 from .scene import Scene
 from .triangles import *
 from .utils import init_device_sync
@@ -48,7 +48,7 @@ _id_counter = itertools.count()
 def _init_html(scene, width, height):
     from IPython.display import HTML, display
 
-    if isinstance(scene, RenderObject):
+    if isinstance(scene, Renderer):
         scene = [scene]
     if isinstance(scene, list):
         scene = Scene(scene)
@@ -102,7 +102,7 @@ def _DrawPyodide(b64_data: str):
 
 
 def _DrawHTML(
-    scene: Scene | list[RenderObject] | RenderObject,
+    scene: Scene | list[Renderer] | Renderer,
     width=640,
     height=640,
 ):
@@ -122,7 +122,7 @@ def _DrawHTML(
 
 
 def Draw(
-    scene: Scene | list[RenderObject] | RenderObject,
+    scene: Scene | list[Renderer] | Renderer,
     width=640,
     height=640,
 ):

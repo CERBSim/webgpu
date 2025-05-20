@@ -1,7 +1,7 @@
 from .clipping import Clipping
 from .colormap import Colormap
 from .font import Font
-from .render_object import RenderObject
+from .renderer import Renderer
 from .scene import Scene
 from .utils import (
     BaseBinding,

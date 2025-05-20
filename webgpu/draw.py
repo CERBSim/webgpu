@@ -1,18 +1,18 @@
 from .canvas import Canvas
 from .lilgui import LilGUI
-from .render_object import BaseRenderObject
+from .renderer import BaseRenderer
 from .scene import Scene
 from .utils import max_bounding_box
 
 
 def Draw(
-    scene: Scene | BaseRenderObject | list[BaseRenderObject],
+    scene: Scene | BaseRenderer | list[BaseRenderer],
     canvas: Canvas,
     lilgui=True,
 ) -> Scene:
     import numpy as np
 
-    if isinstance(scene, BaseRenderObject):
+    if isinstance(scene, BaseRenderer):
         scene = Scene([scene])
     elif isinstance(scene, list):
         scene = Scene(scene)

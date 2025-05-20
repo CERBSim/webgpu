@@ -1,13 +1,13 @@
 import numpy as np
 
 from .font import Font
-from .render_object import RenderObject
+from .renderer import Renderer, RenderOptions, check_timestamp
 from .uniforms import Binding
 from .utils import BufferBinding, read_shader_file
 from .webgpu_api import *
 
 
-class Labels(RenderObject):
+class Labels(Renderer):
     vertex_entry_point: str = "vertexText"
     fragment_entry_point: str = "fragmentFont"
     n_vertices: int = 6
@@ -39,10 +39,8 @@ class Labels(RenderObject):
         self.h_align = h_align
         self.v_align = v_align
 
-    def update(self, timestamp):
-        if timestamp == self._timestamp:
-            return
-        self._timestamp = timestamp
+    @check_timestamp
+    def update(self, options: RenderOptions):
         n_chars = sum(len(label) for label in self.labels)
         n_labels = len(self.labels)
         self.n_vertices = 6
@@ -124,9 +122,9 @@ class Labels(RenderObject):
         shader_code += self.options.camera.get_shader_code()
         return shader_code
 
-    def get_bindings(self):
+    def get_bindings(self, options: RenderOptions):
         return [
-            *self.font.get_bindings(),
-            *self.options.camera.get_bindings(),
+            *self.font.get_bindings(options),
+            *self.options.camera.get_bindings(options),
             BufferBinding(Binding.TEXT, self.buffer),
         ]

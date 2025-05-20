@@ -1,3 +1,5 @@
+#import camera
+#import light
 
 @group(0) @binding(90) var<storage> u_vertices : array<f32>;
 @group(0) @binding(91) var<storage> u_normals : array<f32>;

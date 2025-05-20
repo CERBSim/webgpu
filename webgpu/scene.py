@@ -4,7 +4,7 @@ from threading import Timer
 
 from . import platform
 from .canvas import Canvas
-from .render_object import BaseRenderObject, RenderOptions
+from .renderer import BaseRenderer, RenderOptions
 from .utils import is_pyodide, max_bounding_box
 from .webgpu_api import *
 
@@ -39,13 +39,13 @@ def debounce(render_function):
 
 class Scene:
     canvas: Canvas = None
-    render_objects: list[BaseRenderObject]
+    render_objects: list[BaseRenderer]
     options: RenderOptions
     gui: object = None
 
     def __init__(
         self,
-        render_objects: list[BaseRenderObject],
+        render_objects: list[BaseRenderer],
         id: str | None = None,
         canvas: Canvas | None = None,
     ):
@@ -82,10 +82,9 @@ class Scene:
         self.canvas = canvas
         self.options = RenderOptions(self.canvas)
 
-        timestamp = time.time()
+        self.options.timestamp = time.time()
         for obj in self.render_objects:
-            obj.options = self.options
-            obj.update(timestamp=timestamp)
+            obj._update_and_create_render_pipeline(self.options)
 
         pmin, pmax = max_bounding_box([o.get_bounding_box() for o in self.render_objects])
         camera = self.options.camera
@@ -113,9 +112,9 @@ class Scene:
         with self.redraw_mutex:
             import time
 
-            ts = time.time()
+            self.options.timestamp = time.time()
             for obj in self.render_objects:
-                obj.update(timestamp=ts)
+                obj._update_and_create_render_pipeline(self.options)
 
             self.render()
 
@@ -123,18 +122,20 @@ class Scene:
         platform.js.requestAnimationFrame(self._js_render)
 
     def _render_direct(self, t=0):
-        encoder = self.device.createCommandEncoder()
+        options = self.options
+        options.command_encoder = self.device.createCommandEncoder()
 
         for obj in self.render_objects:
             if obj.active:
-                obj.render(encoder)
+                obj.render(options)
 
-        encoder.copyTextureToTexture(
+        options.command_encoder.copyTextureToTexture(
             TexelCopyTextureInfo(self.canvas.target_texture),
             TexelCopyTextureInfo(self.canvas.context.getCurrentTexture()),
             [self.canvas.width, self.canvas.height, 1],
         )
-        self.device.queue.submit([encoder.finish()])
+        self.device.queue.submit([options.command_encoder.finish()])
+        options.command_encoder = None
 
     @debounce
     def render(self, t=0):
@@ -154,13 +155,15 @@ class Scene:
         #     self.canvas.target_texture.height,
         # )
         with self.redraw_mutex:
-            encoder = self.device.createCommandEncoder()
+            options = self.options
+            options.command_encoder = self.device.createCommandEncoder()
 
             for obj in self.render_objects:
                 if obj.active:
-                    obj.render(encoder)
+                    obj.render(options)
 
-            self.device.queue.submit([encoder.finish()])
+            self.device.queue.submit([options.command_encoder.finish()])
+            options.command_encoder = None
 
             if not is_pyodide:
                 platform.js.patchedRequestAnimationFrame(

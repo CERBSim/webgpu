@@ -1,6 +1,6 @@
 import time
 
-from .render_object import BaseRenderObject
+from .renderer import BaseRenderer, RenderOptions
 from .uniforms import UniformBase, ct
 from .utils import read_shader_file
 
@@ -22,7 +22,7 @@ class ClippingUniforms(UniformBase):
         super().__init__(device, mode=mode, **kwargs)
 
 
-class Clipping(BaseRenderObject):
+class Clipping(BaseRenderer):
     class Mode:
         DISABLED = 0
         PLANE = 1
@@ -41,10 +41,7 @@ class Clipping(BaseRenderObject):
         self.radius = radius
         self.callbacks = []
 
-    def update(self, timestamp):
-        if timestamp == self._timestamp:
-            return
-        self._timestamp = timestamp
+    def update(self, options: RenderOptions):
         if not hasattr(self, "uniforms"):
             self.uniforms = ClippingUniforms(self.device)
         import numpy as np
@@ -68,8 +65,8 @@ class Clipping(BaseRenderObject):
     def update_buffer(self):
         self.uniforms.update_buffer()
 
-    def get_bindings(self):
-        return self.uniforms.get_bindings()
+    def get_bindings(self, options: RenderOptions):
+        return self.uniforms.get_bindings(options)
 
     def get_shader_code(self):
         return read_shader_file("clipping.wgsl")
@@ -91,7 +88,7 @@ class Clipping(BaseRenderObject):
         folder.value("ny", self.normal[1], self.set_ny_value)
         folder.value("nz", self.normal[2], self.set_nz_value)
 
-    def render(self, encoder):
+    def render(self, options: RenderOptions):
         pass
 
     def enable_clipping(self, value):
