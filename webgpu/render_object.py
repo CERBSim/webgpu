@@ -3,7 +3,9 @@ from typing import Callable
 from .camera import Camera
 from .canvas import Canvas
 from .light import Light
-from .utils import BaseBinding, create_bind_group, get_device
+from .utils import (BaseBinding, create_bind_group, get_device,
+                    preprocess_shader_code)
+
 from .webgpu_api import (
     Buffer,
     CommandEncoder,
@@ -105,6 +107,9 @@ class BaseRenderObject:
     def get_shader_code(self) -> str:
         raise NotImplementedError
 
+    def _get_preprocessed_shader_code(self) -> str:
+        return preprocess_shader_code(self.get_shader_code())
+
     def add_options_to_gui(self, gui):
         pass
 
@@ -140,7 +145,8 @@ class RenderObject(BaseRenderObject):
     vertex_buffer: Buffer | None = None
 
     def create_render_pipeline(self) -> None:
-        shader_module = self.device.createShaderModule(self.get_shader_code())
+        shader_module = self.device.createShaderModule(
+            self._get_preprocessed_shader_code())
         layout, self.group = create_bind_group(self.device, self.get_bindings())
         self.pipeline = self.device.createRenderPipeline(
             self.device.createPipelineLayout([layout]),

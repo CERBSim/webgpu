@@ -120,6 +120,7 @@ def init(before_wait_for_connection=None):
     websocket_server._start_handling_messages.set()
     for func in _funcs_after_init:
         func(js)
+    _funcs_after_init.clear()
 
 def init_pyodide(link_):
     global link

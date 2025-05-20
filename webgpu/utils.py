@@ -100,6 +100,8 @@ class Pyodide:
 
 def find_shader_file(file_name, module_file) -> Path:
     for path in [module_file, __file__]:
+        if path is None:
+            continue
         file_path = Path(path).parent / "shaders" / file_name
         if file_path.exists():
             return file_path
@@ -108,7 +110,10 @@ def find_shader_file(file_name, module_file) -> Path:
 
 
 def read_shader_file(file_name, module_file) -> str:
-    code = find_shader_file(file_name, module_file).read_text()
+    return find_shader_file(file_name,
+                            module_file).read_text()
+
+def preprocess_shader_code(code: str, module_file=None) -> str:
     if not "#import" in code:
         return code
     lines = code.split("\n")

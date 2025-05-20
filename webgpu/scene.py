@@ -73,6 +73,8 @@ class Scene:
         return self.canvas.device
 
     def init(self, canvas):
+        import threading
+        self.redraw_mutex = threading.Lock()
         self.canvas = canvas
         self.options = RenderOptions(self.canvas)
 
@@ -102,29 +104,15 @@ class Scene:
 
         canvas.on_resize(self.render)
 
+    @debounce
     def redraw(self):
-        import time
-
-        ts = time.time()
-        for obj in self.render_objects:
-            obj.redraw(timestamp=ts)
-
-        self.render()
-        return
-
-        if is_pyodide:
-            import js
-
-            js.requestAnimationFrame(self._js_render)
-        else:
-            # TODO: check if we are in a jupyter kernel
-            from .jupyter import run_code_in_pyodide
-
+        with self.redraw_mutex:
+            import time
             ts = time.time()
             for obj in self.render_objects:
-                obj.redraw(timestamp=ts)
+                obj.update(timestamp=ts)
 
-            run_code_in_pyodide(f"import webgpu.scene; webgpu.scene.redraw_scene('{self.id}')")
+            self.render()
 
     def _render(self):
         platform.js.requestAnimationFrame(self._js_render)
@@ -160,20 +148,21 @@ class Scene:
         #     self.canvas.target_texture.width,
         #     self.canvas.target_texture.height,
         # )
-        encoder = self.device.createCommandEncoder()
+        with self.redraw_mutex:
+            encoder = self.device.createCommandEncoder()
 
-        for obj in self.render_objects:
-            if obj.active:
-                obj.render(encoder)
+            for obj in self.render_objects:
+                if obj.active:
+                    obj.render(encoder)
 
-        self.device.queue.submit([encoder.finish()])
+            self.device.queue.submit([encoder.finish()])
 
-        if not is_pyodide:
-            platform.js.patchedRequestAnimationFrame(
-                self.canvas.device.handle,
-                self.canvas.context,
-                self.canvas.target_texture,
-            )
+            if not is_pyodide:
+                platform.js.patchedRequestAnimationFrame(
+                    self.canvas.device.handle,
+                    self.canvas.context,
+                    self.canvas.target_texture,
+                )
 
     def cleanup(self):
         for obj in self.render_objects:

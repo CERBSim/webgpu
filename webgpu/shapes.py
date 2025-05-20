@@ -203,4 +203,3 @@ class ShapeRenderObject(RenderObject):
             self.n_instances,
         )
         render_pass.end()
-        self.colormap.render(encoder)
