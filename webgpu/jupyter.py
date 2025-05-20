@@ -106,7 +106,7 @@ def _DrawHTML(
     width=640,
     height=640,
 ):
-    """Draw a scene using display(Javascrip()) with all information in the HTML
+    """Draw a scene using display(Javascript()) with all information in the HTML
     This way, data is kept in the converted html when running nbconvert
     The scene object is unpickled and drawn within a pyodide instance in the browser when the html is opened
     """
@@ -131,6 +131,30 @@ def Draw(
     return scene
 
 
+_js_init_pyodide = """
+async function init_pyodide(webgpu_b64) {
+  const pyodide_module = await import(
+    "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs"
+  );
+  window.pyodide = await pyodide_module.loadPyodide();
+  pyodide.setDebug(true);
+  await pyodide.loadPackage([
+    "micropip",
+    "numpy",
+    "packaging",
+  ]);
+  const webpgu_zip = decodeB64(webgpu_b64);
+  await pyodide.unpackArchive(webpgu_zip, "zip");
+  await pyodide.runPythonAsync("import webgpu.utils");
+  await pyodide.runPythonAsync("await webgpu.utils.init_device()");
+}
+
+window.draw_scene = async (data) => {
+  await window.pyodide_ready;
+  window.pyodide.runPython(`import webgpu.jupyter; webgpu.jupyter._DrawPyodide("${data}")`)
+}
+"""
+
 if not platform.is_pyodide:
     from IPython.display import Javascript, display
 
@@ -141,8 +165,8 @@ if not platform.is_pyodide:
         webgpu_module = create_package_zip("webgpu")
         webgpu_module_b64 = base64.b64encode(webgpu_module).decode("utf-8")
         js_code = _link_js_code
-        js_code += f"\nconst _webgpu_code = '{webgpu_module_b64}';"
-        js_code += f"\nwindow.pyodide_ready = init_pyodide(_webgpu_code);"
+        js_code += _js_init_pyodide
+        js_code += f"\nwindow.pyodide_ready = init_pyodide('{webgpu_module_b64}');"
         display(Javascript(js_code))
     else:
         # Not exporting and not running in pyodide -> Start a websocket server and wait for the client to connect

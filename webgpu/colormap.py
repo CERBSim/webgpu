@@ -99,7 +99,7 @@ class Colorbar(RenderObject):
         ]
 
     def get_shader_code(self):
-        return read_shader_file("colormap.wgsl", __file__)
+        return read_shader_file("colormap.wgsl")
 
     def set_colormap(self, name: str):
         if self.texture is not None:

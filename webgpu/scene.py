@@ -12,6 +12,9 @@ _TARGET_FPS = 60
 
 
 def debounce(render_function):
+    if platform.is_pyodide:
+        return render_function
+
     # Render only once every 1/_TARGET_FPS seconds
     def debounced(*args, **kwargs):
         if debounced.timer is not None:
@@ -74,6 +77,7 @@ class Scene:
 
     def init(self, canvas):
         import threading
+
         self.redraw_mutex = threading.Lock()
         self.canvas = canvas
         self.options = RenderOptions(self.canvas)
@@ -108,6 +112,7 @@ class Scene:
     def redraw(self):
         with self.redraw_mutex:
             import time
+
             ts = time.time()
             for obj in self.render_objects:
                 obj.update(timestamp=ts)

@@ -9,4 +9,4 @@ class Light:
         return []
 
     def get_shader_code(self):
-        return read_shader_file("light.wgsl", __file__)
+        return read_shader_file("light.wgsl")

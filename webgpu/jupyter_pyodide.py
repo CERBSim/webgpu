@@ -37,68 +37,14 @@ def create_package_zip(module_name="webgpu"):
 
 _package_b64 = base64.b64encode(create_package_zip()).decode("utf-8")
 
+from . import jupyter, link
+
+webgpu_module = create_package_zip("webgpu")
 _init_js_code = (
-    r"""
-const SNAPSHOT_URL = 'https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@webgpu1/snapshot.bin.gz';
-
-function decodeB64(base64String) {
-    const binaryString = atob(base64String);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
-}
-
-async function fetchSnapshot() {
-  const blob = await (await fetch(SNAPSHOT_URL)).blob();
-  const decompressor = new DecompressionStream('gzip');
-  const stream = blob.stream().pipeThrough(decompressor);
-  const response = new Response(stream);
-  return await response.arrayBuffer();
-};
-
-function initLilGUI() {
-    // In generated html files, requirejs is imported before lil-gui is loaded.
-    // Thus, we must load lil-gui using require, use import otherwise.
-    const lil_url = "https://cdn.jsdelivr.net/npm/lil-gui@0.20";
-    if(window.define === undefined){
-        import(lil_url);
-    } else {
-        require([lil_url], (module) => {
-            window.lil = module;
-        });
-    }
-}
-
-async function main() {
-  if(window.webgpu_ready === undefined) {
-      initLilGUI();
-      const pyodide_module = await import("https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs");
-      window.pyodide = await pyodide_module.loadPyodide( {
-        // _loadSnapshot: await fetchSnapshot(),
-        // lockFileURL: 'https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@webgpu2/pyodide-lock.json',
-        // indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
-        }
-      );
-      pyodide.setDebug(true);
-      window.pyodide_ready = pyodide.loadPackage(['micropip', 'numpy', 'packaging']);
-      await window.pyodide_ready;
-  }
-  else {
-      await webgpu_ready;
-  }
-  const webgpu_b64 = `"""
-    + _package_b64
-    + r"""`;
-  const webpgu_zip = decodeB64(webgpu_b64);
-  await pyodide.unpackArchive(webpgu_zip, 'zip');
-  await pyodide.runPythonAsync('import webgpu.utils');
-  await pyodide.runPythonAsync('await webgpu.utils.init_device()');
-}
-window.webgpu_ready = main();
-
+    link.js_code
+    + jupyter._js_init_pyodide
+    + f"""window.pyodide_ready = init_pyodide('{_package_b64}');
+window.webgpu_ready = window.pyodide_ready;
 """
 )
 

@@ -72,7 +72,7 @@ class Clipping(BaseRenderObject):
         return self.uniforms.get_bindings()
 
     def get_shader_code(self):
-        return read_shader_file("clipping.wgsl", __file__)
+        return read_shader_file("clipping.wgsl")
 
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return None

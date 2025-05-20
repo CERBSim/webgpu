@@ -51,7 +51,7 @@ fn getColor(vertId: u32, trigId: u32) -> vec4f {{
 
     def get_shader_code(self) -> str:
         return (
-            read_shader_file("triangulation.wgsl", __file__)
+            read_shader_file("triangulation.wgsl")
             + self.options.camera.get_shader_code()
             + self.options.light.get_shader_code()
             + self.get_color_shader()

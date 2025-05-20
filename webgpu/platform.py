@@ -17,7 +17,7 @@ websocket_server = None
 link = None
 
 try:
-    import js as pyodide_js
+    import js
     import pyodide.ffi
     from pyodide.ffi import JsPromise, JsProxy, create_proxy
 
@@ -62,7 +62,7 @@ try:
         value = _convert(value)
         ret = pyodide.ffi.to_js(
             value,
-            dict_converter=pyodide_js.Object.fromEntries,
+            dict_converter=js.Object.fromEntries,
             default_converter=_default_converter,
             create_pyproxies=False,
         )
@@ -89,11 +89,14 @@ if is_pyodide:
     LinkBase.register_serializer(JsProxy, lambda v: json.loads(pyodide_js.JSON.stringify(v)))
 
 _funcs_after_init = []
+
+
 def execute_when_init(func):
     if js is not None:
         func(js)
     else:
         _funcs_after_init.append(func)
+
 
 def init(before_wait_for_connection=None):
     global js, create_proxy, destroy_proxy, websocket_server, link
@@ -121,6 +124,7 @@ def init(before_wait_for_connection=None):
     for func in _funcs_after_init:
         func(js)
     _funcs_after_init.clear()
+
 
 def init_pyodide(link_):
     global link

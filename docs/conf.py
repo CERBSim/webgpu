@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.mathjax", "sphinx.ext.todo",
-              "nbsphinx"]
+extensions = ["sphinx.ext.autodoc", "sphinx.ext.mathjax", "sphinx.ext.todo", "nbsphinx"]
 
 import os
+
 os.environ["WEBGPU_EXPORTING"] = "1"
 master_doc = "index"
 source_suffix = [".rst", ".md"]

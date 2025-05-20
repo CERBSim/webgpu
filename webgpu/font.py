@@ -128,7 +128,7 @@ class Font:
         ]
 
     def get_shader_code(self):
-        return read_shader_file("font.wgsl", __file__)
+        return read_shader_file("font.wgsl")
 
     def set_font_size(self, font_size: int):
         from .font import create_font_texture

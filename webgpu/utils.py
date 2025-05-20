@@ -47,11 +47,7 @@ async def init_device() -> Device:
     if _device is not None:
         return _device
 
-    adapter = requestAdapter(powerPreference=PowerPreference.low_power)
-    try:
-        adapter = await adapter
-    except:
-        pass
+    adapter = await requestAdapter(powerPreference=PowerPreference.low_power)
 
     required_features = []
     if "timestamp-query" in adapter.features:
@@ -75,8 +71,8 @@ async def init_device() -> Device:
         pass
 
     limits = _device.limits
-    js.console.log("device limits\n", limits)
-    js.console.log("adapter info\n", adapter.info)
+    platform.js.console.log("device limits\n", limits)
+    platform.js.console.log("adapter info\n", adapter.info)
 
     print(f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB")
     print(f"max buffer size {limits.maxBufferSize / one_meg:.2f} MB")
@@ -98,34 +94,49 @@ class Pyodide:
         pass
 
 
-def find_shader_file(file_name, module_file) -> Path:
-    for path in [module_file, __file__]:
-        if path is None:
-            continue
-        file_path = Path(path).parent / "shaders" / file_name
-        if file_path.exists():
-            return file_path
+def find_shader_file(file_path) -> Path:
+    package_path = file_path.split("/")
+    if len(package_path) == 1:
+        package_name = ""
+        file_name = package_path[0]
+    else:
+        package_name = package_path[0]
+        file_name = "/".join(package_path[1:])
 
-    raise FileNotFoundError(f"Shader file {file_name} not found")
+    if package_name not in _shader_directories:
+        raise ValueError(f"Shader directory {package_name} not registered")
+
+    file_path = Path(_shader_directories[package_name]) / file_name
+    if file_path.exists():
+        return file_path
+
+    raise FileNotFoundError(f"Shader file {package_name}/{file_name} not found")
 
 
-def read_shader_file(file_name, module_file) -> str:
-    return find_shader_file(file_name,
-                            module_file).read_text()
+def read_shader_file(file_name) -> str:
+    return find_shader_file(file_name).read_text()
 
-def preprocess_shader_code(code: str, module_file=None) -> str:
-    if not "#import" in code:
-        return code
-    lines = code.split("\n")
-    code = ""
-    for line in lines:
-        if line.startswith("#import"):
-            imported_file = line.split()[1] + ".wgsl"
-            code += f"// start file {imported_file}\n"
-            code += read_shader_file(imported_file, module_file) + "\n"
-            code += f"// end file {imported_file}\n"
-        else:
-            code += line + "\n"
+
+def preprocess_shader_code(code: str) -> str:
+    imported_files = set()
+    while "#import" in code:
+        lines = code.split("\n")
+        code = ""
+        replaced_something = False
+        for line in lines:
+            if line.startswith("#import"):
+                replaced_something = True
+                imported_file = line.split()[1] + ".wgsl"
+                if imported_file not in imported_files:
+                    code += f"// start file {imported_file}\n"
+                    code += read_shader_file(imported_file) + "\n"
+                    code += f"// end file {imported_file}\n"
+                    imported_files.add(imported_file)
+            else:
+                code += line + "\n"
+        if not replaced_something:
+            break
+
     return code
 
 
@@ -309,13 +320,16 @@ def reload_package(package_name):
 
 
 def run_compute_shader(
-    code, bindings, n_workgroups, label="compute", entry_point="main", encoder=None
+    code, bindings, n_workgroups: list | int, label="compute", entry_point="main", encoder=None
 ):
     from webgpu.utils import create_bind_group, get_device
 
+    if isinstance(n_workgroups, int):
+        n_workgroups = [n_workgroups, 1, 1]
+
     device = get_device()
 
-    shader_module = device.createShaderModule(code)
+    shader_module = device.createShaderModule(preprocess_shader_code(code))
 
     layout, bind_group = create_bind_group(device, bindings, label)
     pipeline = device.createComputePipeline(
@@ -456,3 +470,15 @@ def format_number(n):
         return f"{n:.2e}"
     else:
         return f"{n:.3g}"
+
+
+_shader_directories = {}
+
+
+def register_shader_directory(name, path):
+    if name in _shader_directories:
+        raise ValueError(f"Shader directory {name} already registered")
+    _shader_directories[name] = path
+
+
+register_shader_directory("", Path(__file__).parent / "shaders")

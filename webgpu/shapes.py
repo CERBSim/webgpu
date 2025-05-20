@@ -174,7 +174,7 @@ class ShapeRenderObject(RenderObject):
         super().update(timestamp)
 
     def get_shader_code(self) -> str:
-        return read_shader_file("shapes.wgsl", __file__)
+        return read_shader_file("shapes.wgsl")
 
     def get_bindings(self):
         return [

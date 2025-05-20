@@ -94,7 +94,7 @@ class Camera:
         return self.uniforms.get_bindings()
 
     def get_shader_code(self):
-        return read_shader_file("camera.wgsl", __file__)
+        return read_shader_file("camera.wgsl")
 
     def __del__(self):
         del self.uniforms

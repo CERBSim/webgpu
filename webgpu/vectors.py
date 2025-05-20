@@ -52,7 +52,7 @@ class BaseVectorRenderObject(RenderObject):
         raise NotImplementedError
 
     def get_shader_code(self):
-        shader_code = read_shader_file("vector.wgsl", __file__)
+        shader_code = read_shader_file("vector.wgsl")
         shader_code += self.options.camera.get_shader_code()
         shader_code += self.options.light.get_shader_code()
         shader_code += self.colormap.get_shader_code()

@@ -5,4 +5,5 @@ pyodide
 __pycache__
 *.egg-info
 docs/html
+*.html
 
