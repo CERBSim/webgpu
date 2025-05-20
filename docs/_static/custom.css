@@ -1,0 +1,23 @@
+
+dl.class > dt:first-of-type {
+    display: block !important;
+    background-color: var(--pst-color-primary-bg);
+}
+
+dl.function > dt:first-of-type {
+    display: block !important;
+    background-color: var(--pst-color-secondary-bg);
+}
+
+dl.class > dd:first-of-type {
+    display: block !important;
+    background-color: var(--pst-color-surface);
+    padding: 0.5em;
+}
+
+dl.function > dd:first-of-type {
+    display: block !important;
+    background-color: var(--pst-color-surface);
+    padding: 0.5em;
+}
+
