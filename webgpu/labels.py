@@ -38,6 +38,7 @@ class Labels(Renderer):
         self.apply_camera = apply_camera
         self.h_align = h_align
         self.v_align = v_align
+        self.buffer = None
 
     def update(self, options: RenderOptions):
         n_chars = sum(len(label) for label in self.labels)
@@ -108,10 +109,12 @@ class Labels(Renderer):
             + char_data.tobytes()
         )
 
-        self.buffer = self.device.createBuffer(
-            len(data),
-            usage=BufferUsage.STORAGE | BufferUsage.COPY_DST,
-        )
+        if self.buffer is None or self.buffer.size != len(data):
+            self.buffer = self.device.createBuffer(
+                len(data),
+                usage=BufferUsage.STORAGE | BufferUsage.COPY_DST,
+                label="labels",
+            )
         self.device.queue.writeBuffer(self.buffer, 0, data)
 
     def get_shader_code(self):

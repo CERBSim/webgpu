@@ -1,7 +1,7 @@
 from .labels import Labels
 from .renderer import MultipleRenderer, Renderer, RenderOptions
 from .uniforms import Binding, UniformBase, ct
-from .utils import SamplerBinding, TextureBinding, format_number, read_shader_file
+from .utils import SamplerBinding, TextureBinding, format_number, read_shader_file, get_device
 from .webgpu_api import (
     TexelCopyBufferLayout,
     TexelCopyTextureInfo,
@@ -47,7 +47,7 @@ class Colorbar(Renderer):
 
     def update(self, options: RenderOptions):
         if self.uniforms is None:
-            self.uniforms = ColormapUniforms(self.device)
+            self.uniforms = ColormapUniforms()
         self.uniforms.min = self.minval
         self.uniforms.max = self.maxval
         self.uniforms.position_x = self.position_x
@@ -60,7 +60,7 @@ class Colorbar(Renderer):
         self.uniforms.update_buffer()
 
         if self.sampler is None:
-            self.sampler = self.device.createSampler(
+            self.sampler = get_device().createSampler(
                 magFilter="linear",
                 minFilter="linear",
             )
@@ -107,13 +107,14 @@ class Colorbar(Renderer):
         v4 = [v + [255] for v in data]
         data = sum(v4, [])
 
-        self.texture = self.device.createTexture(
+        device = get_device()
+        self.texture = device.createTexture(
             size=[n, 1, 1],
             usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
             format=TextureFormat.rgba8unorm,
             dimension="1d",
         )
-        self.device.queue.writeTexture(
+        device.queue.writeTexture(
             TexelCopyTextureInfo(self.texture),
             data,
             TexelCopyBufferLayout(bytesPerRow=n * 4),

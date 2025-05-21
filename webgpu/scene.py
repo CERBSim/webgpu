@@ -107,6 +107,27 @@ class Scene:
 
         canvas.on_resize(self.render)
 
+    def _render_objects(self, to_canvas=True):
+        options = self.options
+        options.timestamp = time.time()
+        for obj in self.render_objects:
+            if obj.active and obj._needs_update:
+                obj._update_and_create_render_pipeline(options)
+
+        options.command_encoder = self.device.createCommandEncoder()
+        for obj in self.render_objects:
+            if obj.active:
+                obj.render(options)
+
+        if to_canvas:
+            options.command_encoder.copyTextureToTexture(
+                TexelCopyTextureInfo(self.canvas.target_texture),
+                TexelCopyTextureInfo(self.canvas.context.getCurrentTexture()),
+                [self.canvas.width, self.canvas.height, 1],
+            )
+        self.device.queue.submit([options.command_encoder.finish()])
+        options.command_encoder = None
+
     @debounce
     def redraw(self):
         with self.redraw_mutex:
@@ -122,20 +143,7 @@ class Scene:
         platform.js.requestAnimationFrame(self._js_render)
 
     def _render_direct(self, t=0):
-        options = self.options
-        options.command_encoder = self.device.createCommandEncoder()
-
-        for obj in self.render_objects:
-            if obj.active:
-                obj.render(options)
-
-        options.command_encoder.copyTextureToTexture(
-            TexelCopyTextureInfo(self.canvas.target_texture),
-            TexelCopyTextureInfo(self.canvas.context.getCurrentTexture()),
-            [self.canvas.width, self.canvas.height, 1],
-        )
-        self.device.queue.submit([options.command_encoder.finish()])
-        options.command_encoder = None
+        self._render_objects(to_canvas=True)
 
     @debounce
     def render(self, t=0):
@@ -155,15 +163,7 @@ class Scene:
         #     self.canvas.target_texture.height,
         # )
         with self.redraw_mutex:
-            options = self.options
-            options.command_encoder = self.device.createCommandEncoder()
-
-            for obj in self.render_objects:
-                if obj.active:
-                    obj.render(options)
-
-            self.device.queue.submit([options.command_encoder.finish()])
-            options.command_encoder = None
+            self._render_objects(to_canvas=False)
 
             if not is_pyodide:
                 platform.js.patchedRequestAnimationFrame(

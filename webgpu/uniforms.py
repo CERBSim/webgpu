@@ -10,7 +10,7 @@ CAUTION:
 
 import ctypes as ct
 
-from .utils import BaseBinding, UniformBinding
+from .utils import BaseBinding, UniformBinding, get_device
 from .webgpu_api import BufferUsage, Device
 
 
@@ -52,10 +52,10 @@ class Binding:
 
 class UniformBase(ct.Structure):
 
-    def __init__(self, device: Device, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.device = device
+        device = get_device()
         self._buffer = device.createBuffer(
             size=len(bytes(self)),
             usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST,
@@ -69,7 +69,7 @@ class UniformBase(ct.Structure):
             )
 
     def update_buffer(self):
-        self.device.queue.writeBuffer(self._buffer, 0, bytes(self))
+        get_device().queue.writeBuffer(self._buffer, 0, bytes(self))
 
     def get_bindings(self, options) -> list[BaseBinding]:
         return [UniformBinding(self._binding, self._buffer)]
@@ -86,8 +86,8 @@ class MeshUniforms(UniformBase):
         ("padding", ct.c_float * 2),
     ]
 
-    def __init__(self, device, subdivision=1, shrink=1.0, **kwargs):
-        super().__init__(device, subdivision=subdivision, shrink=shrink, **kwargs)
+    def __init__(self, subdivision=1, shrink=1.0, **kwargs):
+        super().__init__(subdivision=subdivision, shrink=shrink, **kwargs)
 
 
 class LineIntegralConvolutionUniforms(UniformBase):
@@ -101,9 +101,8 @@ class LineIntegralConvolutionUniforms(UniformBase):
         ("padding", ct.c_float * 3),
     ]
 
-    def __init__(self, device, kernel_length=25, oriented=0, thickness=5, **kwargs):
+    def __init__(self, kernel_length=25, oriented=0, thickness=5, **kwargs):
         super().__init__(
-            device,
             kernel_length=kernel_length,
             oriented=oriented,
             thickness=thickness,

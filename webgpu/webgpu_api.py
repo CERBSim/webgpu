@@ -6,6 +6,41 @@ from . import platform
 from .platform import JsPromise, JsProxy, create_proxy, is_pyodide, toJS
 
 
+DEBUG_LABELS = False
+
+
+def _get_label_from_stack():
+    if not DEBUG_LABELS:
+        return ""
+
+    import inspect
+
+    stack = inspect.stack()
+    method_names = []
+
+    if len(stack) > 2:
+        stack = stack[2:]
+    if len(stack) > 2:
+        stack = stack[:2]
+
+    for frame_info in stack:
+        frame = frame_info.frame
+        func_name = frame_info.function
+
+        cls_name = None
+        if "self" in frame.f_locals:
+            cls_name = type(frame.f_locals["self"]).__name__
+        elif "cls" in frame.f_locals:
+            cls_name = frame.f_locals["cls"].__name__
+
+        if cls_name:
+            method_names.append(f"{cls_name}.{func_name}")
+        else:
+            method_names.append(func_name)
+
+    return " <- ".join(method_names)
+
+
 class BaseWebGPUHandle:
     handle: JsProxy
 
@@ -1229,7 +1264,6 @@ class Device(BaseWebGPUHandle):
         entries: list["BindGroupEntry"] = field(default_factory=list),
         label: str = "",
     ) -> BindGroup:
-
         return self.handle.createBindGroup(
             BindGroupDescriptor(
                 layout=layout,
@@ -1243,6 +1277,7 @@ class Device(BaseWebGPUHandle):
         entries: list["BindGroupLayoutEntry"] = field(default_factory=list),
         label: str = "",
     ) -> "BindGroupLayout":
+        label = label or _get_label_from_stack()
         return self.handle.createBindGroupLayout(
             BindGroupLayoutDescriptor(entries=entries, label=label).toJS()
         )
@@ -1254,6 +1289,7 @@ class Device(BaseWebGPUHandle):
         mappedAtCreation: bool = False,
         label: str = "",
     ) -> Buffer:
+        label = label or _get_label_from_stack()
         return Buffer(
             self.handle.createBuffer(
                 BufferDescriptor(
@@ -1376,6 +1412,7 @@ class Device(BaseWebGPUHandle):
         maxAnisotropy: int = 1,
         label: str = "",
     ):
+        label = label or _get_label_from_stack()
         return self.handle.createSampler(
             SamplerDescriptor(
                 addressModeU=addressModeU,
@@ -1398,6 +1435,7 @@ class Device(BaseWebGPUHandle):
         compilationHints: list[ShaderModuleCompilationHint] = [],
         label: str = "",
     ) -> "ShaderModule":
+        label = label or _get_label_from_stack()
         return self.handle.createShaderModule(
             ShaderModuleDescriptor(
                 code=code,
@@ -1417,6 +1455,7 @@ class Device(BaseWebGPUHandle):
         viewFormats: list["TextureFormat"] | None = None,
         label: str = "",
     ) -> "Texture":
+        label = label or _get_label_from_stack()
         return self.handle.createTexture(
             TextureDescriptor(
                 size=size,

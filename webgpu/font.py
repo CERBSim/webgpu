@@ -4,12 +4,12 @@ import os
 import zlib
 
 from .uniforms import Binding, UniformBase, ct
-from .utils import Device, TextureBinding, read_shader_file
+from .utils import TextureBinding, read_shader_file, texture_from_data
 from .renderer import RenderOptions
 from .webgpu_api import *
 
 
-def create_font_texture(device: Device, size: int = 15):
+def create_font_texture(size: int = 15):
     fonts = json.load(open(os.path.join(os.path.dirname(__file__), "fonts.json")))
 
     dist = 0
@@ -32,22 +32,7 @@ def create_font_texture(device: Device, size: int = 15):
     w = font["width"]
     h = font["height"]
 
-    tex_width = w * (127 - 32)
-
-    texture = device.createTexture(
-        size=[tex_width, h, 1],
-        usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
-        format=TextureFormat.r8unorm,
-        label="font",
-    )
-    device.queue.writeTexture(
-        TexelCopyTextureInfo(texture),
-        data,
-        TexelCopyBufferLayout(bytesPerRow=tex_width),
-        size=[tex_width, h, 1],
-    )
-
-    return texture
+    return texture_from_data(w, h, data, format=TextureFormat.r8unorm, label="font")
 
 
 def _get_default_font():
@@ -117,7 +102,7 @@ class FontUniforms(UniformBase):
 class Font:
     def __init__(self, canvas, size=15):
         self.canvas = canvas
-        self.uniforms = FontUniforms(canvas.device)
+        self.uniforms = FontUniforms()
         self.set_font_size(size)
 
         self.canvas.on_resize(self.update)
@@ -134,7 +119,7 @@ class Font:
     def set_font_size(self, font_size: int):
         from .font import create_font_texture
 
-        self._texture = create_font_texture(self.canvas.device, font_size)
+        self._texture = create_font_texture(font_size)
         char_width = self._texture.width // (127 - 32)
         char_height = self._texture.height
         self.uniforms.width = char_width

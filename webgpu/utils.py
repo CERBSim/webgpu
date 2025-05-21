@@ -288,6 +288,7 @@ class TimeQuery:
         self.buffer = self.device.createBuffer(
             size=16,
             usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
+            label="time_query",
         )
 
 
@@ -356,7 +357,30 @@ def run_compute_shader(
         device.queue.submit([encoder.finish()])
 
 
-def buffer_from_array(array, usage=BufferUsage.STORAGE, label="") -> Buffer:
+def texture_from_data(width, height, data, format, label=""):
+    """Create texture from data (bytes or numpy array)"""
+    tex_width = width * (127 - 32)
+    device = get_device()
+    texture = device.createTexture(
+        size=[tex_width, height, 1],
+        usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
+        format=format,
+        label=label,
+    )
+
+    if not isinstance(data, bytes):
+        data = data.tobytes()
+
+    device.queue.writeTexture(
+        TexelCopyTextureInfo(texture),
+        data,
+        TexelCopyBufferLayout(bytesPerRow=tex_width),
+        size=[tex_width, height, 1],
+    )
+    return texture
+
+
+def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array") -> Buffer:
     device = get_device()
     buffer = device.createBuffer(
         array.size * array.itemsize, usage=usage | BufferUsage.COPY_DST, label=label
@@ -365,15 +389,20 @@ def buffer_from_array(array, usage=BufferUsage.STORAGE, label="") -> Buffer:
     return buffer
 
 
-def uniform_from_array(array):
-    return buffer_from_array(array, usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST)
+def uniform_from_array(array, label="") -> Buffer:
+    return buffer_from_array(array, usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST, label=label)
+
+
+def write_array_to_buffer(buffer: Buffer, array):
+    device = get_device()
+    device.queue.writeBuffer(buffer, 0, array.tobytes())
 
 
 class ReadBuffer:
     def __init__(self, buffer, encoder):
         self.buffer = buffer
         self.read_buffer = get_device().createBuffer(
-            buffer.size, BufferUsage.MAP_READ | BufferUsage.COPY_DST
+            buffer.size, BufferUsage.MAP_READ | BufferUsage.COPY_DST, label="read_buffer"
         )
         encoder.copyBufferToBuffer(self.buffer, 0, self.read_buffer, 0, buffer.size)
 
@@ -399,6 +428,7 @@ def read_buffer(buffer, dtype=None, offset=0, size=0):
         tmp_buffer = device.createBuffer(
             size=buffer.size,
             usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
+            label="read_buffer_tmp",
         )
         encoder = device.createCommandEncoder()
         encoder.copyBufferToBuffer(buffer, offset, tmp_buffer, 0, size)
@@ -427,6 +457,7 @@ def read_texture(texture, bytes_per_pixel=4):
     buffer = device.createBuffer(
         size=size,
         usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
+        label="read_texture",
     )
     encoder = device.createCommandEncoder()
     encoder.copyTextureToBuffer(

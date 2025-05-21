@@ -18,8 +18,8 @@ class ClippingUniforms(UniformBase):
         ("padding", ct.c_uint32 * 3),
     ]
 
-    def __init__(self, device, mode=0, **kwargs):
-        super().__init__(device, mode=mode, **kwargs)
+    def __init__(self, mode=0, **kwargs):
+        super().__init__(mode=mode, **kwargs)
 
 
 class Clipping(BaseRenderer):
@@ -43,7 +43,7 @@ class Clipping(BaseRenderer):
 
     def update(self, options: RenderOptions):
         if not hasattr(self, "uniforms"):
-            self.uniforms = ClippingUniforms(self.device)
+            self.uniforms = ClippingUniforms()
         import numpy as np
 
         c, n = (

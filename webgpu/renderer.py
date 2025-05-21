@@ -4,7 +4,6 @@ from .camera import Camera
 from .canvas import Canvas
 from .light import Light
 from .utils import BaseBinding, create_bind_group, get_device, preprocess_shader_code
-
 from .webgpu_api import (
     Buffer,
     CommandEncoder,
@@ -32,7 +31,7 @@ class RenderOptions:
 
     @property
     def device(self) -> Device:
-        return self.canvas.device
+        return get_device()
 
     def update_buffers(self):
         self.camera._update_uniforms()
@@ -61,10 +60,11 @@ def check_timestamp(callback: Callable):
     """Decorator to handle updates for render objects. The function is only called if the timestamp has changed."""
 
     def wrapper(self, options, *args, **kwargs):
-        if options.timestamp == self._timestamp:
+        if options.timestamp == self._timestamp and not self._needs_update:
             return
         callback(self, options, *args, **kwargs)
         self._timestamp = options.timestamp
+        self._needs_update = False
 
     return wrapper
 
@@ -79,6 +79,7 @@ class BaseRenderer:
             self.label = self.__class__.__name__
         else:
             self.label = label
+        self._needs_update = True
 
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return None
@@ -113,9 +114,13 @@ class BaseRenderer:
     def add_options_to_gui(self, gui):
         pass
 
+    def set_needs_update(self, needs_update: bool = True) -> None:
+        self._needs_update = needs_update
+
 
 class MultipleRenderer(BaseRenderer):
     def __init__(self, render_objects):
+        super().__init__()
         self.render_objects = render_objects
 
     def update(self, options: RenderOptions) -> None:
@@ -130,6 +135,11 @@ class MultipleRenderer(BaseRenderer):
     def render(self, options: RenderOptions) -> None:
         for r in self.render_objects:
             r.render(options)
+
+    def _set_needs_update(self, needs_update: bool = True) -> None:
+        super()._set_needs_update(needs_update)
+        for r in self.render_objects:
+            r.set_needs_update(needs_update)
 
 
 class Renderer(BaseRenderer):

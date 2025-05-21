@@ -1,7 +1,7 @@
 import numpy as np
 
 from .uniforms import BaseBinding, Binding, UniformBase, ct
-from .utils import read_shader_file
+from .utils import read_shader_file, get_device
 
 
 class CameraUniforms(UniformBase):
@@ -82,7 +82,7 @@ class Transform:
 class Camera:
     def __init__(self, canvas):
         self.canvas = canvas
-        self.uniforms = CameraUniforms(canvas.device)
+        self.uniforms = CameraUniforms()
         self.transform = Transform()
         self._render_function = None
         self._is_moving = False
