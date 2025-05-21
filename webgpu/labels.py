@@ -120,9 +120,8 @@ class Labels(Renderer):
     def get_shader_code(self):
         return read_shader_file("text.wgsl")
 
-    def get_bindings(self, options: RenderOptions):
+    def get_bindings(self):
         return [
-            *self.font.get_bindings(options),
-            *options.camera.get_bindings(options),
+            *self.font.get_bindings(),
             BufferBinding(Binding.TEXT, self.buffer),
         ]

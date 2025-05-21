@@ -109,9 +109,8 @@ class Scene:
 
     def _render_objects(self, to_canvas=True):
         options = self.options
-        options.timestamp = time.time()
         for obj in self.render_objects:
-            if obj.active and obj._needs_update:
+            if obj.active:
                 obj._update_and_create_render_pipeline(options)
 
         options.command_encoder = self.device.createCommandEncoder()

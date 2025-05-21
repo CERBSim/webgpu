@@ -88,11 +88,11 @@ class Colorbar(Renderer):
             self.uniforms.max = maxval
             self.uniforms.update_buffer()
 
-    def get_bindings(self, options: RenderOptions):
+    def get_bindings(self):
         return [
             TextureBinding(Binding.COLORMAP_TEXTURE, self.texture),
             SamplerBinding(Binding.COLORMAP_SAMPLER, self.sampler),
-            *self.uniforms.get_bindings(options),
+            *self.uniforms.get_bindings(),
         ]
 
     def get_shader_code(self):
@@ -136,8 +136,8 @@ class Colormap(MultipleRenderer):
     def get_shader_code(self):
         return self.colorbar.get_shader_code()
 
-    def get_bindings(self, options: RenderOptions):
-        return self.colorbar.get_bindings(options)
+    def get_bindings(self):
+        return self.colorbar.get_bindings()
 
     @autoupdate.setter
     def autoupdate(self, value):

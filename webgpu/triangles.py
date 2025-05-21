@@ -47,9 +47,8 @@ fn getColor(vertId: u32, trigId: u32) -> vec4f {{
     def get_shader_code(self) -> str:
         return read_shader_file("triangulation.wgsl") + self.get_color_shader()
 
-    def get_bindings(self, options: RenderOptions) -> list[BufferBinding]:
+    def get_bindings(self) -> list[BufferBinding]:
         return [
-            *options.get_bindings(),
             BufferBinding(Binding.VERTICES, self.point_buffer),
             BufferBinding(Binding.NORMALS, self.normal_buffer),
         ]

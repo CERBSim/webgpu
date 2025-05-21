@@ -38,8 +38,8 @@ class RenderOptions:
 
     def get_bindings(self):
         return [
-            *self.light.get_bindings(self),
-            *self.camera.get_bindings(self),
+            *self.light.get_bindings(),
+            *self.camera.get_bindings(),
         ]
 
     def begin_render_pass(self, **kwargs):
@@ -60,11 +60,10 @@ def check_timestamp(callback: Callable):
     """Decorator to handle updates for render objects. The function is only called if the timestamp has changed."""
 
     def wrapper(self, options, *args, **kwargs):
-        if options.timestamp == self._timestamp and not self._needs_update:
+        if options.timestamp == self._timestamp:
             return
         callback(self, options, *args, **kwargs)
         self._timestamp = options.timestamp
-        self._needs_update = False
 
     return wrapper
 
@@ -79,7 +78,6 @@ class BaseRenderer:
             self.label = self.__class__.__name__
         else:
             self.label = label
-        self._needs_update = True
 
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return None
@@ -102,8 +100,8 @@ class BaseRenderer:
     def render(self, options: RenderOptions) -> None:
         raise NotImplementedError
 
-    def get_bindings(self, options: RenderOptions) -> list[BaseBinding]:
-        raise NotImplementedError
+    def get_bindings(self) -> list[BaseBinding]:
+        return []
 
     def get_shader_code(self) -> str:
         raise NotImplementedError
@@ -114,8 +112,12 @@ class BaseRenderer:
     def add_options_to_gui(self, gui):
         pass
 
-    def set_needs_update(self, needs_update: bool = True) -> None:
-        self._needs_update = needs_update
+    def set_needs_update(self) -> None:
+        self._timestamp = -1
+
+    @property
+    def needs_update(self) -> bool:
+        return self._timestamp == -1
 
 
 class MultipleRenderer(BaseRenderer):
@@ -136,10 +138,18 @@ class MultipleRenderer(BaseRenderer):
         for r in self.render_objects:
             r.render(options)
 
-    def _set_needs_update(self, needs_update: bool = True) -> None:
-        super()._set_needs_update(needs_update)
+    def set_needs_update(self) -> None:
+        super().set_needs_update()
         for r in self.render_objects:
-            r.set_needs_update(needs_update)
+            r.set_needs_update()
+
+    @property
+    def needs_update(self) -> bool:
+        ret = self._timestamp == -1
+        for r in self.render_objects:
+            ret = ret or r.needs_update
+
+        return ret
 
 
 class Renderer(BaseRenderer):
@@ -156,7 +166,9 @@ class Renderer(BaseRenderer):
 
     def create_render_pipeline(self, options: RenderOptions) -> None:
         shader_module = self.device.createShaderModule(self._get_preprocessed_shader_code())
-        layout, self.group = create_bind_group(self.device, self.get_bindings(options))
+        layout, self.group = create_bind_group(
+            self.device, options.get_bindings() + self.get_bindings()
+        )
         self.pipeline = self.device.createRenderPipeline(
             self.device.createPipelineLayout([layout]),
             vertex=VertexState(
@@ -187,6 +199,3 @@ class Renderer(BaseRenderer):
             render_pass.setVertexBuffer(0, self.vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
-
-    def get_bindings(self, options: RenderOptions) -> list[BaseBinding]:
-        return options.get_bindings()

@@ -172,10 +172,9 @@ class ShapeRenderer(Renderer):
     def get_shader_code(self) -> str:
         return read_shader_file("shapes.wgsl")
 
-    def get_bindings(self, options):
+    def get_bindings(self):
         return [
-            *options.get_bindings(),
-            *self.colormap.get_bindings(options),
+            *self.colormap.get_bindings(),
             BufferBinding(
                 _VALUES_BINDING_NUMBER,
                 self.values_buffer,

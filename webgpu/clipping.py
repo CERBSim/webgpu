@@ -65,8 +65,8 @@ class Clipping(BaseRenderer):
     def update_buffer(self):
         self.uniforms.update_buffer()
 
-    def get_bindings(self, options: RenderOptions):
-        return self.uniforms.get_bindings(options)
+    def get_bindings(self):
+        return self.uniforms.get_bindings()
 
     def get_shader_code(self):
         return read_shader_file("clipping.wgsl")
