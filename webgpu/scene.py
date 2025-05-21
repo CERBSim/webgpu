@@ -91,7 +91,7 @@ class Scene:
         camera.transform._center = 0.5 * (pmin + pmax)
 
         def norm(v):
-            return math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+            return max(math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2), 1e-6)
 
         camera.transform._scale = 2 / norm(pmax - pmin)
         if not (pmin[2] == 0 and pmax[2] == 0):

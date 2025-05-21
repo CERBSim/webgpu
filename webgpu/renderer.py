@@ -162,7 +162,7 @@ class Renderer(BaseRenderer):
     vertex_entry_point: str = "vertex_main"
     fragment_entry_point: str = "fragment_main"
     vertex_buffer_layouts: list[VertexBufferLayout] = []
-    vertex_buffer: Buffer | None = None
+    vertex_buffers: list[Buffer] = []
 
     def create_render_pipeline(self, options: RenderOptions) -> None:
         shader_module = self.device.createShaderModule(self._get_preprocessed_shader_code())
@@ -195,7 +195,7 @@ class Renderer(BaseRenderer):
         render_pass = options.begin_render_pass()
         render_pass.setPipeline(self.pipeline)
         render_pass.setBindGroup(0, self.group)
-        if self.vertex_buffer is not None:
-            render_pass.setVertexBuffer(0, self.vertex_buffer)
+        for i, vertex_buffer in enumerate(self.vertex_buffers):
+            render_pass.setVertexBuffer(i, vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
