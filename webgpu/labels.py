@@ -39,7 +39,6 @@ class Labels(Renderer):
         self.h_align = h_align
         self.v_align = v_align
 
-    @check_timestamp
     def update(self, options: RenderOptions):
         n_chars = sum(len(label) for label in self.labels)
         n_labels = len(self.labels)
@@ -101,7 +100,7 @@ class Labels(Renderer):
                 char_data[ichar]["char"] = ord(c)
                 ichar += 1
 
-        self.font = Font(self.canvas, self.font_size)
+        self.font = Font(options.canvas, self.font_size)
 
         data = (
             np.array([len(self.labels)], dtype=np.uint32).tobytes()
@@ -114,17 +113,13 @@ class Labels(Renderer):
             usage=BufferUsage.STORAGE | BufferUsage.COPY_DST,
         )
         self.device.queue.writeBuffer(self.buffer, 0, data)
-        self.create_render_pipeline()
 
     def get_shader_code(self):
-        shader_code = read_shader_file("text.wgsl")
-        shader_code += self.font.get_shader_code()
-        shader_code += self.options.camera.get_shader_code()
-        return shader_code
+        return read_shader_file("text.wgsl")
 
     def get_bindings(self, options: RenderOptions):
         return [
             *self.font.get_bindings(options),
-            *self.options.camera.get_bindings(options),
+            *options.camera.get_bindings(options),
             BufferBinding(Binding.TEXT, self.buffer),
         ]

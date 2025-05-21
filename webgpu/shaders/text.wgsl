@@ -1,3 +1,6 @@
+#import font
+#import camera
+
 @group(0) @binding(30) var<storage> u_text : Texts;
 
 struct Texts {

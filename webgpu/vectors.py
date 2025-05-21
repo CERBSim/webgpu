@@ -74,9 +74,6 @@ class VectorRenderer(BaseVectorRenderer):
         self.size = size or 1 / 10 * np.linalg.norm(self.bounding_box[1] - self.bounding_box[0])
 
     def update(self, timestamp):
-        if timestamp == self._timestamp:
-            return
-
         super().update(timestamp)
 
         self._buffers = {

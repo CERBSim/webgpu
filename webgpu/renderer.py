@@ -122,6 +122,11 @@ class MultipleRenderer(BaseRenderer):
         for r in self.render_objects:
             r.update(options)
 
+    def _update_and_create_render_pipeline(self, options: RenderOptions) -> None:
+        self.update(options)
+        for r in self.render_objects:
+            r.create_render_pipeline(options)
+
     def render(self, options: RenderOptions) -> None:
         for r in self.render_objects:
             r.render(options)
