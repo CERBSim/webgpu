@@ -32,5 +32,5 @@ fn vertex_main(@builtin(vertex_index) vertId: u32, @builtin(instance_index) trig
 
 @fragment
 fn fragment_main(input: TriangleFragmentInput) -> @location(0) vec4<f32> {
-  return lightCalcColor(input.n, getColor(input.vertId, input.trigId));
+  return lightCalcColor(input.position, input.n, getColor(input.vertId, input.trigId));
 }

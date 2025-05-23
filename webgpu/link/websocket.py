@@ -12,16 +12,21 @@ class WebsocketLinkBase(LinkBaseAsync):
     _websocket_thread: threading.Thread
     _connection: websockets.asyncio.client.ClientConnection
     _event_is_connected: threading.Event
+    _event_is_running: threading.Event
     _start_handling_messages: threading.Event
 
     def __init__(self):
         super().__init__()
         self._event_is_connected = threading.Event()
+        self._event_is_running = threading.Event()
         self._start_handling_messages = threading.Event()
         self._send_loop = asyncio.new_event_loop()
 
         self._websocket_thread = threading.Thread(target=self._connect)
         self._websocket_thread.start()
+
+    def wait_for_server_running(self):
+        self._event_is_running.wait()
 
     def wait_for_connection(self):
         self._event_is_connected.wait()
@@ -67,12 +72,12 @@ class WebsocketLinkClient(WebsocketLinkBase):
 
 class WebsocketLinkServer(WebsocketLinkBase):
     _stop: asyncio.Future
-    _port: int = 0
+    _port: int = None
 
     def __init__(self):
-        super().__init__()
         self._stop = self._send_loop.create_future()
         self._port = 8700
+        super().__init__()
 
     @property
     def port(self):
@@ -96,7 +101,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
                     async with websockets.serve(
                         self._websocket_handler, "", self._port, max_size=2 * 1024**3
                     ):
-                        # print("server running on port", self._port)
+                        self._event_is_running.set()
                         await self._stop
                         break
                 except OSError as e:

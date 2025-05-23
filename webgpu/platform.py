@@ -102,11 +102,12 @@ def init(before_wait_for_connection=None):
     global js, create_proxy, destroy_proxy, websocket_server, link
     if is_pyodide or js is not None:
         return
-
     websocket_server = WebsocketLinkServer()
     create_proxy = websocket_server.create_proxy
     destroy_proxy = websocket_server.destroy_proxy
     link = websocket_server
+
+    websocket_server.wait_for_server_running()
 
     if before_wait_for_connection:
         before_wait_for_connection(websocket_server)

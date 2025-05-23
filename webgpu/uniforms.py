@@ -24,6 +24,7 @@ class Binding:
     COLORMAP = 5
     COLORMAP_TEXTURE = 6
     COLORMAP_SAMPLER = 7
+    LIGHT = 8
 
     EDGES = 8
     TRIGS = 9

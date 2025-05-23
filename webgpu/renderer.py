@@ -26,7 +26,7 @@ class RenderOptions:
 
     def __init__(self, canvas):
         self.canvas = canvas
-        self.light = Light(self.device)
+        self.light = Light()
         self.camera = Camera(canvas)
 
     @property
@@ -35,6 +35,7 @@ class RenderOptions:
 
     def update_buffers(self):
         self.camera._update_uniforms()
+        self.light._update_uniforms()
 
     def get_bindings(self):
         return [

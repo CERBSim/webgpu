@@ -14,8 +14,9 @@ struct ShapeVertexIn {
 
 struct ShapeVertexOut {
     @builtin(position) position: vec4f,
-    @location(0) normal: vec3f,
-    @location(1) color: vec4f,
+    @location(0) p: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) color: vec4f,
 };
 
 @vertex fn shape_vertex_main(
@@ -42,13 +43,13 @@ struct ShapeVertexOut {
     input: ShapeVertexOut,
 ) -> @location(0) vec4f {
     let color = getColor(input.color.x);
-    return lightCalcColor(normalize(input.normal), color);
+    return lightCalcColor(input.p, input.normal, color);
 }
 
 @fragment fn shape_fragment_main_color(
     input: ShapeVertexOut,
 ) -> @location(0) vec4f {
-    return lightCalcColor(normalize(input.normal), input.color);
+    return lightCalcColor(input.p, input.normal, input.color);
 }
 
 fn quaternion(vTo: vec3f, vFrom: vec3f) -> vec4f {
