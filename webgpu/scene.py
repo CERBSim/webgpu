@@ -127,6 +127,16 @@ class Scene:
         self.device.queue.submit([options.command_encoder.finish()])
         options.command_encoder = None
 
+    def redraw_blocking(self):
+        with self.redraw_mutex:
+            import time
+
+            self.options.timestamp = time.time()
+            for obj in self.render_objects:
+                obj._update_and_create_render_pipeline(self.options)
+
+            self.render()
+
     @debounce
     def redraw(self):
         with self.redraw_mutex:
