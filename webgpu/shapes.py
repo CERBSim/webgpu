@@ -174,6 +174,9 @@ class ShapeRenderer(Renderer):
 
         self.shape_data = shape_data
 
+    def get_bindings(self):
+        return self.colormap.get_bindings()
+
     def update(self, options: RenderOptions):
         self.n_vertices = self.shape_data.triangles.size
         self.n_instances = self.positions.size // 3
