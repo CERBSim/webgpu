@@ -75,9 +75,9 @@ class WebsocketLinkServer(WebsocketLinkBase):
     _port: int = None
 
     def __init__(self):
-        self._stop = self._send_loop.create_future()
         self._port = 8700
         super().__init__()
+        self._stop = self._send_loop.create_future()
 
     @property
     def port(self):
