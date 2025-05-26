@@ -19,6 +19,15 @@ struct ShapeVertexOut {
     @location(2) color: vec4f,
 };
 
+@group(0) @binding(10) var<uniform> u_shape: ShapeUniform;
+
+struct ShapeUniform {
+    scale: f32,
+    padding1: f32,
+    padding2: f32,
+    padding3: f32,
+};
+
 @vertex fn shape_vertex_main(
     vert: ShapeVertexIn,
     @builtin(instance_index) instance_index: u32,
@@ -31,7 +40,7 @@ struct ShapeVertexOut {
     let q = quaternion(v, vec3f(0., 0., 1.));
     var pref = vert.position;
     pref.z *= length(v);
-    let p = pstart + rotate(pref, q);
+    let p = pstart + u_shape.scale * rotate(pref, q);
     out.position = cameraMapPoint(p);
     out.normal = normalize(rotate(vert.normal, q));
     let lam = (vert.position.z-vert.z_range.x) / (vert.z_range.y-vert.z_range.x);

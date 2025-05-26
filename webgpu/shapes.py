@@ -9,6 +9,7 @@ import numpy as np
 
 from .colormap import Colormap
 from .renderer import Renderer, RenderOptions
+from .uniforms import UniformBase, ct
 from .utils import (
     buffer_from_array,
     read_shader_file,
@@ -145,6 +146,10 @@ def generate_cone(n, radius=1, height=1, bottom_face=False):
         n, radius, height, top_face=False, bottom_face=bottom_face, radius_top=0
     )
 
+class ShapeUniforms(UniformBase):
+    _binding = 10
+    _fields_ = [("scale", ct.c_float),
+                ("padding", ct.c_float * 3)]
 
 class ShapeRenderer(Renderer):
     def __init__(
@@ -169,11 +174,13 @@ class ShapeRenderer(Renderer):
             colors = np.array(colors, dtype=np.float32).reshape(-1)
             colors = np.array(np.round(255 * colors), dtype=np.uint8).flatten()
         self._colors = colors
-
+        self._scale = 1.
+        self._scale_range = (0.01, 2, 0.01)
+        self._uniforms = None
         self.shape_data = shape_data
 
     def get_bindings(self):
-        return self.colormap.get_bindings()
+        return self.colormap.get_bindings() + self._uniforms.get_bindings()
 
     @property
     def positions(self):
@@ -183,6 +190,17 @@ class ShapeRenderer(Renderer):
     def positions(self, value):
         self._positions = np.array(value, dtype=np.float32).reshape(-1)
         self.set_needs_update()
+
+    @property
+    def scale(self):
+        return self._scale
+
+    @scale.setter
+    def scale(self, value):
+        self._scale = value
+        if self._uniforms is not None:
+            self._uniforms.scale = value
+            self._uniforms.update_buffer()
 
     @property
     def directions(self):
@@ -217,6 +235,9 @@ class ShapeRenderer(Renderer):
         self.n_vertices = self.shape_data.triangles.size
         self.n_instances = self.positions.size // 3
         self.colormap.update(options)
+        self._uniforms = ShapeUniforms()
+        self._uniforms.scale = self.scale
+        self._uniforms.update_buffer()
         buffers = self.shape_data.create_buffers()
         self.triangle_buffer = buffers["triangles"]
         positions_buffer = buffer_from_array(
@@ -351,6 +372,20 @@ class ShapeRenderer(Renderer):
                 ],
             ),
         ]
+
+    def add_options_to_gui(self, gui):
+        if gui is None:
+            return
+        def set_scale(value):
+            self.scale = value
+        gui.slider(
+            value=self.scale,
+            func=set_scale,
+            min=self._scale_range[0],
+            max=self._scale_range[1],
+            step=self._scale_range[2],
+            label="Scale Shapes"
+        )
 
     def get_shader_code(self) -> str:
         return read_shader_file("shapes.wgsl")
