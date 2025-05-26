@@ -203,6 +203,10 @@ class ShapeRenderer(Renderer):
             itemsize = self.values.itemsize
             color_format = VertexFormat.float32
             n_colors = self.values.size
+            if self.colormap.autoscale:
+                self.colormap.set_min_max(
+                    self.values.min(), self.values.max(), set_autoscale=False
+                )
             self.fragment_entry_point = "shape_fragment_main_value"
             colors_buffer = buffer_from_array(
                 self.values, label="values", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
