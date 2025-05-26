@@ -157,27 +157,63 @@ class ShapeRenderer(Renderer):
         label=None,
         colormap=None,
     ):
-        if colors is None and values is None:
-            raise ValueError("Either colors or values must be provided")
 
         super().__init__(label=label)
 
         self.colormap = colormap or Colormap()
-        self.positions = np.array(positions, dtype=np.float32).reshape(-1)
-        self.values = values and np.array(values, dtype=np.float32).reshape(-1)
-        self.directions = np.array(directions, dtype=np.float32).reshape(-1)
+        self._positions = np.array(positions, dtype=np.float32).reshape(-1)
+        self._values = values and np.array(values, dtype=np.float32).reshape(-1)
+        self._directions = np.array(directions, dtype=np.float32).reshape(-1)
 
         if colors:
             colors = np.array(colors, dtype=np.float32).reshape(-1)
             colors = np.array(np.round(255 * colors), dtype=np.uint8).flatten()
-        self.colors = colors
+        self._colors = colors
 
         self.shape_data = shape_data
 
     def get_bindings(self):
         return self.colormap.get_bindings()
 
+    @property
+    def positions(self):
+        return self._positions
+
+    @positions.setter
+    def positions(self, value):
+        self._positions = np.array(value, dtype=np.float32).reshape(-1)
+        self.set_needs_update()
+
+    @property
+    def directions(self):
+        return self._directions
+
+    @directions.setter
+    def directions(self, value):
+        self._directions = np.array(value, dtype=np.float32).reshape(-1)
+        self.set_needs_update()
+
+    @property
+    def values(self):
+        return self._values
+
+    @values.setter
+    def values(self, value):
+        self._values = np.array(value, dtype=np.float32).reshape(-1)
+        self.set_needs_update()
+
+    @property
+    def colors(self):
+        return self._colors
+
+    @colors.setter
+    def colors(self, value):
+        self._colors = np.array(value, dtype=np.uint8).reshape(-1)
+        self.set_needs_update()
+
     def update(self, options: RenderOptions):
+        if self.colors is None and self.values is None:
+            raise ValueError("Either colors or values must be provided")
         self.n_vertices = self.shape_data.triangles.size
         self.n_instances = self.positions.size // 3
         self.colormap.update(options)
