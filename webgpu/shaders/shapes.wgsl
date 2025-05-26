@@ -33,7 +33,7 @@ struct ShapeVertexOut {
     pref.z *= length(v);
     let p = pstart + rotate(pref, q);
     out.position = cameraMapPoint(p);
-    out.normal = cameraMapNormal(rotate(vert.normal, q)).xyz;
+    out.normal = normalize(rotate(vert.normal, q));
     let lam = (vert.position.z-vert.z_range.x) / (vert.z_range.y-vert.z_range.x);
     out.color = mix(vert.instance_color_bot, vert.instance_color_top, lam);
     return out;

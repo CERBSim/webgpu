@@ -169,7 +169,7 @@ class ShapeRenderer(Renderer):
 
         if colors:
             colors = np.array(colors, dtype=np.float32).reshape(-1)
-            colors = np.array(255 * np.round(colors), dtype=np.uint8).flatten()
+            colors = np.array(np.round(255 * colors), dtype=np.uint8).flatten()
         self.colors = colors
 
         self.shape_data = shape_data
