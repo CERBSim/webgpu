@@ -1,9 +1,10 @@
 import numpy as np
 
-from . import BufferBinding, Colormap, Renderer, read_shader_file
 from .uniforms import UniformBase, ct
-from .utils import buffer_from_array
+from .utils import buffer_from_array, BufferBinding, read_shader_file
 from .webgpu_api import PrimitiveTopology
+from .colormap import Colormap
+from .renderer import Renderer
 
 
 class Binding:
