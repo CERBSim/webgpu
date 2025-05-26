@@ -155,22 +155,20 @@ class ShapeRenderer(Renderer):
         values: np.ndarray | None = None,
         colors: np.ndarray | None = None,
         label=None,
+        colormap=None,
     ):
         if colors is None and values is None:
             raise ValueError("Either colors or values must be provided")
 
         super().__init__(label=label)
 
-        self.colormap = Colormap()
-        self.positions = np.array(positions, dtype=np.float32)
-        self.values = values and np.array(values, dtype=np.float32)
-        self.directions = np.array(directions, dtype=np.float32)
+        self.colormap = colormap or Colormap()
+        self.positions = np.array(positions, dtype=np.float32).reshape(-1)
+        self.values = values and np.array(values, dtype=np.float32).reshape(-1)
+        self.directions = np.array(directions, dtype=np.float32).reshape(-1)
 
         if colors:
-            colors = np.array(colors, dtype=np.float32).reshape(-1, 3)
-            colors = np.concatenate(
-                (colors, np.ones((colors.shape[0], 1), dtype=np.float32)), axis=1
-            )
+            colors = np.array(colors, dtype=np.float32).reshape(-1)
             colors = np.array(255 * np.round(colors), dtype=np.uint8).flatten()
         self.colors = colors
 
@@ -189,7 +187,7 @@ class ShapeRenderer(Renderer):
             self.directions, label="directions", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
         )
 
-        self.vertex_entry_point = "cylinder_vertex_main"
+        self.vertex_entry_point = "shape_vertex_main"
         if self.colors is not None:
             itemsize = self.colors.itemsize * 4
             color_format = VertexFormat.unorm8x4

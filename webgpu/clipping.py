@@ -79,6 +79,8 @@ class Clipping(BaseRenderer):
             self.uniforms._buffer.destroy()
 
     def add_options_to_gui(self, gui):
+        if gui is None:
+            return
         folder = gui.folder("Clipping", closed=True)
         folder.checkbox("enabled", self.mode != self.Mode.DISABLED, self.enable_clipping)
         folder.value("x", self.center[0], self.set_x_value)
