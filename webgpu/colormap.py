@@ -1,7 +1,13 @@
 from .labels import Labels
-from .renderer import MultipleRenderer, Renderer, RenderOptions
+from .renderer import BaseRenderer, Renderer, RenderOptions
 from .uniforms import Binding, UniformBase, ct
-from .utils import SamplerBinding, TextureBinding, format_number, read_shader_file, get_device
+from .utils import (
+    SamplerBinding,
+    TextureBinding,
+    format_number,
+    get_device,
+    read_shader_file,
+)
 from .webgpu_api import (
     TexelCopyBufferLayout,
     TexelCopyTextureInfo,
@@ -16,47 +22,42 @@ class ColormapUniforms(UniformBase):
     _fields_ = [
         ("min", ct.c_float),
         ("max", ct.c_float),
-        ("position_x", ct.c_float),
-        ("position_y", ct.c_float),
         ("discrete", ct.c_uint32),
         ("n_colors", ct.c_uint32),
+    ]
+
+
+class ColorbarUniforms(UniformBase):
+    _binding = Binding.COLORBAR
+    _fields_ = [
+        ("position", ct.c_float * 2),
         ("width", ct.c_float),
         ("height", ct.c_float),
     ]
 
 
-class Colorbar(Renderer):
+class Colormap(BaseRenderer):
     texture: Texture
-    vertex_entry_point: str = "colormap_vertex"
-    fragment_entry_point: str = "colormap_fragment"
-    n_vertices: int = 3
 
-    def __init__(self, minval=0, maxval=1):
+    def __init__(self, minval=0, maxval=1, colormap: list | str = "matlab:jet"):
         self.texture = None
         self.minval = minval
         self.maxval = maxval
-        self.position_x = -0.9
-        self.position_y = 0.9
         self.discrete = 0
         self.n_colors = 8
-        self.width = 1.0
-        self.height = 0.05
         self.uniforms = None
         self.sampler = None
-        self.autoupdate = True
+        self.autoscale = True
+
+        self.set_colormap(colormap)
 
     def update(self, options: RenderOptions):
         if self.uniforms is None:
             self.uniforms = ColormapUniforms()
         self.uniforms.min = self.minval
         self.uniforms.max = self.maxval
-        self.uniforms.position_x = self.position_x
-        self.uniforms.position_y = self.position_y
         self.uniforms.discrete = self.discrete
         self.uniforms.n_colors = self.n_colors
-        self.uniforms.width = self.width
-        self.uniforms.height = self.height
-        self.n_instances = 2 * self.n_colors
         self.uniforms.update_buffer()
 
         if self.sampler is None:
@@ -66,11 +67,20 @@ class Colorbar(Renderer):
             )
 
         if self.texture is None:
-            self.set_colormap("matlab:jet")
-        self.create_render_pipeline(options)
+            self._create_texture()
 
-    def get_bounding_box(self):
-        return None
+    def set_colormap(self, colormap: list | str):
+        if self.texture is not None:
+            self.texture.destroy()
+            self.texture = None
+        if isinstance(colormap, str):
+            if colormap in _colormaps:
+                colormap = _colormaps[colormap]
+            else:
+                colormap = create_colormap(colormap, 32)
+
+        self.colors = colormap
+        self.set_needs_update()
 
     def set_n_colors(self, n_colors):
         self.n_instances = 2 * n_colors
@@ -78,11 +88,11 @@ class Colorbar(Renderer):
             self.uniforms.n_colors = n_colors
             self.uniforms.update_buffer()
 
-    def set_min_max(self, minval, maxval, set_autoupdate=True):
+    def set_min_max(self, minval, maxval, set_autoscale=True):
         self.minval = minval
         self.maxval = maxval
-        if set_autoupdate:
-            self.autoupdate = False
+        if set_autoscale:
+            self.autoscale = False
         if self.uniforms is not None:
             self.uniforms.min = minval
             self.uniforms.max = maxval
@@ -95,14 +105,11 @@ class Colorbar(Renderer):
             *self.uniforms.get_bindings(),
         ]
 
-    def get_shader_code(self):
-        return read_shader_file("colormap.wgsl")
-
-    def set_colormap(self, name: str):
+    def _create_texture(self):
         if self.texture is not None:
             self.texture.destroy()
 
-        data = _colormaps[name]
+        data = self.colors
         n = len(data)
         v4 = [v + [255] for v in data]
         data = sum(v4, [])
@@ -122,50 +129,96 @@ class Colorbar(Renderer):
         )
 
 
-class Colormap(MultipleRenderer):
-    def __init__(self):
-        self.colorbar = Colorbar()
+class Colorbar(Renderer):
+    vertex_entry_point: str = "colormap_vertex"
+    fragment_entry_point: str = "colormap_fragment"
+    n_vertices: int = 3
+
+    def __init__(
+        self, colormap: Colormap | None = None, position=(-0.9, 0.9), width=1, height=0.05
+    ):
+        super().__init__()
+        self.colormap = colormap or Colormap()
         self.labels = Labels([], [], font_size=14, h_align="center", v_align="top")
-        self.update_labels()
-        super().__init__([self.colorbar, self.labels])
+        self.uniforms = None
+
+        self._position = position
+        self._width = width
+        self._height = height
 
     @property
-    def autoupdate(self):
-        return self.colorbar.autoupdate
+    def position(self):
+        return self._position
+
+    @position.setter
+    def position(self, value):
+        self._position = value
+        if self.uniforms is not None:
+            self.uniforms.position = value
+        self.set_needs_update()
+
+    @property
+    def width(self):
+        return self._width
+
+    @width.setter
+    def width(self, value):
+        self._width = value
+        if self.uniforms is not None:
+            self.uniforms.width = value
+        self.set_needs_update()
+
+    @property
+    def height(self):
+        return self._height
+
+    @height.setter
+    def height(self, value):
+        self._height = value
+        if self.uniforms is not None:
+            self.uniforms.height = value
+        self.set_needs_update()
 
     def get_shader_code(self):
-        return self.colorbar.get_shader_code()
+        return read_shader_file("colormap.wgsl")
 
     def get_bindings(self):
-        return self.colorbar.get_bindings()
+        return (
+            self.colormap.get_bindings() + self.labels.get_bindings() + self.uniforms.get_bindings()
+        )
 
-    @autoupdate.setter
-    def autoupdate(self, value):
-        self.colorbar.autoupdate = value
+    def update(self, options: RenderOptions):
+        if self.uniforms is None:
+            self.uniforms = ColorbarUniforms()
+            self.uniforms.position = self.position
+            self.uniforms.width = self.width
+            self.uniforms.height = self.height
 
-    def set_min_max(self, min, max, set_autoupdate=True):
-        self.colorbar.set_min_max(min, max, set_autoupdate)
-        self.update_labels()
+        self.uniforms.update_buffer()
 
-    def update_labels(self):
+        self.n_instances = 2 * self.colormap.n_colors
+
         self.labels.labels = [
             format_number(v)
             for v in [
-                self.colorbar.minval + i / 4 * (self.colorbar.maxval - self.colorbar.minval)
+                self.colormap.minval + i / 4 * (self.colormap.maxval - self.colormap.minval)
                 for i in range(6)
             ]
         ]
         self.labels.positions = [
             (
-                self.colorbar.position_x + i * self.colorbar.width / 4,
-                self.colorbar.position_y - 0.01,
+                self.position[0] + i * self.width / 4,
+                self.position[1] - 0.01,
                 0,
             )
             for i in range(5)
         ]
+        self.labels.set_needs_update()
+        self.labels._update_and_create_render_pipeline(options)
 
-    def get_bounding_box(self):
-        return None
+    def render(self, options: RenderOptions):
+        super().render(options)
+        self.labels.render(options)
 
 
 _colormaps = {
@@ -308,16 +361,24 @@ _colormaps = {
 }
 
 
-if __name__ == "__main__":
+def create_colormap(name: str, n_colors: int = 32):
+    """Create a colormap with the given name and number of colors."""
     from cmap import Colormap
 
+    cm = Colormap(name)
+    colors = []
+    for i in range(n_colors):
+        c = cm(i / n_colors)
+        colors.append([int(255 * c[i] + 0.5) for i in range(3)])
+    return colors
+
+
+if __name__ == "__main__":
     print("_colormaps = {")
     for name in ["viridis", "plasma", "cet_l20", "matlab:jet"]:
+        colors = create_colormap(name, n_colors=32)
         print(f"  '{name}' : [")
-        cm = Colormap(name)
         for i in range(32):
-            c = cm(i / 32)
-            r, g, b = [int(255 * c[i] + 0.5) for i in range(3)]
-            print(f"    [{r}, {g}, {b}],")
+            print(f"    {colors[i]},")
         print("  ],")
     print("}")
