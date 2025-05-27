@@ -110,6 +110,7 @@ def _DrawHTML(
     This way, data is kept in the converted html when running nbconvert
     The scene object is unpickled and drawn within a pyodide instance in the browser when the html is opened
     """
+    print("draw html")
     from IPython.display import Javascript, display
 
     scene, id_ = _init_html(scene, width, height)
@@ -134,9 +135,11 @@ def Draw(
 _js_init_pyodide = """
 async function init_pyodide(webgpu_b64) {
   const pyodide_module = await import(
-    "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs"
+    "https://cdn.jsdelivr.net/pyodide/v0.27.5/full/pyodide.mjs"
   );
-  window.pyodide = await pyodide_module.loadPyodide();
+  window.pyodide = await pyodide_module.loadPyodide(
+      {lockFileURL: "https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@0.27.5/pyodide-lock.json"}
+  );
   pyodide.setDebug(true);
   await pyodide.loadPackage([
     "micropip",
@@ -150,10 +153,15 @@ async function init_pyodide(webgpu_b64) {
 }
 
 window.draw_scene = async (data) => {
+  console.log("draw scene, wati for pyoidde");
   await window.pyodide_ready;
-  window.pyodide.runPython(`import webgpu.jupyter; webgpu.jupyter._DrawPyodide("${data}")`)
+  console.log("draw scene, have pyoidde");
+  window.pyodide.runPythonAsync(`import webgpu.jupyter; webgpu.jupyter._DrawPyodide("${data}")`)
+  console.log("draw scene, done");
 }
 """
+
+is_exporting = False
 
 if not platform.is_pyodide:
     from IPython.display import Javascript, display
@@ -176,3 +184,70 @@ if not platform.is_pyodide:
             )
         )
         device = init_device_sync()
+
+_code_counter = 0
+
+
+def add_init_js_code(js_code: str):
+    global _code_counter
+    if not is_exporting:
+        return
+
+    from IPython.display import Javascript, display
+
+    display(
+        Javascript(
+            """
+window._webgpu_ready_{{COUNTER}} = window.pyodide_ready;
+window.pyodide_ready = async function() {
+    await window._webgpu_ready_{{COUNTER}};
+    {{CODE}} 
+}();
+""".replace(
+                "{{COUNTER}}", str(_code_counter)
+            ).replace(
+                "{{CODE}}", js_code
+            )
+        )
+    )
+
+
+def add_zipped_module_on_export(module_name: str):
+    print("add module on export", module_name)
+    global _module_counter
+    if not is_exporting:
+        return
+
+    module_code = create_package_zip(module_name)
+    module_b64 = base64.b64encode(module_code).decode("utf-8")
+    code = f'await pyodide.unpackArchive(decodeB64("{module_b64}"), "zip");'
+    add_init_js_code(code)
+
+
+def add_imports_on_export(modules: list[str]):
+    """Add imports to the pyodide_ready function on export"""
+    if not is_exporting:
+        return
+
+    add_init_js_code(
+        f'await pyodide.runPythonAsync("import micropip; await micropip.install({modules})")'
+    )
+
+
+def install_wheels_on_export(urls: list[str]):
+    """Add imports to the pyodide_ready function on export"""
+    if not is_exporting:
+        return
+
+    code = ""
+    for url in urls:
+        file_name = url.split("/")[-1]
+        code += f"""
+        {{
+          const response = await fetch("{url}");
+          const blob = await response.blob();
+          await window.pyodide._api.install(await blob.arrayBuffer(), "{file_name}", 'site');
+        }}
+"""
+    add_init_js_code(code)
+
