@@ -39,8 +39,8 @@ struct ShapeUniform {
     let v = pend - pstart;
     let q = quaternion(v, vec3f(0., 0., 1.));
     var pref = vert.position;
-    pref.z *= length(v);
-    let p = pstart + u_shape.scale * rotate(pref, q);
+    //pref.z *= length(v);
+    let p = pstart + length(v) * u_shape.scale * rotate(pref, q);
     out.position = cameraMapPoint(p);
     out.normal = normalize(rotate(vert.normal, q));
     let lam = (vert.position.z-vert.z_range.x) / (vert.z_range.y-vert.z_range.x);
