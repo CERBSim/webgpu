@@ -98,6 +98,20 @@ class Colormap(BaseRenderer):
             self.uniforms.max = maxval
             self.uniforms.update_buffer()
 
+    def set_min(self, minval):
+        self.minval = minval
+        self.autoscale = False
+        if self.uniforms is not None:
+            self.uniforms.min = minval
+            self.uniforms.update_buffer()
+
+    def set_max(self, maxval):
+        self.maxval = maxval
+        self.autoscale = False
+        if self.uniforms is not None:
+            self.uniforms.max = maxval
+            self.uniforms.update_buffer()
+
     def get_bindings(self):
         return [
             TextureBinding(Binding.COLORMAP_TEXTURE, self.texture),
@@ -219,6 +233,21 @@ class Colorbar(Renderer):
     def render(self, options: RenderOptions):
         super().render(options)
         self.labels.render(options)
+
+    def add_options_to_gui(self, gui):
+        if gui is None:
+            return
+        folder = gui.folder("Colormap", closed=True)
+        folder.value("min", self.colormap.minval, self.set_min)
+        folder.value("max", self.colormap.maxval, self.set_max)
+
+    def set_min(self, minval):
+        self.colormap.set_min(minval)
+        self.set_needs_update()
+
+    def set_max(self, maxval):
+        self.colormap.set_max(maxval)
+        self.set_needs_update()
 
 
 _colormaps = {
