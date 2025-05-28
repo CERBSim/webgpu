@@ -14,6 +14,8 @@ from .triangles import *
 from .utils import init_device_sync
 from .webgpu_api import *
 
+_PYODIDE_VERSION = "0.27.6"
+
 
 def create_package_zip(module_name="webgpu"):
     """
@@ -135,10 +137,10 @@ def Draw(
 _js_init_pyodide = """
 async function init_pyodide(webgpu_b64) {
   const pyodide_module = await import(
-    "https://cdn.jsdelivr.net/pyodide/v0.27.5/full/pyodide.mjs"
+    "https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/pyodide.mjs"
   );
   window.pyodide = await pyodide_module.loadPyodide(
-      {lockFileURL: "https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@0.27.5/pyodide-lock.json"}
+      {lockFileURL: "https://cdn.jsdelivr.net/gh/mhochsteger/ngsolve_pyodide@{PYODIDE_VERSION}/pyodide-lock.json"}
   );
   pyodide.setDebug(true);
   await pyodide.loadPackage([
@@ -159,7 +161,9 @@ window.draw_scene = async (data) => {
   window.pyodide.runPythonAsync(`import webgpu.jupyter; webgpu.jupyter._DrawPyodide("${data}")`)
   console.log("draw scene, done");
 }
-"""
+""".replace(
+    "{PYODIDE_VERSION}", _PYODIDE_VERSION
+)
 
 is_exporting = False
 
@@ -250,4 +254,3 @@ def install_wheels_on_export(urls: list[str]):
         }}
 """
     add_init_js_code(code)
-

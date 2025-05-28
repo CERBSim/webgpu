@@ -146,10 +146,11 @@ def generate_cone(n, radius=1, height=1, bottom_face=False):
         n, radius, height, top_face=False, bottom_face=bottom_face, radius_top=0
     )
 
+
 class ShapeUniforms(UniformBase):
     _binding = 10
-    _fields_ = [("scale", ct.c_float),
-                ("padding", ct.c_float * 3)]
+    _fields_ = [("scale", ct.c_float), ("padding", ct.c_float * 3)]
+
 
 class ShapeRenderer(Renderer):
     def __init__(
@@ -174,7 +175,7 @@ class ShapeRenderer(Renderer):
             colors = np.array(colors, dtype=np.float32).reshape(-1)
             colors = np.array(np.round(255 * colors), dtype=np.uint8).flatten()
         self._colors = colors
-        self._scale = 1.
+        self._scale = 1.0
         self._scale_range = (0.01, 2, 0.01)
         self._uniforms = None
         self.shape_data = shape_data
@@ -261,9 +262,7 @@ class ShapeRenderer(Renderer):
             color_format = VertexFormat.float32
             n_colors = self.values.size
             if self.colormap.autoscale:
-                self.colormap.set_min_max(
-                    self.values.min(), self.values.max(), set_autoscale=False
-                )
+                self.colormap.set_min_max(self.values.min(), self.values.max(), set_autoscale=False)
             self.fragment_entry_point = "shape_fragment_main_value"
             colors_buffer = buffer_from_array(
                 self.values, label="values", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
@@ -376,15 +375,17 @@ class ShapeRenderer(Renderer):
     def add_options_to_gui(self, gui):
         if gui is None:
             return
+
         def set_scale(value):
             self.scale = value
+
         gui.slider(
             value=self.scale,
             func=set_scale,
             min=self._scale_range[0],
             max=self._scale_range[1],
             step=self._scale_range[2],
-            label="Scale Shapes"
+            label="Scale Shapes",
         )
 
     def get_shader_code(self) -> str:
