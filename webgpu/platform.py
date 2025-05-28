@@ -83,6 +83,7 @@ if not is_pyodide:
 
 if is_pyodide:
     import json
+    import js as pyodide_js
 
     from .link.base import LinkBase
 
