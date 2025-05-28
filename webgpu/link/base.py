@@ -260,12 +260,11 @@ class LinkBase:
             if request_id is not None:
                 self._send_response(request_id, response)
         except Exception as e:
-            from webapp_client.utils import print_exception
-
-            print("error in on_message", data, type(e), str(e))
-            if "id" in data and data["id"] in self._objects:
-                print("object", data["id"], self._objects[data["id"]])
-            print_exception(e)
+            import traceback
+            import sys
+            print("error in on_message", data, type(e), str(e), file=sys.stderr)
+            if not isinstance(e, str):
+                traceback.print_exception(*sys.exc_info(), file=sys.stderr)
 
     def _on_message(self, message: str):
         data = json.loads(message)
