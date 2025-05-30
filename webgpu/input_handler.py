@@ -2,10 +2,11 @@ from typing import Callable
 
 from .platform import is_pyodide
 from .utils import to_js
-
+import threading
 
 class InputHandler:
     def __init__(self, html_canvas):
+        self._mutex = threading.Lock()
         self._callbacks = {}
 
         self.html_canvas = html_canvas
@@ -44,12 +45,13 @@ class InputHandler:
         self.on("mousemove", func)
 
     def unregister_callbacks(self):
-        for event in self._callbacks:
-            for func in self._callbacks[event]:
-                self.html_canvas.removeEventListener(event, func)
-                if is_pyodide:
-                    func.destroy()
-        self._callbacks = {}
+        with self._mutex:
+            for event in self._callbacks:
+                for func in self._callbacks[event]:
+                    self.html_canvas.removeEventListener(event, func)
+                    if is_pyodide:
+                        func.destroy()
+            self._callbacks = {}
 
     def _handle_js_event(self, event_type):
         def wrapper(event):

@@ -53,6 +53,8 @@ class Scene:
             import uuid
 
             id = str(uuid.uuid4())
+        import threading
+        self.redraw_mutex = threading.Lock()
 
         self._id = id
         self.render_objects = render_objects
@@ -76,9 +78,6 @@ class Scene:
         return self.canvas.device
 
     def init(self, canvas):
-        import threading
-
-        self.redraw_mutex = threading.Lock()
         self.canvas = canvas
         self.options = RenderOptions(self.canvas)
 
@@ -181,19 +180,18 @@ class Scene:
                 )
 
     def cleanup(self):
-        for obj in self.render_objects:
-            obj.options = None
+        with self.redraw_mutex:
+            if self.canvas is not None:
+                self.options.camera.unregister_callbacks(self.canvas.input_handler)
+                self.options.camera._render_function = None
+                self.canvas.input_handler.unregister_callbacks()
+                platform.destroy_proxy(self._js_render)
+                del self._js_render
+                self.canvas._on_resize_callbacks.remove(self.render)
+                self.canvas = None
 
-        self.options.camera.unregister_callbacks(self.canvas.input_handler)
-        self.options.camera._render_function = None
-        self.canvas.input_handler.unregister_callbacks()
-        platform.destroy_proxy(self._js_render)
-        del self._js_render
-        self.canvas._on_resize_callbacks.remove(self.render)
-        self.canvas = None
-
-        if is_pyodide:
-            del _scenes_by_id[self.id]
+                if is_pyodide:
+                    del _scenes_by_id[self.id]
 
 
 if is_pyodide:
