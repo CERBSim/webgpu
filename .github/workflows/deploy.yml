@@ -30,7 +30,7 @@ jobs:
 
       - name: Build package
         run: |
-          python -m build
+          python -m build -w
 
       - name: Publish to PyPI via Trusted Publishing
         uses: pypa/gh-action-pypi-publish@release/v1
