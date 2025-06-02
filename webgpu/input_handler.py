@@ -4,6 +4,7 @@ from .platform import is_pyodide
 from .utils import to_js
 import threading
 
+
 class InputHandler:
     def __init__(self, html_canvas):
         self._mutex = threading.Lock()

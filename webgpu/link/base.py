@@ -262,6 +262,7 @@ class LinkBase:
         except Exception as e:
             import traceback
             import sys
+
             print("error in on_message", data, type(e), str(e), file=sys.stderr)
             if not isinstance(e, str):
                 traceback.print_exception(*sys.exc_info(), file=sys.stderr)

@@ -54,6 +54,7 @@ class Scene:
 
             id = str(uuid.uuid4())
         import threading
+
         self.redraw_mutex = threading.Lock()
 
         self._id = id
