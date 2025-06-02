@@ -117,7 +117,7 @@ def read_shader_file(file_name) -> str:
     return find_shader_file(file_name).read_text()
 
 
-def preprocess_shader_code(code: str) -> str:
+def preprocess_shader_code(code: str, defines: dict[str, str] | None = None) -> str:
     imported_files = set()
     while "#import" in code:
         lines = code.split("\n")
@@ -137,6 +137,9 @@ def preprocess_shader_code(code: str) -> str:
         if not replaced_something:
             break
 
+    if defines:
+        for key, value in defines.items():
+            code = code.replace(f"@{key}@", str(value))
     return code
 
 

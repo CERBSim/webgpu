@@ -73,8 +73,10 @@ class BaseRenderer:
     label: str = ""
     _timestamp: float = -1
     active: bool = True
+    shader_defines: dict[str, str] = None
 
     def __init__(self, label=None):
+        self.shader_defines = {}
         if label is None:
             self.label = self.__class__.__name__
         else:
@@ -108,7 +110,7 @@ class BaseRenderer:
         raise NotImplementedError
 
     def _get_preprocessed_shader_code(self) -> str:
-        return preprocess_shader_code(self.get_shader_code())
+        return preprocess_shader_code(self.get_shader_code(), defines=self.shader_defines)
 
     def add_options_to_gui(self, gui):
         pass
