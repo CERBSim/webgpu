@@ -183,6 +183,7 @@ class Camera:
         model_view_proj = proj_mat @ model_view
         normal_mat = np.linalg.inv(model_view)
 
+        self.uniforms.aspect = aspect
         self.uniforms.model_view[:] = model_view.transpose().flatten()
         self.uniforms.model_view_projection[:] = model_view_proj.transpose().flatten()
         self.uniforms.normal_mat[:] = normal_mat.flatten()
