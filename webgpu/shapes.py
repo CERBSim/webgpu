@@ -149,10 +149,13 @@ def generate_cone(n, radius=1, height=1, bottom_face=False):
 
 class ShapeUniforms(UniformBase):
     _binding = 10
-    _fields_ = [("scale", ct.c_float), ("padding", ct.c_float * 3)]
+    _fields_ = [("scale", ct.c_float), ("scale_mode", ct.c_uint32), ("padding", ct.c_float * 2)]
 
 
 class ShapeRenderer(Renderer):
+    SCALE_UNIFORM = ct.c_uint32(0)
+    SCALE_Z = ct.c_uint32(1)
+
     def __init__(
         self,
         shape_data: ShapeData,
@@ -176,6 +179,7 @@ class ShapeRenderer(Renderer):
             colors = np.array(np.round(255 * colors), dtype=np.uint8).flatten()
         self._colors = colors
         self._scale = 1.0
+        self._scale_mode = ShapeRenderer.SCALE_UNIFORM
         self._scale_range = (0.01, 2, 0.01)
         self._uniforms = None
         self.shape_data = shape_data
@@ -201,6 +205,17 @@ class ShapeRenderer(Renderer):
         self._scale = value
         if self._uniforms is not None:
             self._uniforms.scale = value
+            self._uniforms.update_buffer()
+
+    @property
+    def scale_mode(self):
+        return self._scale_mode
+
+    @scale_mode.setter
+    def scale_mode(self, value):
+        self._scale_mode = value
+        if self._uniforms is not None:
+            self._uniforms.scale_mode = value
             self._uniforms.update_buffer()
 
     @property
@@ -238,6 +253,7 @@ class ShapeRenderer(Renderer):
         self.colormap.update(options)
         self._uniforms = ShapeUniforms()
         self._uniforms.scale = self.scale
+        self._uniforms.scale_mode = self.scale_mode
         self._uniforms.update_buffer()
         buffers = self.shape_data.create_buffers()
         self.triangle_buffer = buffers["triangles"]

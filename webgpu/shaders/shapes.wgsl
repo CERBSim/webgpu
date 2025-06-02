@@ -23,9 +23,9 @@ struct ShapeVertexOut {
 
 struct ShapeUniform {
     scale: f32,
+    scale_mode: u32,
     padding1: f32,
     padding2: f32,
-    padding3: f32,
 };
 
 @vertex fn shape_vertex_main(
@@ -39,8 +39,13 @@ struct ShapeUniform {
     let v = pend - pstart;
     let q = quaternion(v, vec3f(0., 0., 1.));
     var pref = vert.position;
-    //pref.z *= length(v);
-    let p = pstart + length(v) * u_shape.scale * rotate(pref, q);
+    if(u_shape.scale_mode == 0u) {
+        pref *= length(v);
+    }
+    else if(u_shape.scale_mode == 1u) {
+        pref.z *= length(v);
+    }
+    let p = pstart + u_shape.scale * rotate(pref, q);
     out.position = cameraMapPoint(p);
     out.normal = normalize(rotate(vert.normal, q));
     let lam = (vert.position.z-vert.z_range.x) / (vert.z_range.y-vert.z_range.x);
