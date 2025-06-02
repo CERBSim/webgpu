@@ -132,6 +132,7 @@ class MultipleRenderer(BaseRenderer):
         for r in self.render_objects:
             r.update(options)
 
+    @check_timestamp
     def _update_and_create_render_pipeline(self, options: RenderOptions) -> None:
         self.update(options)
         for r in self.render_objects:
