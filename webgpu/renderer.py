@@ -163,6 +163,7 @@ class Renderer(BaseRenderer):
     n_instances: int = 1
     topology: PrimitiveTopology = PrimitiveTopology.triangle_list
     depthBias: int = 0
+    depthBiasSlopeScale: int = 0
     vertex_entry_point: str = "vertex_main"
     fragment_entry_point: str = "fragment_main"
     vertex_buffer_layouts: list[VertexBufferLayout] = []
@@ -191,6 +192,7 @@ class Renderer(BaseRenderer):
                 depthWriteEnabled=True,
                 depthCompare=CompareFunction.less,
                 depthBias=self.depthBias,
+                depthBiasSlopeScale=self.depthBiasSlopeScale,
             ),
             multisample=options.canvas.multisample,
         )
