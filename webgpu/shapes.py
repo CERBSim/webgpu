@@ -155,6 +155,8 @@ class ShapeUniforms(UniformBase):
 class ShapeRenderer(Renderer):
     SCALE_UNIFORM = ct.c_uint32(0)
     SCALE_Z = ct.c_uint32(1)
+    vertex_entry_point = "shape_vertex_main"
+    select_entry_point = "shape_fragment_main_select"
 
     def __init__(
         self,
@@ -272,7 +274,6 @@ class ShapeRenderer(Renderer):
             self.directions, label="directions", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
         )
 
-        self.vertex_entry_point = "shape_vertex_main"
         if self.colors is not None:
             itemsize = self.colors.itemsize * 4
             color_format = VertexFormat.unorm8x4
@@ -418,6 +419,19 @@ class ShapeRenderer(Renderer):
     def render(self, options: RenderOptions) -> None:
         render_pass = options.begin_render_pass()
         render_pass.setPipeline(self.pipeline)
+        render_pass.setBindGroup(0, self.group)
+        for i, vertex_buffer in enumerate(self.vertex_buffers):
+            render_pass.setVertexBuffer(i, vertex_buffer)
+        render_pass.setIndexBuffer(self.triangle_buffer, IndexFormat.uint32)
+        render_pass.drawIndexed(
+            self.n_vertices,
+            self.n_instances,
+        )
+        render_pass.end()
+
+    def select(self, options: RenderOptions, x, y) -> None:
+        render_pass = options.begin_select_pass(x, y)
+        render_pass.setPipeline(self._select_pipeline)
         render_pass.setBindGroup(0, self.group)
         for i, vertex_buffer in enumerate(self.vertex_buffers):
             render_pass.setVertexBuffer(i, vertex_buffer)

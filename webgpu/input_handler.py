@@ -6,14 +6,34 @@ import threading
 
 
 class InputHandler:
-    def __init__(self, html_canvas):
+    def __init__(self):
         self._mutex = threading.Lock()
         self._callbacks = {}
 
-        self.html_canvas = html_canvas
+        self.html_canvas = None
 
         self._callbacks = {}
+
+        self.on_mousedown(self.__on_mousedown)
+        self.on_mouseup(self.__on_mouseup)
+        self.on_mousemove(self.__on_mousemove)
+
+    def set_canvas(self, html_canvas):
+        self.html_canvas = html_canvas
         self.register_callbacks()
+
+    def __on_mousedown(self, _):
+        self._is_mousedown = True
+        self._is_moving = False
+
+    def __on_mouseup(self, ev):
+        self._is_mousedown = False
+
+        if not self._is_moving:
+            self.emit("click", ev)
+
+    def __on_mousemove(self, ev):
+        self._is_moving = True
 
     def on(self, event: str, func: Callable):
         if event not in self._callbacks:
@@ -29,6 +49,9 @@ class InputHandler:
         if event in self._callbacks:
             for func in self._callbacks[event]:
                 func(*args)
+
+    def on_click(self, func):
+        self.on("click", func)
 
     def on_mousedown(self, func):
         self.on("mousedown", func)
@@ -67,6 +90,11 @@ class InputHandler:
                         event = ev
                 except ImportError:
                     pass
+
+                if "x" in event and "y" in event:
+                    rect = self.html_canvas.getBoundingClientRect()
+                    event["canvasX"] = event["x"] - int(rect.x)
+                    event["canvasY"] = event["y"] - int(rect.y)
                 self.emit(event_type, event)
 
         return wrapper
@@ -74,7 +102,6 @@ class InputHandler:
     def register_callbacks(self):
         from .platform import create_proxy
 
-        self.unregister_callbacks()
         options = to_js({"capture": True})
         for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout"]:
             js_handler = create_proxy(self._handle_js_event(event))

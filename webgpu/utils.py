@@ -451,8 +451,11 @@ def read_buffer(buffer, dtype=None, offset=0, size=0):
     return data
 
 
-def read_texture(texture, bytes_per_pixel=4):
+def read_texture(texture, bytes_per_pixel=4, dtype=None):
     import numpy as np
+
+    if dtype is None:
+        dtype = np.uint8
 
     bytes_per_row = (texture.width * bytes_per_pixel + 255) // 256 * 256
     size = bytes_per_row * texture.height

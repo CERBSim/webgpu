@@ -9,3 +9,4 @@ Webgpu
 
    introduction.ipynb
    instanced_shapes.ipynb
+   selection.ipynb

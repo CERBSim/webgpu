@@ -1,7 +1,6 @@
 from typing import Callable
 
 from . import platform
-from .input_handler import InputHandler
 from .utils import get_device
 from .webgpu_api import *
 
@@ -47,7 +46,12 @@ class Canvas:
                 ),
             ),
         )
+        self.depth_format = TextureFormat.depth24plus
 
+        self.select_format = TextureFormat.rgba32uint
+        self.select_target = ColorTargetState(
+            format=self.select_format,
+        )
         self.canvas = canvas
 
         self.context = canvas.getContext("webgpu")
@@ -64,8 +68,6 @@ class Canvas:
         )
 
         self.multisample = MultisampleState(count=multisample_count)
-        self.depth_format = TextureFormat.depth24plus
-        self.input_handler = InputHandler(canvas)
 
         self.resize()
 
@@ -119,6 +121,20 @@ class Canvas:
 
         self.target_texture_view = self.target_texture.createView()
 
+        self.select_texture = device.createTexture(
+            size=[width, height, 1],
+            format=self.select_format,
+            usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
+            label="select",
+        )
+        self.select_depth_texture = device.createTexture(
+            size=[width, height, 1],
+            format=self.depth_format,
+            usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
+            label="select_depth",
+        )
+        self.select_texture_view = self.select_texture.createView()
+
         for func in self._on_resize_callbacks:
             func()
 
@@ -134,8 +150,24 @@ class Canvas:
                 resolveTarget=self.target_texture_view if have_multisample else None,
                 clearValue=Color(1, 1, 1, 1),
                 loadOp=loadOp,
-            )
+            ),
         ]
+
+    def select_attachments(self, loadOp: LoadOp):
+        return [
+            RenderPassColorAttachment(
+                view=self.select_texture_view,
+                clearValue=Color(0, 0, 0, 0),
+                loadOp=loadOp,
+            ),
+        ]
+
+    def select_depth_stencil_attachment(self, loadOp: LoadOp):
+        return RenderPassDepthStencilAttachment(
+            self.select_depth_texture.createView(),
+            depthClearValue=1.0,
+            depthLoadOp=loadOp,
+        )
 
     def depth_stencil_attachment(self, loadOp: LoadOp):
         return RenderPassDepthStencilAttachment(
@@ -143,7 +175,3 @@ class Canvas:
             depthClearValue=1.0,
             depthLoadOp=loadOp,
         )
-
-    def __del__(self):
-        # unregister is needed to remove circular references
-        self.input_handler.unregister_callbacks()

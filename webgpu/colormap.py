@@ -39,15 +39,15 @@ class ColorbarUniforms(UniformBase):
 class Colormap(BaseRenderer):
     texture: Texture
 
-    def __init__(self, minval=0, maxval=1, colormap: list | str = "matlab:jet"):
+    def __init__(self, minval=None, maxval=None, colormap: list | str = "matlab:jet"):
         self.texture = None
-        self.minval = minval
-        self.maxval = maxval
+        self.autoscale = minval is None or maxval is None
+        self.minval = minval if minval is not None else 0
+        self.maxval = maxval if maxval is not None else 1
         self.discrete = 0
         self.n_colors = 8
         self.uniforms = None
         self.sampler = None
-        self.autoscale = True
 
         self.set_colormap(colormap)
 

@@ -17,6 +17,7 @@ struct ShapeVertexOut {
     @location(0) p: vec3f,
     @location(1) normal: vec3f,
     @location(2) color: vec4f,
+    @location(3) @interpolate(flat) instance: u32,
 };
 
 @group(0) @binding(10) var<uniform> u_shape: ShapeUniform;
@@ -46,10 +47,12 @@ struct ShapeUniform {
         pref.z *= length(v);
     }
     let p = pstart + u_shape.scale * rotate(pref, q);
+    out.p = p;
     out.position = cameraMapPoint(p);
     out.normal = normalize(rotate(vert.normal, q));
     let lam = (vert.position.z-vert.z_range.x) / (vert.z_range.y-vert.z_range.x);
     out.color = mix(vert.instance_color_bot, vert.instance_color_top, lam);
+    out.instance = instance_index;
     return out;
 }
 
@@ -64,6 +67,12 @@ struct ShapeUniform {
     input: ShapeVertexOut,
 ) -> @location(0) vec4f {
     return lightCalcColor(input.p, input.normal, input.color);
+}
+
+@fragment fn shape_fragment_main_select(
+    input: ShapeVertexOut,
+) -> @location(0) vec4<u32> {
+    return vec4<u32>(@RENDER_OBJECT_ID@, input.instance, bitcast<u32>(input.color.x), 0);
 }
 
 fn quaternion(vTo: vec3f, vFrom: vec3f) -> vec4f {

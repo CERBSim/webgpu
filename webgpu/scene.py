@@ -1,12 +1,14 @@
 import time
 from threading import Timer
+
 import numpy as np
 
 from . import platform
 from .canvas import Canvas
-from .renderer import BaseRenderer, RenderOptions
-from .utils import is_pyodide, max_bounding_box
+from .renderer import BaseRenderer, RenderOptions, SelectEvent
+from .utils import is_pyodide, max_bounding_box, read_buffer, read_texture
 from .webgpu_api import *
+from .input_handler import InputHandler
 
 _TARGET_FPS = 60
 
@@ -56,7 +58,7 @@ class Scene:
         import threading
 
         self.options = RenderOptions()
-        self.redraw_mutex = threading.Lock()
+        self._render_mutex = threading.Lock()
 
         self._id = id
         self.render_objects = render_objects
@@ -81,7 +83,7 @@ class Scene:
         # if not (pmin[2] == 0 and pmax[2] == 0):
         #     camera.transform.rotate(30, -20)
         camera._update_uniforms()
-
+        self.input_handler = InputHandler()
 
     def __repr__(self):
         return ""
@@ -96,6 +98,7 @@ class Scene:
 
     def init(self, canvas):
         self.canvas = canvas
+        self.input_handler.set_canvas(canvas.canvas)
         self.options.set_canvas(canvas)
 
         self.options.timestamp = time.time()
@@ -104,14 +107,72 @@ class Scene:
 
         camera = self.options.camera
         self._js_render = platform.create_proxy(self._render_direct)
-        camera.register_callbacks(canvas.input_handler, self.render)
+        camera.register_callbacks(self.input_handler, self.render)
         self.options.update_buffers()
         if is_pyodide:
             _scenes_by_id[self.id] = self
 
+        self._select_buffer = self.device.createBuffer(
+            size=4 * 4,
+            usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
+            label="select",
+        )
+        self._select_buffer_valid = False
+
         canvas.on_resize(self.render)
 
+    @debounce
+    def select(self, x: int, y: int):
+        objects = self.render_objects
+
+        have_select_callback = False
+        for obj in objects:
+            if obj.active and obj._select_pipeline and obj._on_select:
+                have_select_callback = True
+                break
+
+        if not have_select_callback:
+            return
+
+        with self._render_mutex:
+            select_texture = self.canvas.select_texture
+            bytes_per_row = (select_texture.width * 16 + 255) // 256 * 256
+
+            options = self.options
+            options.command_encoder = self.device.createCommandEncoder()
+
+            if not self._select_buffer_valid:
+                for obj in objects:
+                    if obj.active:
+                        obj._update_and_create_render_pipeline(options)
+
+                for obj in objects:
+                    if obj.active:
+                        obj.select(options, x, y)
+
+                self._select_buffer_valid = True
+
+            buffer = self._select_buffer
+            options.command_encoder.copyTextureToBuffer(
+                TexelCopyTextureInfo(select_texture, origin=Origin3d(x, y, 0)),
+                TexelCopyBufferInfo(buffer, 0, bytes_per_row),
+                [1, 1, 1],
+            )
+
+            self.device.queue.submit([options.command_encoder.finish()])
+            options.command_encoder = None
+
+            ev = SelectEvent(x, y, read_buffer(buffer))
+            if ev.obj_id > 0:
+                for obj in objects:
+                    if obj._id == ev.obj_id:
+                        obj._handle_on_select(ev)
+                        break
+
+            return ev
+
     def _render_objects(self, to_canvas=True):
+        self._select_buffer_valid = False
         options = self.options
         for obj in self.render_objects:
             if obj.active:
@@ -132,7 +193,7 @@ class Scene:
         options.command_encoder = None
 
     def _redraw_blocking(self):
-        with self.redraw_mutex:
+        with self._render_mutex:
             import time
 
             self.options.timestamp = time.time()
@@ -165,17 +226,7 @@ class Scene:
         if is_pyodide:
             self._render()
             return
-        # print("render")
-        # print("canvas", self.canvas.canvas)
-        # from . import proxy
-        # proxy.js.console.log("canvas", self.canvas.canvas)
-        # print("canvas size ", self.canvas.canvas.width, self.canvas.canvas.height)
-        # print(
-        #     "texture size",
-        #     self.canvas.target_texture.width,
-        #     self.canvas.target_texture.height,
-        # )
-        with self.redraw_mutex:
+        with self._render_mutex:
             self._render_objects(to_canvas=False)
 
             if not is_pyodide:
@@ -186,11 +237,11 @@ class Scene:
                 )
 
     def cleanup(self):
-        with self.redraw_mutex:
+        with self._render_mutex:
             if self.canvas is not None:
-                self.options.camera.unregister_callbacks(self.canvas.input_handler)
+                self.options.camera.unregister_callbacks(self.input_handler)
                 self.options.camera._render_function = None
-                self.canvas.input_handler.unregister_callbacks()
+                self.input_handler.unregister_callbacks()
                 platform.destroy_proxy(self._js_render)
                 del self._js_render
                 self.canvas._on_resize_callbacks.remove(self.render)

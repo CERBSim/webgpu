@@ -32,6 +32,7 @@ class Labels(Renderer):
         v_align: str | list[str] = "bottom",
         font_size=20,
     ):
+        super().__init__()
         self.labels = labels
         self.positions = positions
         self.font_size = font_size
