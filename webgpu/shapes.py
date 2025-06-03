@@ -169,10 +169,18 @@ class ShapeRenderer(Renderer):
 
         super().__init__(label=label)
 
+        if positions is None:
+            positions = []
+
+        if directions is None:
+            directions = []
+
         self.colormap = colormap or Colormap()
-        self._positions = np.array(positions or [], dtype=np.float32).reshape(-1)
-        self._values = values and np.array(values or [], dtype=np.float32).reshape(-1)
-        self._directions = np.array(directions or [], dtype=np.float32).reshape(-1)
+        self._positions = np.array(positions, dtype=np.float32).reshape(-1)
+        self._values = (
+            np.array(values, dtype=np.float32).reshape(-1) if values is not None else None
+        )
+        self._directions = np.array(directions, dtype=np.float32).reshape(-1)
 
         if colors:
             colors = np.array(colors, dtype=np.float32).reshape(-1)
