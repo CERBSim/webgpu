@@ -24,10 +24,13 @@ class RenderOptions:
     command_encoder: CommandEncoder
     timestamp: float
 
-    def __init__(self, canvas):
-        self.canvas = canvas
+    def __init__(self):
         self.light = Light()
-        self.camera = Camera(canvas)
+        self.camera = Camera()
+
+    def set_canvas(self, canvas: Canvas):
+        self.canvas = canvas
+        self.camera.set_canvas(canvas)
 
     @property
     def device(self) -> Device:

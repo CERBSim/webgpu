@@ -170,9 +170,9 @@ class ShapeRenderer(Renderer):
         super().__init__(label=label)
 
         self.colormap = colormap or Colormap()
-        self._positions = np.array(positions, dtype=np.float32).reshape(-1)
-        self._values = values and np.array(values, dtype=np.float32).reshape(-1)
-        self._directions = np.array(directions, dtype=np.float32).reshape(-1)
+        self._positions = np.array(positions or [], dtype=np.float32).reshape(-1)
+        self._values = values and np.array(values or [], dtype=np.float32).reshape(-1)
+        self._directions = np.array(directions or [], dtype=np.float32).reshape(-1)
 
         if colors:
             colors = np.array(colors, dtype=np.float32).reshape(-1)
@@ -421,6 +421,8 @@ class ShapeRenderer(Renderer):
         render_pass.end()
 
     def get_bounding_box(self):
+        if self.positions.size == 0:
+            return None
         bmin, bmax = self.shape_data.get_bounding_box()
         r = np.linalg.norm(bmax - bmin) / 2
         r *= self.directions.max()

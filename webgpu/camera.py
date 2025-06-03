@@ -80,15 +80,18 @@ class Transform:
 
 
 class Camera:
-    def __init__(self, canvas):
-        self.canvas = canvas
+    def __init__(self):
         self.uniforms = CameraUniforms()
+        self.canvas = None
         self.transform = Transform()
         self._render_function = None
         self._is_moving = False
         self._is_rotating = False
 
+    def set_canvas(self, canvas):
+        self.canvas = canvas
         canvas.on_resize(self._update_uniforms)
+        self._update_uniforms()
 
     def get_bindings(self) -> list[BaseBinding]:
         return self.uniforms.get_bindings()
@@ -147,6 +150,8 @@ class Camera:
             self._render_function()
 
     def _update_uniforms(self):
+        if self.canvas is None:
+            return
         near = 0.1
         far = 10
         fov = 45

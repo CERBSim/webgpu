@@ -1,6 +1,6 @@
-import math
 import time
 from threading import Timer
+import numpy as np
 
 from . import platform
 from .canvas import Canvas
@@ -55,6 +55,7 @@ class Scene:
             id = str(uuid.uuid4())
         import threading
 
+        self.options = RenderOptions()
         self.redraw_mutex = threading.Lock()
 
         self._id = id
@@ -66,6 +67,21 @@ class Scene:
                 self.init(canvas)
 
         self.t_last = 0
+        objects = render_objects
+        pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])
+
+        camera = self.options.camera
+        camera.transform._center = 0.5 * (pmin + pmax)
+        camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
+
+        if not (pmin[2] == 0 and pmax[2] == 0):
+            camera.transform.rotate(270, 0)
+            camera.transform.rotate(0, -20)
+            camera.transform.rotate(20, 0)
+        # if not (pmin[2] == 0 and pmax[2] == 0):
+        #     camera.transform.rotate(30, -20)
+        camera._update_uniforms()
+
 
     def __repr__(self):
         return ""
@@ -80,25 +96,13 @@ class Scene:
 
     def init(self, canvas):
         self.canvas = canvas
-        self.options = RenderOptions(self.canvas)
+        self.options.set_canvas(canvas)
 
         self.options.timestamp = time.time()
         for obj in self.render_objects:
             obj._update_and_create_render_pipeline(self.options)
 
-        pmin, pmax = max_bounding_box([o.get_bounding_box() for o in self.render_objects])
         camera = self.options.camera
-        camera.transform._center = 0.5 * (pmin + pmax)
-
-        def norm(v):
-            return max(math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2), 1e-6)
-
-        camera.transform._scale = 2 / norm(pmax - pmin)
-        if not (pmin[2] == 0 and pmax[2] == 0):
-            camera.transform.rotate(270, 0)
-            camera.transform.rotate(0, -20)
-            camera.transform.rotate(20, 0)
-
         self._js_render = platform.create_proxy(self._render_direct)
         camera.register_callbacks(canvas.input_handler, self.render)
         self.options.update_buffers()
@@ -156,7 +160,8 @@ class Scene:
     @debounce
     def render(self, t=0):
         # self.canvas.resize()
-
+        if self.canvas is None:
+            return
         if is_pyodide:
             self._render()
             return
