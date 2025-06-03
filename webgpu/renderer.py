@@ -198,6 +198,7 @@ class Renderer(BaseRenderer):
                 depthBiasSlopeScale=self.depthBiasSlopeScale,
             ),
             multisample=options.canvas.multisample,
+            label=self.label
         )
 
     def render(self, options: RenderOptions) -> None:
