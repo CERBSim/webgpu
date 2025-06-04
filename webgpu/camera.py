@@ -155,7 +155,10 @@ class Camera:
         near = 0.1
         far = 10
         fov = 45
-        aspect = self.canvas.width / self.canvas.height
+        if self.canvas.height == 0:
+            aspect = 800/600
+        else:
+            aspect = self.canvas.width / self.canvas.height
 
         zoom = 1.0
         top = near * (np.tan(np.radians(fov) / 2)) * zoom
