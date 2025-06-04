@@ -81,7 +81,7 @@ class Transform:
 
 class Camera:
     def __init__(self):
-        self.uniforms = CameraUniforms()
+        self.uniforms = None
         self.canvas = None
         self.transform = Transform()
         self._render_function = None
@@ -91,6 +91,8 @@ class Camera:
     def set_canvas(self, canvas):
         self.canvas = canvas
         canvas.on_resize(self._update_uniforms)
+        if self.uniforms is None:
+            self.uniforms = CameraUniforms()
         self._update_uniforms()
 
     def get_bindings(self) -> list[BaseBinding]:
@@ -156,7 +158,7 @@ class Camera:
         far = 10
         fov = 45
         if self.canvas.height == 0:
-            aspect = 800/600
+            aspect = 800 / 600
         else:
             aspect = self.canvas.width / self.canvas.height
 

@@ -1,14 +1,14 @@
 import time
-from threading import Timer
+from threading import Lock, Timer
 
 import numpy as np
 
 from . import platform
 from .canvas import Canvas
+from .input_handler import InputHandler
 from .renderer import BaseRenderer, RenderOptions, SelectEvent
 from .utils import is_pyodide, max_bounding_box, read_buffer, read_texture
 from .webgpu_api import *
-from .input_handler import InputHandler
 
 _TARGET_FPS = 60
 
@@ -58,7 +58,7 @@ class Scene:
         import threading
 
         self.options = RenderOptions()
-        self._render_mutex = threading.Lock()
+        self._render_mutex = Lock()
 
         self._id = id
         self.render_objects = render_objects
@@ -101,25 +101,32 @@ class Scene:
         self.input_handler.set_canvas(canvas.canvas)
         self.options.set_canvas(canvas)
 
-        self.options.timestamp = time.time()
-        for obj in self.render_objects:
-            obj._update_and_create_render_pipeline(self.options)
+        with self._render_mutex:
+            self.options.timestamp = time.time()
+            self.options.update_buffers()
+            for obj in self.render_objects:
+                obj._update_and_create_render_pipeline(self.options)
 
-        camera = self.options.camera
-        self._js_render = platform.create_proxy(self._render_direct)
-        camera.register_callbacks(self.input_handler, self.render)
-        self.options.update_buffers()
-        if is_pyodide:
-            _scenes_by_id[self.id] = self
+            camera = self.options.camera
+            self._js_render = platform.create_proxy(self._render_direct)
+            camera.register_callbacks(self.input_handler, self.render)
+            if is_pyodide:
+                _scenes_by_id[self.id] = self
 
-        self._select_buffer = self.device.createBuffer(
-            size=4 * 4,
-            usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
-            label="select",
-        )
-        self._select_buffer_valid = False
+            self._select_buffer = self.device.createBuffer(
+                size=4 * 4,
+                usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
+                label="select",
+            )
+            self._select_buffer_valid = False
 
-        canvas.on_resize(self.render)
+            canvas.on_resize(self.render)
+
+            canvas.on_update_html_canvas(self.__on_update_html_canvas)
+
+    def __on_update_html_canvas(self, html_canvas):
+        self.input_handler.unregister_callbacks()
+        self.input_handler.set_canvas(html_canvas)
 
     @debounce
     def select(self, x: int, y: int):
@@ -139,6 +146,7 @@ class Scene:
             bytes_per_row = (select_texture.width * 16 + 255) // 256 * 256
 
             options = self.options
+            options.update_buffers()
             options.command_encoder = self.device.createCommandEncoder()
 
             if not self._select_buffer_valid:
@@ -220,9 +228,9 @@ class Scene:
 
     @debounce
     def render(self, t=0):
-        # self.canvas.resize()
-        if self.canvas is None or self.canvas.canvas.height == 0:
+        if self.canvas is None or self.canvas.height == 0:
             return
+
         if is_pyodide:
             self._render()
             return
@@ -245,6 +253,7 @@ class Scene:
                 platform.destroy_proxy(self._js_render)
                 del self._js_render
                 self.canvas._on_resize_callbacks.remove(self.render)
+                self.canvas._on_update_html_canvas.remove(self.__on_update_html_canvas)
                 self.canvas = None
 
                 if is_pyodide:

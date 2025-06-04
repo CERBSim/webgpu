@@ -1,4 +1,5 @@
 from typing import Callable
+import threading
 
 from . import platform
 from .utils import get_device
@@ -23,13 +24,17 @@ class Canvas:
     width: int = 0
     height: int = 0
 
-    _on_resize_callbacks: list[Callable] = []
+    _on_resize_callbacks: list[Callable]
+    _on_update_html_canvas: list[Callable]
 
     def __init__(self, device, canvas, multisample_count=4):
+        self._update_mutex = threading.Lock()
 
         self._on_resize_callbacks = []
+        self._on_update_html_canvas = []
 
         self.device = device
+        self.context = None
         self.format = platform.js.navigator.gpu.getPreferredCanvasFormat()
         self.color_target = ColorTargetState(
             format=self.format,
@@ -52,91 +57,133 @@ class Canvas:
         self.select_target = ColorTargetState(
             format=self.select_format,
         )
-        self.canvas = canvas
-
-        self.context = canvas.getContext("webgpu")
-        self.context.configure(
-            toJS(
-                {
-                    "device": device.handle,
-                    "format": self.format,
-                    "alphaMode": "premultiplied",
-                    "sampleCount": multisample_count,
-                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
-                }
-            )
-        )
-
         self.multisample = MultisampleState(count=multisample_count)
 
-        self.resize()
+        self.update_html_canvas(canvas)
 
-        # platform.js.webgpuOnResize(canvas, create_proxy(self.resize, True))
+    def update_html_canvas(self, html_canvas):
+        """Reconfigure the canvas with the current HTML canvas element. This is necessary when the HTML canvas element changes, disappears (e.g. when switching a tab) and appears again."""
+
+        self.width = self.height = 0  # disable rendering until resize is called
+
+        with self._update_mutex:
+            if self.context is not None:
+                self.context.unconfigure()
+
+            self.canvas = html_canvas
+            self.context = html_canvas.getContext("webgpu")
+            self.context.configure(
+                toJS(
+                    {
+                        "device": self.device.handle,
+                        "format": self.format,
+                        "alphaMode": "premultiplied",
+                        "sampleCount": self.multisample.count,
+                        "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
+                    }
+                )
+            )
+
+            def on_resize(*args):
+                self.resize()
+
+            def on_intersection(*args):
+                for func in self._on_resize_callbacks:
+                    func()
+
+            self._resize_observer = platform.js.ResizeObserver._new(
+                platform.create_proxy(on_resize, True)
+            )
+            self._intersection_observer = platform.js.IntersectionObserver._new(
+                platform.create_proxy(on_intersection, True),
+                {
+                    "root": None,
+                    "rootMargin": "0px",
+                    "threshold": 0.01,  # Trigger when at least 10% of the canvas is visible
+                },
+            )
+
+            self._resize_observer.observe(self.canvas)
+            self._intersection_observer.observe(self.canvas)
+
+            for func in self._on_update_html_canvas:
+                func(html_canvas)
+
+            self.width = self.height = 0  # force resize
+        self.resize()
 
     def on_resize(self, func: Callable):
         self._on_resize_callbacks.append(func)
 
-    def resize(self, *args):
-        canvas = self.canvas
-        rect = canvas.getBoundingClientRect()
-        width = int(rect.width)
-        height = int(rect.height)
+    def on_update_html_canvas(self, func: Callable):
+        self._on_update_html_canvas.append(func)
 
-        if width == self.width and height == self.height:
-            return False
+    def resize(self):
+        with self._update_mutex:
+            canvas = self.canvas
+            rect = canvas.getBoundingClientRect()
+            width = int(rect.width)
+            height = int(rect.height)
 
-        if width == 0 or height == 0:
-            return False
+            if width == self.width and height == self.height:
+                for func in self._on_resize_callbacks:
+                    func()
+                return False
 
-        canvas.width = width
-        canvas.height = height
+            if width == 0 or height == 0:
+                self.height = 0
+                self.width = 0
+                return False
 
-        self.width = width
-        self.height = height
+            canvas.width = width
+            canvas.height = height
 
-        device = self.device
-        self.target_texture = device.createTexture(
-            size=[width, height, 1],
-            sampleCount=1,
-            format=self.format,
-            usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
-            label="target",
-        )
-        if self.multisample.count > 1:
-            self.multisample_texture = device.createTexture(
+            device = self.device
+            self.target_texture = device.createTexture(
                 size=[width, height, 1],
-                sampleCount=self.multisample.count,
+                sampleCount=1,
                 format=self.format,
+                usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
+                label="target",
+            )
+            if self.multisample.count > 1:
+                self.multisample_texture = device.createTexture(
+                    size=[width, height, 1],
+                    sampleCount=self.multisample.count,
+                    format=self.format,
+                    usage=TextureUsage.RENDER_ATTACHMENT,
+                    label="multisample",
+                )
+
+            self.depth_texture = device.createTexture(
+                size=[width, height, 1],
+                format=self.depth_format,
                 usage=TextureUsage.RENDER_ATTACHMENT,
-                label="multisample",
+                label="depth_texture",
+                sampleCount=self.multisample.count,
             )
 
-        self.depth_texture = device.createTexture(
-            size=[width, height, 1],
-            format=self.depth_format,
-            usage=TextureUsage.RENDER_ATTACHMENT,
-            label="depth_texture",
-            sampleCount=self.multisample.count,
-        )
+            self.target_texture_view = self.target_texture.createView()
 
-        self.target_texture_view = self.target_texture.createView()
+            self.select_texture = device.createTexture(
+                size=[width, height, 1],
+                format=self.select_format,
+                usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
+                label="select",
+            )
+            self.select_depth_texture = device.createTexture(
+                size=[width, height, 1],
+                format=self.depth_format,
+                usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
+                label="select_depth",
+            )
+            self.select_texture_view = self.select_texture.createView()
 
-        self.select_texture = device.createTexture(
-            size=[width, height, 1],
-            format=self.select_format,
-            usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
-            label="select",
-        )
-        self.select_depth_texture = device.createTexture(
-            size=[width, height, 1],
-            format=self.depth_format,
-            usage=TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC,
-            label="select_depth",
-        )
-        self.select_texture_view = self.select_texture.createView()
+            self.width = width
+            self.height = height
 
-        for func in self._on_resize_callbacks:
-            func()
+            for func in self._on_resize_callbacks:
+                func()
 
     def color_attachments(self, loadOp: LoadOp):
         have_multisample = self.multisample.count > 1

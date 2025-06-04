@@ -12,8 +12,6 @@ class InputHandler:
 
         self.html_canvas = None
 
-        self._callbacks = {}
-
         self.on_mousedown(self.__on_mousedown)
         self.on_mouseup(self.__on_mouseup)
         self.on_mousemove(self.__on_mousemove)
@@ -75,7 +73,6 @@ class InputHandler:
                     self.html_canvas.removeEventListener(event, func)
                     if is_pyodide:
                         func.destroy()
-            self._callbacks = {}
 
     def _handle_js_event(self, event_type):
         def wrapper(event):

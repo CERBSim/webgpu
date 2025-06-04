@@ -111,6 +111,8 @@ class Labels(Renderer):
         )
 
         if self.buffer is None or self.buffer.size != len(data):
+            if self.buffer is not None:
+                self.buffer.destroy()
             self.buffer = self.device.createBuffer(
                 len(data),
                 usage=BufferUsage.STORAGE | BufferUsage.COPY_DST,

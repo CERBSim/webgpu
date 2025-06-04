@@ -19,12 +19,22 @@ class LightUniforms(UniformBase):
 
 class Light:
     def __init__(self):
-        self.uniforms = LightUniforms()
-        self.uniforms.direction = (0.5, 0.5, 1.5)
-        self.uniforms.ambient = 0.3
-        self.uniforms.diffuse = 0.7
-        self.uniforms.specular = 0.3
-        self.uniforms.shininess = 10.0
+        self.direction = (0.5, 0.5, 1.5)
+        self.ambient = 0.3
+        self.diffuse = 0.7
+        self.specular = 0.3
+        self.shininess = 10.0
+        self.uniforms = None
+
+    def update(self, options):
+        if self.uniforms is None:
+            self.uniforms = LightUniforms()
+        self.uniforms.direction = self.direction
+        self.uniforms.ambient = self.ambient
+        self.uniforms.diffuse = self.diffuse
+        self.uniforms.specular = self.specular
+        self.uniforms.shininess = self.shininess
+        self._update_uniforms()
 
     def get_bindings(self):
         return self.uniforms.get_bindings()

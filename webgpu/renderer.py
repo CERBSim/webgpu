@@ -67,7 +67,7 @@ class RenderOptions:
 
     def update_buffers(self):
         self.camera._update_uniforms()
-        self.light._update_uniforms()
+        self.light.update(self)
 
     def get_bindings(self):
         return [
