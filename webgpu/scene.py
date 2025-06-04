@@ -221,7 +221,7 @@ class Scene:
     @debounce
     def render(self, t=0):
         # self.canvas.resize()
-        if self.canvas is None:
+        if self.canvas is None or self.canvas.canvas.height == 0:
             return
         if is_pyodide:
             self._render()
