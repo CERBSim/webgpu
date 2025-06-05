@@ -55,7 +55,6 @@ class Scene:
             import uuid
 
             id = str(uuid.uuid4())
-        import threading
 
         self.options = RenderOptions()
         self._render_mutex = Lock()
@@ -84,6 +83,25 @@ class Scene:
         #     camera.transform.rotate(30, -20)
         camera._update_uniforms()
         self.input_handler = InputHandler()
+
+    def __getstate__(self):
+        state = {
+            "render_objects": self.render_objects,
+            "id": self._id,
+            "render_options": self.options,
+        }
+        return state
+
+    def __setstate__(self, state):
+        self.render_objects = state["render_objects"]
+        self._id = state["id"]
+        self.options = state["render_options"]
+        self.canvas = None
+        self.input_handler = InputHandler()
+        self._render_mutex = Lock()
+
+        if is_pyodide:
+            _scenes_by_id[self._id] = self
 
     def __repr__(self):
         return ""

@@ -88,6 +88,17 @@ class Camera:
         self._is_moving = False
         self._is_rotating = False
 
+    def __setstate__(self, state):
+        self.transform = state["transform"]
+        self.canvas = None
+        self.uniforms = None
+        self._render_function = None
+        self._is_moving = False
+        self._is_rotating = False
+
+    def __getstate__(self):
+        return { "transform": self.transform }
+
     def set_canvas(self, canvas):
         self.canvas = canvas
         canvas.on_resize(self._update_uniforms)

@@ -26,6 +26,24 @@ class Light:
         self.shininess = 10.0
         self.uniforms = None
 
+    def __getstate__(self):
+        state = {
+            "direction": self.direction,
+            "ambient": self.ambient,
+            "diffuse": self.diffuse,
+            "specular": self.specular,
+            "shininess": self.shininess,
+        }
+        return state
+
+    def __setstate__(self, state):
+        self.direction = state["direction"]
+        self.ambient = state["ambient"]
+        self.diffuse = state["diffuse"]
+        self.specular = state["specular"]
+        self.shininess = state["shininess"]
+        self.uniforms = None
+
     def update(self, options):
         if self.uniforms is None:
             self.uniforms = LightUniforms()
