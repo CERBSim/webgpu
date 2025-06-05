@@ -63,7 +63,7 @@ def fromJS(obj):
 
 class BaseWebGPUObject:
     def toJS(self):
-        return toJS(self.__dict__)
+        return self.__dict__
 
 
 class Sampler(BaseWebGPUHandle):
@@ -1279,7 +1279,7 @@ class Device(BaseWebGPUHandle):
     ) -> "BindGroupLayout":
         label = label or _get_label_from_stack()
         return self.handle.createBindGroupLayout(
-            BindGroupLayoutDescriptor(entries=entries, label=label).toJS()
+            BindGroupLayoutDescriptor(entries=[e.toJS() for e in entries], label=label).toJS()
         )
 
     def createBuffer(
@@ -1516,7 +1516,7 @@ class Queue(BaseWebGPUHandle):
         self.handle.writeBuffer(
             buffer.handle,
             bufferOffset,
-            toJS(memoryview(data)),
+            memoryview(data),
             dataOffset,
             size,
         )
@@ -1530,7 +1530,7 @@ class Queue(BaseWebGPUHandle):
     ) -> None:
         return self.handle.writeTexture(
             destination.toJS(),
-            toJS(memoryview(bytes(data))),
+            memoryview(bytes(data)),
             dataLayout.toJS(),
             size,
         )

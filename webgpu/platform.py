@@ -10,6 +10,7 @@
 from collections.abc import Mapping
 
 is_pyodide = False
+is_pyodide_main_thread = False
 create_proxy = None
 destroy_proxy = None
 js = None
@@ -19,12 +20,20 @@ link = None
 try:
     import js
     import pyodide.ffi
-    from pyodide.ffi import JsPromise, JsProxy, create_proxy
+    from pyodide.ffi import JsPromise, JsProxy
+    from pyodide.ffi import create_proxy as _create_proxy
+
+    def create_proxy(func, ignore_return_value=False):
+        return _create_proxy(func)
 
     def destroy_proxy(proxy):
         proxy.destroy()
 
     is_pyodide = True
+    try:
+        is_pyodide_main_thread = bool(js.window.document)
+    except:
+        is_pyodide_main_thread = False
 
     def _default_converter(value, a, b):
         from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject
@@ -87,7 +96,14 @@ if is_pyodide:
 
     from .link.base import LinkBase
 
-    LinkBase.register_serializer(JsProxy, lambda v: json.loads(pyodide_js.JSON.stringify(v)))
+    def _serialize_jsproxy(link, value):
+        if hasattr(value, "unwrap"):
+            u = value.unwrap()
+            return link._dump_data(u)
+
+        return json.loads(pyodide_js.JSON.stringify(value))
+
+    LinkBase.register_serializer(JsProxy, _serialize_jsproxy)
 
 _funcs_after_init = []
 
@@ -119,8 +135,8 @@ def init(before_wait_for_connection=None):
     from .link.base import LinkBase
     from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject
 
-    LinkBase.register_serializer(BaseWebGPUHandle, lambda v: v.handle)
-    LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
+    LinkBase.register_serializer(BaseWebGPUHandle, lambda _, v: v.handle)
+    LinkBase.register_serializer(BaseWebGPUObject, lambda _, v: v.__dict__ or None)
 
     websocket_server._start_handling_messages.set()
     for func in _funcs_after_init:
@@ -137,5 +153,5 @@ def init_pyodide(link_):
     from .link.base import LinkBase
     from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject
 
-    LinkBase.register_serializer(BaseWebGPUHandle, lambda v: v.handle)
-    LinkBase.register_serializer(BaseWebGPUObject, lambda v: v.__dict__ or None)
+    LinkBase.register_serializer(BaseWebGPUHandle, lambda _, v: v.handle)
+    LinkBase.register_serializer(BaseWebGPUObject, lambda _, v: v.__dict__ or None)

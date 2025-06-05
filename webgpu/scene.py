@@ -7,7 +7,8 @@ from . import platform
 from .canvas import Canvas
 from .input_handler import InputHandler
 from .renderer import BaseRenderer, RenderOptions, SelectEvent
-from .utils import is_pyodide, max_bounding_box, read_buffer, read_texture
+from .utils import max_bounding_box, read_buffer
+from .platform import is_pyodide, is_pyodide_main_thread
 from .webgpu_api import *
 
 _TARGET_FPS = 60
@@ -62,10 +63,10 @@ class Scene:
         self._id = id
         self.render_objects = render_objects
 
-        if is_pyodide:
-            _scenes_by_id[id] = self
-            if canvas is not None:
-                self.init(canvas)
+        # if is_pyodide:
+        #     _scenes_by_id[id] = self
+        #     if canvas is not None:
+        #         self.init(canvas)
 
         self.t_last = 0
         objects = render_objects
@@ -128,8 +129,8 @@ class Scene:
             camera = self.options.camera
             self._js_render = platform.create_proxy(self._render_direct)
             camera.register_callbacks(self.input_handler, self.render)
-            if is_pyodide:
-                _scenes_by_id[self.id] = self
+            # if is_pyodide:
+            #     _scenes_by_id[self.id] = self
 
             self._select_buffer = self.device.createBuffer(
                 size=4 * 4,
@@ -249,18 +250,18 @@ class Scene:
         if self.canvas is None or self.canvas.height == 0:
             return
 
-        if is_pyodide:
+        if is_pyodide_main_thread:
             self._render()
             return
+
         with self._render_mutex:
             self._render_objects(to_canvas=False)
 
-            if not is_pyodide:
-                platform.js.patchedRequestAnimationFrame(
-                    self.canvas.device.handle,
-                    self.canvas.context,
-                    self.canvas.target_texture,
-                )
+            platform.js.patchedRequestAnimationFrame(
+                self.canvas.device.handle,
+                self.canvas.context,
+                self.canvas.target_texture,
+            )
 
     def cleanup(self):
         with self._render_mutex:
@@ -274,15 +275,15 @@ class Scene:
                 self.canvas._on_update_html_canvas.remove(self.__on_update_html_canvas)
                 self.canvas = None
 
-                if is_pyodide:
-                    del _scenes_by_id[self.id]
+                # if is_pyodide:
+                #     del _scenes_by_id[self.id]
 
 
-if is_pyodide:
-    _scenes_by_id: dict[str, Scene] = {}
-
-    def get_scene(id: str) -> Scene:
-        return _scenes_by_id[id]
-
-    def redraw_scene(id: str):
-        get_scene(id).redraw()
+# if is_pyodide:
+#     _scenes_by_id: dict[str, Scene] = {}
+#
+#     def get_scene(id: str) -> Scene:
+#         return _scenes_by_id[id]
+#
+#     def redraw_scene(id: str):
+#         get_scene(id).redraw()

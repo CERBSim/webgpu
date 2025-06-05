@@ -71,8 +71,6 @@ class InputHandler:
             for event in self._callbacks:
                 for func in self._callbacks[event]:
                     self.html_canvas.removeEventListener(event, func)
-                    if is_pyodide:
-                        func.destroy()
 
     def _handle_js_event(self, event_type):
         def wrapper(event):

@@ -73,15 +73,13 @@ class Canvas:
             self.canvas = html_canvas
             self.context = html_canvas.getContext("webgpu")
             self.context.configure(
-                toJS(
-                    {
-                        "device": self.device.handle,
-                        "format": self.format,
-                        "alphaMode": "premultiplied",
-                        "sampleCount": self.multisample.count,
-                        "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
-                    }
-                )
+                {
+                    "device": self.device.handle,
+                    "format": self.format,
+                    "alphaMode": "premultiplied",
+                    "sampleCount": self.multisample.count,
+                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
+                }
             )
 
             def on_resize(*args):

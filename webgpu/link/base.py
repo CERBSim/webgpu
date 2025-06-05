@@ -115,7 +115,7 @@ class LinkBase:
         type_ = type(data)
         for ser_type in self._serializers:
             if issubclass(type_, ser_type):
-                data = self._serializers[ser_type](data)
+                data = self._serializers[ser_type](self, data)
                 break
 
         if isinstance(data, (int, float, str, bool, type(None))):
