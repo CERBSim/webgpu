@@ -1,9 +1,48 @@
 from typing import Callable
 import threading
+import time
+import functools
 
 from . import platform
 from .utils import get_device
 from .webgpu_api import *
+
+_TARGET_FPS = 60
+
+
+def debounce(arg=None):
+    def decorator(func):
+        if platform.is_pyodide:
+            return render_function
+
+        # Render only once every 1/_TARGET_FPS seconds
+        @functools.wraps(func)
+        def debounced(*args, **kwargs):
+            if debounced.timer is not None:
+                # we already have a render scheduled, so do nothing
+                return
+
+            def f():
+                # clear the timer, so we can schedule a new one with the next function call
+                t = time.time()
+                func(*args, **kwargs)
+                debounced.timer = None
+                debounced.t_last = t
+
+            t_wait = max(1 / target_fps - (time.time() - debounced.t_last), 0)
+            debounced.timer = threading.Timer(t_wait, f)
+            debounced.timer.start()
+
+        debounced.timer = None
+        debounced.t_last = time.time()
+        return debounced
+
+    if callable(arg):
+        target_fps = _TARGET_FPS
+        return decorator(arg)
+    else:
+        target_fps = arg
+        return decorator
 
 
 def init_webgpu(html_canvas):
@@ -104,10 +143,10 @@ class Canvas:
             self._resize_observer.observe(self.canvas)
             self._intersection_observer.observe(self.canvas)
 
-            for func in self._on_update_html_canvas:
-                func(html_canvas)
+        for func in self._on_update_html_canvas:
+            func(html_canvas)
 
-            self.width = self.height = 0  # force resize
+        self.width = self.height = 0  # force resize
         self.resize()
 
     def on_resize(self, func: Callable):
@@ -116,6 +155,7 @@ class Canvas:
     def on_update_html_canvas(self, func: Callable):
         self._on_update_html_canvas.append(func)
 
+    @debounce(5)
     def resize(self):
         with self._update_mutex:
             canvas = self.canvas
@@ -180,8 +220,8 @@ class Canvas:
             self.width = width
             self.height = height
 
-            for func in self._on_resize_callbacks:
-                func()
+        for func in self._on_resize_callbacks:
+            func()
 
     def color_attachments(self, loadOp: LoadOp):
         have_multisample = self.multisample.count > 1

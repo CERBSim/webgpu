@@ -97,7 +97,7 @@ class Camera:
         self._is_rotating = False
 
     def __getstate__(self):
-        return { "transform": self.transform }
+        return {"transform": self.transform}
 
     def set_canvas(self, canvas):
         self.canvas = canvas
