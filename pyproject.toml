@@ -18,6 +18,7 @@ classifiers = [
 ]
 readme = "README.md"
 requires-python = ">=3.8"
+dependencies = ["numpy"]
 
 [tool.setuptools_scm]
 version_file = "webgpu/_version.py"
