@@ -72,6 +72,9 @@ class Canvas:
         self._on_resize_callbacks = []
         self._on_update_html_canvas = []
 
+        self._resize_observer = None
+        self._intersection_observer = None
+
         self.device = device
         self.context = None
         self.format = platform.js.navigator.gpu.getPreferredCanvasFormat()
@@ -100,6 +103,12 @@ class Canvas:
 
         self.update_html_canvas(canvas)
 
+    def __del__(self):
+        if self._resize_observer is not None:
+            self._resize_observer.disconnect()
+        if self._intersection_observer is not None:
+            self._intersection_observer.disconnect()
+
     def update_html_canvas(self, html_canvas):
         """Reconfigure the canvas with the current HTML canvas element. This is necessary when the HTML canvas element changes, disappears (e.g. when switching a tab) and appears again."""
 
@@ -124,10 +133,15 @@ class Canvas:
             def on_resize(*args):
                 self.resize()
 
-            def on_intersection(*args):
-                for func in self._on_resize_callbacks:
-                    func()
+            def on_intersection(observer_entry, args):
+                if observer_entry[0].isIntersecting:
+                    for func in self._on_resize_callbacks:
+                        func()
 
+            if self._resize_observer is not None:
+                self._resize_observer.disconnect()
+            if self._intersection_observer is not None:
+                self._intersection_observer.disconnect()
             self._resize_observer = platform.js.ResizeObserver._new(
                 platform.create_proxy(on_resize, True)
             )

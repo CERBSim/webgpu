@@ -165,6 +165,8 @@ class Camera:
     def _update_uniforms(self):
         if self.canvas is None:
             return
+        if self.uniforms is None:
+            self.uniforms = CameraUniforms()
         near = 0.1
         far = 10
         fov = 45
