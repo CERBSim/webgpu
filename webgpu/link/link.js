@@ -4,10 +4,13 @@ function serializeEvent(event) {
   event.preventDefault();
   const keys = [
     'button',
+    'code',
+    'key',
     'altKey',
     'metaKey',
     'ctrlKey',
     'shiftKey',
+    'repeat',
     'x',
     'y',
     'deltaX',
