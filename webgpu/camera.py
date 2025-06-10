@@ -97,7 +97,7 @@ class Camera:
         self._is_rotating = False
 
     def __getstate__(self):
-        return { "transform": self.transform }
+        return {"transform": self.transform}
 
     def set_canvas(self, canvas):
         self.canvas = canvas
@@ -165,6 +165,8 @@ class Camera:
     def _update_uniforms(self):
         if self.canvas is None:
             return
+        if self.uniforms is None:
+            self.uniforms = CameraUniforms()
         near = 0.1
         far = 10
         fov = 45

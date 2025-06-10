@@ -1,43 +1,17 @@
-import time
-from threading import Lock, Timer
+from threading import Lock
 
 import numpy as np
+import time
 
 from . import platform
-from .canvas import Canvas
+from .canvas import Canvas, debounce
 from .input_handler import InputHandler
 from .renderer import BaseRenderer, RenderOptions, SelectEvent
 from .utils import max_bounding_box, read_buffer
 from .platform import is_pyodide, is_pyodide_main_thread
 from .webgpu_api import *
-
-_TARGET_FPS = 60
-
-
-def debounce(render_function):
-    if platform.is_pyodide:
-        return render_function
-
-    # Render only once every 1/_TARGET_FPS seconds
-    def debounced(*args, **kwargs):
-        if debounced.timer is not None:
-            # we already have a render scheduled, so do nothing
-            return
-
-        def f():
-            # clear the timer, so we can schedule a new one with the next function call
-            t = time.time()
-            render_function(*args, **kwargs)
-            debounced.timer = None
-            debounced.t_last = t
-
-        t_wait = max(1 / _TARGET_FPS - (time.time() - debounced.t_last), 0)
-        debounced.timer = Timer(t_wait, f)
-        debounced.timer.start()
-
-    debounced.timer = None
-    debounced.t_last = time.time()
-    return debounced
+from .camera import Camera
+from .light import Light
 
 
 class Scene:
@@ -51,13 +25,25 @@ class Scene:
         render_objects: list[BaseRenderer],
         id: str | None = None,
         canvas: Canvas | None = None,
+        camera: Camera | None = None,
+        light: Light | None = None,
     ):
         if id is None:
             import uuid
 
             id = str(uuid.uuid4())
 
-        self.options = RenderOptions()
+        if camera is None:
+            camera = Camera()
+            camera.transform._center = 0.5 * (pmin + pmax)
+            camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
+
+            if not (pmin[2] == 0 and pmax[2] == 0):
+                camera.transform.rotate(270, 0)
+                camera.transform.rotate(0, -20)
+                camera.transform.rotate(20, 0)
+        light = light or Light()
+        self.options = RenderOptions(camera, light)
         self._render_mutex = Lock()
 
         self._id = id
@@ -71,18 +57,8 @@ class Scene:
         self.t_last = 0
         objects = render_objects
         pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])
+        self.bounding_box = (pmin, pmax)
 
-        camera = self.options.camera
-        camera.transform._center = 0.5 * (pmin + pmax)
-        camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
-
-        if not (pmin[2] == 0 and pmax[2] == 0):
-            camera.transform.rotate(270, 0)
-            camera.transform.rotate(0, -20)
-            camera.transform.rotate(20, 0)
-        # if not (pmin[2] == 0 and pmax[2] == 0):
-        #     camera.transform.rotate(30, -20)
-        camera._update_uniforms()
         self.input_handler = InputHandler()
 
     def __getstate__(self):
@@ -139,6 +115,7 @@ class Scene:
             )
             self._select_buffer_valid = False
 
+            canvas._update_mutex = self._render_mutex
             canvas.on_resize(self.render)
 
             canvas.on_update_html_canvas(self.__on_update_html_canvas)

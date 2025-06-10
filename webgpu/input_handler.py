@@ -6,9 +6,12 @@ import threading
 
 
 class InputHandler:
+    _js_handlers: dict
+
     def __init__(self):
         self._mutex = threading.Lock()
         self._callbacks = {}
+        self._js_handlers = {}
 
         self.html_canvas = None
 
@@ -17,6 +20,8 @@ class InputHandler:
         self.on_mousemove(self.__on_mousemove)
 
     def set_canvas(self, html_canvas):
+        if self.html_canvas:
+            self.unregister_callbacks()
         self.html_canvas = html_canvas
         self.register_callbacks()
 
@@ -67,10 +72,10 @@ class InputHandler:
         self.on("mousemove", func)
 
     def unregister_callbacks(self):
-        with self._mutex:
-            for event in self._callbacks:
-                for func in self._callbacks[event]:
-                    self.html_canvas.removeEventListener(event, func)
+        if self.html_canvas is not None:
+            with self._mutex:
+                for event, func in self._js_handlers.items():
+                    self.html_canvas["on" + event] = None
 
     def _handle_js_event(self, event_type):
         def wrapper(event):
@@ -100,7 +105,8 @@ class InputHandler:
         options = to_js({"capture": True})
         for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout"]:
             js_handler = create_proxy(self._handle_js_event(event))
-            self.html_canvas.addEventListener(event, js_handler, options)
+            self.html_canvas["on" + event] = js_handler
+            self._js_handlers[event] = js_handler
 
     def __del__(self):
         self.unregister_callbacks()

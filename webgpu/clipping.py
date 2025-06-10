@@ -34,11 +34,13 @@ class Clipping(BaseRenderer):
         center=[0.0, 0.0, 0.0],
         normal=[0.0, -1.0, 0.0],
         radius=1.0,
+        offset=0.
     ):
         self.mode = mode
         self.center = center
         self.normal = normal
         self.radius = radius
+        self.offset = offset
         self.callbacks = []
 
     def update(self, options: RenderOptions):
@@ -54,6 +56,7 @@ class Clipping(BaseRenderer):
             n = np.array([0.0, 0.0, -1.0], dtype=np.float32)
         else:
             n = n / np.linalg.norm(n)
+        c += n * self.offset  # apply offset to center
         # convert to normal and distance from origin
         d = -np.dot(c, n)
         self.uniforms.mode = self.mode
@@ -131,6 +134,12 @@ class Clipping(BaseRenderer):
 
     def set_nz_value(self, value):
         self.normal[2] = value
+        self.update(time.time())
+        for cb in self.callbacks:
+            cb()
+
+    def set_offset(self, value):
+        self.offset = value
         self.update(time.time())
         for cb in self.callbacks:
             cb()
