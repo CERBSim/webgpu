@@ -33,6 +33,9 @@ class Scene:
 
             id = str(uuid.uuid4())
 
+        objects = render_objects
+        pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])
+        self.bounding_box = (pmin, pmax)
         if camera is None:
             camera = Camera()
             camera.transform._center = 0.5 * (pmin + pmax)
@@ -55,9 +58,6 @@ class Scene:
         #         self.init(canvas)
 
         self.t_last = 0
-        objects = render_objects
-        pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])
-        self.bounding_box = (pmin, pmax)
 
         self.input_handler = InputHandler()
 
