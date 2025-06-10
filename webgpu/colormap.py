@@ -15,6 +15,7 @@ from .webgpu_api import (
     TextureFormat,
     TextureUsage,
 )
+import numpy as np
 
 
 class ColormapUniforms(UniformBase):
@@ -125,7 +126,10 @@ class Colormap(BaseRenderer):
 
         data = self.colors
         n = len(data)
-        v4 = [v + [255] for v in data]
+        if len(data[0]) == 4:
+            v4 = data
+        else:
+            v4 = [v + [255] for v in data]
         data = sum(v4, [])
 
         device = get_device()
@@ -137,7 +141,7 @@ class Colormap(BaseRenderer):
         )
         device.queue.writeTexture(
             TexelCopyTextureInfo(self.texture),
-            data,
+            np.array(data, dtype=np.uint8).tobytes(),
             TexelCopyBufferLayout(bytesPerRow=n * 4),
             [n, 1, 1],
         )

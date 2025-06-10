@@ -10,6 +10,8 @@ from .renderer import BaseRenderer, RenderOptions, SelectEvent
 from .utils import max_bounding_box, read_buffer
 from .platform import is_pyodide, is_pyodide_main_thread
 from .webgpu_api import *
+from .camera import Camera
+from .light import Light
 
 
 class Scene:
@@ -23,13 +25,25 @@ class Scene:
         render_objects: list[BaseRenderer],
         id: str | None = None,
         canvas: Canvas | None = None,
+        camera: Camera | None = None,
+        light: Light | None = None,
     ):
         if id is None:
             import uuid
 
             id = str(uuid.uuid4())
 
-        self.options = RenderOptions()
+        if camera is None:
+            camera = Camera()
+            camera.transform._center = 0.5 * (pmin + pmax)
+            camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
+
+            if not (pmin[2] == 0 and pmax[2] == 0):
+                camera.transform.rotate(270, 0)
+                camera.transform.rotate(0, -20)
+                camera.transform.rotate(20, 0)
+        light = light or Light()
+        self.options = RenderOptions(camera, light)
         self._render_mutex = Lock()
 
         self._id = id
@@ -43,18 +57,8 @@ class Scene:
         self.t_last = 0
         objects = render_objects
         pmin, pmax = max_bounding_box([o.get_bounding_box() for o in objects])
+        self.bounding_box = (pmin, pmax)
 
-        camera = self.options.camera
-        camera.transform._center = 0.5 * (pmin + pmax)
-        camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
-
-        if not (pmin[2] == 0 and pmax[2] == 0):
-            camera.transform.rotate(270, 0)
-            camera.transform.rotate(0, -20)
-            camera.transform.rotate(20, 0)
-        # if not (pmin[2] == 0 and pmax[2] == 0):
-        #     camera.transform.rotate(30, -20)
-        camera._update_uniforms()
         self.input_handler = InputHandler()
 
     def __getstate__(self):
