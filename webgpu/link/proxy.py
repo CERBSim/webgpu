@@ -55,6 +55,9 @@ class Proxy:
 
         return self._link.set(self._id, key, value)
 
+    def __setitem__(self, key, value):
+        return self.__setattr__(key, value)
+
     def __call__(self, *args, _ignore_result=False):
         return self._link.call(self._id, list(args), self._parent_id, _ignore_result)
 
