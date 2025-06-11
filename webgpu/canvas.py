@@ -13,7 +13,7 @@ _TARGET_FPS = 60
 def debounce(arg=None):
     def decorator(func):
         if platform.is_pyodide:
-            return render_function
+            return arg
 
         # Render only once every 1/_TARGET_FPS seconds
         @functools.wraps(func)
