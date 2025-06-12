@@ -1,7 +1,12 @@
 /* eslint-disable */
 
 function serializeEvent(event) {
-  event.preventDefault();
+  try {
+    event.preventDefault();
+  }
+  catch (e) {
+    // ignore, some events do not support preventDefault
+  }
   const keys = [
     'button',
     'code',
