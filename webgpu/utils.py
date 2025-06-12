@@ -324,7 +324,13 @@ def reload_package(package_name):
 
 
 def run_compute_shader(
-    code, bindings, n_workgroups: list | int, label="compute", entry_point="main", encoder=None
+    code,
+    bindings,
+    n_workgroups: list | int,
+    label="compute",
+    entry_point="main",
+    encoder=None,
+    defines: dict[str, str] | None = None,
 ):
     from webgpu.utils import create_bind_group, get_device
 
@@ -333,7 +339,7 @@ def run_compute_shader(
 
     device = get_device()
 
-    shader_module = device.createShaderModule(preprocess_shader_code(code))
+    shader_module = device.createShaderModule(preprocess_shader_code(code, defines), label=label)
 
     layout, bind_group = create_bind_group(device, bindings, label)
     pipeline = device.createComputePipeline(
