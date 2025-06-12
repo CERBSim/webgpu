@@ -1,5 +1,5 @@
 from .clipping import Clipping
-from .colormap import Colormap
+from .colormap import Colormap, Colorbar
 from .font import Font
 from .renderer import Renderer
 from .scene import Scene
