@@ -117,7 +117,60 @@ def read_shader_file(file_name) -> str:
     return find_shader_file(file_name).read_text()
 
 
+def _handle_ifdef(code: str, defines: dict[str, str]) -> str:
+    lines = code.splitlines()
+    result = []
+    stack = []
+
+    for lineno, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        if stripped.startswith("#ifdef"):
+            parts = stripped.split()
+            if len(parts) != 2:
+                raise ValueError(f"Syntax error at line {lineno}: {line}")
+            token = parts[1]
+            is_enabled = token in defines
+            stack.append((token, is_enabled, False))  # (token, include_block, else_encountered)
+            continue
+
+        elif stripped.startswith("#else"):
+            parts = stripped.split()
+            if len(parts) != 2:
+                raise ValueError(f"Syntax error at line {lineno}: {line}")
+            token = parts[1]
+            if not stack or stack[-1][0] != token:
+                raise ValueError(f"Mismatched #else {token} at line {lineno}")
+            if stack[-1][2]:
+                raise ValueError(f"Multiple #else for token {token} at line {lineno}")
+            old_token, old_include, _ = stack.pop()
+            # Invert the inclusion logic for the else block
+            stack.append((old_token, not old_include, True))
+            continue
+
+        elif stripped.startswith("#endif"):
+            parts = stripped.split()
+            if len(parts) != 2:
+                raise ValueError(f"Syntax error at line {lineno}: {line}")
+            token = parts[1]
+            if not stack or stack[-1][0] != token:
+                raise ValueError(f"Mismatched #endif {token} at line {lineno}")
+            stack.pop()
+            continue
+
+        # Include line if all conditions above it evaluate to True
+        if all(frame[1] for frame in stack):
+            result.append(line)
+
+    if stack:
+        tokens_left = ", ".join(token for token, *_ in stack)
+        raise ValueError(f"Unmatched #ifdef(s): {tokens_left}")
+
+    return "\n".join(result)
+
+
 def preprocess_shader_code(code: str, defines: dict[str, str] | None = None) -> str:
+    defines = defines or {}
     imported_files = set()
     while "#import" in code:
         lines = code.split("\n")
@@ -134,8 +187,11 @@ def preprocess_shader_code(code: str, defines: dict[str, str] | None = None) -> 
                     imported_files.add(imported_file)
             else:
                 code += line + "\n"
+
         if not replaced_something:
             break
+
+    code = _handle_ifdef(code, defines)
 
     if defines:
         for key, value in defines.items():
