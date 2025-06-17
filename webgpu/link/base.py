@@ -17,10 +17,11 @@ class LinkBase:
     _request_id: itertools.count
     _requests: dict
     _objects: dict
+    _cache: dict
 
     _serializers: dict[type, Callable] = {}
 
-    def _send_data(self, data):
+    def _send_data(self, data, key=None):
         raise NotImplementedError
 
     @staticmethod
@@ -31,6 +32,7 @@ class LinkBase:
         self._request_id = itertools.count()
         self._requests = {}
         self._objects = {}
+        self._cache = {}
 
     def _call_data(self, id, prop, args, ignore_result=False):
         return {
@@ -95,13 +97,17 @@ class LinkBase:
         )
 
     def get(self, id, prop: str | None = None):
+        if (id, prop) in self._cache:
+            return self._cache[(id, prop)]
+
         return self._send_data(
             {
                 "request_id": next(self._request_id),
                 "type": "get",
                 "id": id,
                 "prop": prop,
-            }
+            },
+            key=(id, prop),
         )
 
     def create_handle(self, obj):
@@ -223,8 +229,10 @@ class LinkBase:
 
             match msg_type:
                 case "response":
-                    event = self._requests[request_id]
+                    event, key = self._requests[request_id]
                     self._requests[request_id] = self._load_data(data.get("value", None))
+                    if key and data.get("cache", False):
+                        self._cache[key] = self._requests[request_id]
                     event.set()
                     return
 
@@ -260,8 +268,8 @@ class LinkBase:
             if request_id is not None:
                 self._send_response(request_id, response)
         except Exception as e:
-            import traceback
             import sys
+            import traceback
 
             print("error in on_message", data, type(e), str(e), file=sys.stderr)
             if not isinstance(e, str):
@@ -277,8 +285,11 @@ class LinkBase:
 
             match msg_type:
                 case "response":
-                    event = self._requests[request_id]
-                    self._requests[request_id] = self._load_data(data.get("value", None))
+                    event, key = self._requests[request_id]
+                    response = self._load_data(data.get("value", None))
+                    self._requests[request_id] = response
+                    if data.get("cache", False):
+                        self._cache[key] = response
                     event.set()
                     return
 
@@ -332,7 +343,7 @@ class PyodideLink(LinkBase):
             "ignore_return_value": ignore_return_value,
         }
 
-    def _send_data(self, data):
+    def _send_data(self, data, key=None):
         if type(data) is bytes:
             self._send_message(data)
         else:
@@ -388,7 +399,7 @@ class LinkBaseAsync(LinkBase):
             "ignore_return_value": ignore_return_value,
         }
 
-    def _send_data(self, data):
+    def _send_data(self, data, key=None):
         """Send data to the remote environment,
         if request_id is set, (blocking-)wait for the response and return it"""
         # print("send data", data)
@@ -400,7 +411,7 @@ class LinkBaseAsync(LinkBase):
         event = None
         if type != "response" and request_id is not None:
             event = threading.Event()
-            self._requests[request_id] = event
+            self._requests[request_id] = event, key
 
         asyncio.run_coroutine_threadsafe(self._send_async(message), self._send_loop)
         if event:

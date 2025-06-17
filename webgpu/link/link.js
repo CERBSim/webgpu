@@ -24,7 +24,13 @@ function serializeEvent(event) {
     'movementX',
     'movementY',
   ];
-  return Object.fromEntries(keys.map((k) => [k, event[k]]));
+  let obj = Object.fromEntries(keys.map((k) => [k, event[k]]));
+  if(event.x !== undefined) {
+      let rect = event.target.getBoundingClientRect();
+      obj.canvasX = event.x - Math.floor(rect.x);
+      obj.canvasY = event.y - Math.floor(rect.y);
+  }
+  return obj;
 }
 
 function decodeB64(data) {
@@ -275,6 +281,7 @@ class CrossLink {
     return {
       __is_crosslink_type__: true,
       type: 'proxy',
+      js_type: typeof(data),
       id,
     };
   }
@@ -319,6 +326,7 @@ class CrossLink {
       type: 'response',
       request_id,
       value,
+      cache: value && value.__is_crosslink_type__ && value.js_type === 'function',
     });
   }
 

@@ -91,7 +91,7 @@ class InputHandler:
                 except ImportError:
                     pass
 
-                if "x" in event and "y" in event:
+                if False and "x" in event and "y" in event:
                     rect = self.html_canvas.getBoundingClientRect()
                     event["canvasX"] = event["x"] - int(rect.x)
                     event["canvasY"] = event["y"] - int(rect.y)
