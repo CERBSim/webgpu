@@ -1,10 +1,12 @@
+from base64 import b64decode
 from typing import Callable
 import threading
 import time
 import functools
+import pathlib
 
 from . import platform
-from .utils import get_device
+from .utils import get_device, read_texture
 from .webgpu_api import *
 
 _TARGET_FPS = 60
@@ -168,6 +170,23 @@ class Canvas:
 
     def on_update_html_canvas(self, func: Callable):
         self._on_update_html_canvas.append(func)
+
+    def save_screenshot(self, filename: str):
+        with self._update_mutex:
+            path = pathlib.Path(filename)
+            format = path.suffix[1:]
+            data = read_texture(self.target_texture)
+            canvas = platform.js.document.createElement("canvas")
+            canvas.width = self.width
+            canvas.height = self.height
+            ctx = canvas.getContext("2d")
+            u8 = platform.js.Uint8ClampedArray._new(data.tobytes())
+            image_data = platform.js.ImageData._new(
+                u8, self.width, self.height
+            )
+            ctx.putImageData(image_data, 0, 0)
+            canvas.remove()
+            path.write_bytes(b64decode(canvas.toDataURL(format).split(",")[1]))
 
     @debounce(5)
     def resize(self):
