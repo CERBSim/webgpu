@@ -172,7 +172,9 @@ if not platform.is_pyodide:
         # Not exporting and not running in pyodide -> Start a websocket server and wait for the client to connect
         platform.init(
             before_wait_for_connection=lambda server: display(
-                Javascript(_link_js_code + f"WebsocketLink('ws://'+location.hostname+':{server.port}');")
+                Javascript(
+                    _link_js_code + f"WebsocketLink('ws://'+location.hostname+':{server.port}');"
+                )
             )
         )
         device = init_device_sync()

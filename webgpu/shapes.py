@@ -141,7 +141,7 @@ def generate_cylinder(
     )
 
 
-def generate_cone(n, radius=1., height=1., bottom_face=False):
+def generate_cone(n, radius=1.0, height=1.0, bottom_face=False):
     return generate_cylinder(
         n, radius, height, top_face=False, bottom_face=bottom_face, radius_top=0
     )

@@ -50,11 +50,11 @@ class LinkBase:
         return self._send_data(self._call_data(id, prop, args, ignore_result))
 
     def call_method_ignore_return(self, id=None, prop=None, args=[]):
-        return self.call(id, prop, args, ignore_result=True)
+        return self.call(id, prop=prop, args=args, ignore_result=True)
 
-    def call(self, id, args=[], parent_id=None, ignore_result=False):
+    def call(self, id, args=[], parent_id=None, ignore_result=False, prop=None):
         return self._send_data(
-            self._call_data(id, None, args, ignore_result) | {"parent_id": parent_id}
+            self._call_data(id, prop, args, ignore_result) | {"parent_id": parent_id}
         )
 
     def set_item(self, id, key, value):

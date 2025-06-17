@@ -3,8 +3,7 @@
 function serializeEvent(event) {
   try {
     event.preventDefault();
-  }
-  catch (e) {
+  } catch (e) {
     // ignore, some events do not support preventDefault
   }
   const keys = [
@@ -25,10 +24,10 @@ function serializeEvent(event) {
     'movementY',
   ];
   let obj = Object.fromEntries(keys.map((k) => [k, event[k]]));
-  if(event.x !== undefined) {
-      let rect = event.target.getBoundingClientRect();
-      obj.canvasX = event.x - Math.floor(rect.x);
-      obj.canvasY = event.y - Math.floor(rect.y);
+  if (event.x !== undefined) {
+    let rect = event.target.getBoundingClientRect();
+    obj.canvasX = event.x - Math.floor(rect.x);
+    obj.canvasY = event.y - Math.floor(rect.y);
   }
   return obj;
 }
@@ -77,22 +76,36 @@ function isPrimitiveDict(obj) {
   return true;
 }
 
-function createProxy(link, id, parent_id) {
-  const target = function (...args) {
-    return link.call(id, args, parent_id);
-  };
+function createProxy(link, id, parent_id, ignore_return = false) {
+  const target = ignore_return
+    ? function (...args) {
+        link.callIgnoreResult(id, args, parent_id);
+      }
+    : function (...args) {
+        return link.call(id, args, parent_id);
+      };
   target.handleEvent = async (eventType, event) => {
     return link.callIgnoreResult(id, [eventType, event], parent_id);
-  };
-  target.callFunction = (self, arg) => {
-    return link.call(id, [arg], parent_id);
-  };
-  target.callMethod = async (prop, args) => {
-    return await link.callMethod(id, prop, args);
   };
   target.callMethodIgnoreResult = (prop, args) => {
     link.callMethodIgnoreResult(id, prop, args);
   };
+  if (ignore_return) {
+    target.callFunction = (self, arg) => {
+      link.callIgnoreResult(id, [arg], parent_id);
+    };
+    target.callMethod = async (prop, args) => {
+      link.callMethodIgnoreResult(id, prop, args);
+    };
+  } else {
+    target.callFunction = (self, arg) => {
+      return link.call(id, [arg], parent_id);
+    };
+    target.callMethod = async (prop, args) => {
+      return await link.callMethod(id, prop, args);
+    };
+  }
+
   const handler = {
     get: function (obj, prop) {
       if (prop === '_parent_id') return parent_id;
@@ -115,9 +128,13 @@ function createProxy(link, id, parent_id) {
       return true;
     },
 
-    apply: function (obj, thisArg, args) {
-      return link.call(id, args, parent_id);
-    },
+    apply: ignore_return
+      ? function (obj, thisArg, args) {
+          link.callIgnoreResult(id, args, parent_id);
+        }
+      : function (obj, thisArg, args) {
+          return link.call(id, args, parent_id);
+        },
   };
   return new Proxy(target, handler);
 }
@@ -281,7 +298,7 @@ class CrossLink {
     return {
       __is_crosslink_type__: true,
       type: 'proxy',
-      js_type: typeof(data),
+      js_type: typeof data,
       id,
     };
   }
@@ -294,7 +311,12 @@ class CrossLink {
     if (value.type == 'bytes') return decodeB64(value.value);
     if (value.type == 'object') return this.objects[value.id];
     if (value.type == 'proxy')
-      return createProxy(this, value.id, value.parent_id);
+      return createProxy(
+        this,
+        value.id,
+        value.parent_id,
+        value.ignore_return_value
+      );
 
     console.error('Cannot load value, unknown value type:', value);
   }
@@ -326,7 +348,8 @@ class CrossLink {
       type: 'response',
       request_id,
       value,
-      cache: value && value.__is_crosslink_type__ && value.js_type === 'function',
+      cache:
+        value && value.__is_crosslink_type__ && value.js_type === 'function',
     });
   }
 

@@ -23,11 +23,13 @@ class Proxy:
     _link: LinkBase
     _parent_id: int | None
     _id: int | None
+    _noreturn_names: set[str]
 
     def __init__(self, link, parent_id=None, id=None):
         self._link = link
         self._id = id
         self._parent_id = parent_id
+        self._noreturn_names = set()
 
     def __getitem__(self, key):
         return self.__getattr__(key)
@@ -42,15 +44,22 @@ class Proxy:
                 "_call",
                 "_call_method_ignore_return",
                 "_call_method",
+                "_noreturn_names",
             ]
             or isinstance(key, str)
             and key.startswith("__")
         ):
             return super().__getattr__(key)
+        if key in self._noreturn_names:
+
+            def wrapper(*args):
+                return self._call_method_ignore_return(key, list(args))
+
+            return wrapper
         return self._link.get(self._id, key)
 
     def __setattr__(self, key, value):
-        if key in ["_id", "_parent_id", "_link"]:
+        if key in ["_id", "_parent_id", "_link", "_noreturn_names"]:
             return super().__setattr__(key, value)
 
         return self._link.set(self._id, key, value)

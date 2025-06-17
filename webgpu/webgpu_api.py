@@ -1,10 +1,12 @@
+import inspect
 import sys
+import types
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
+from functools import wraps
 
 from . import platform
 from .platform import JsPromise, JsProxy, create_proxy, is_pyodide, toJS
-
 
 DEBUG_LABELS = False
 
@@ -41,11 +43,24 @@ def _get_label_from_stack():
     return " <- ".join(method_names)
 
 
-class BaseWebGPUHandle:
+class _BaseWebGPUHandleMetaClass(type):
+    def __new__(cls, name, bases, namespace):
+        for attr_name, attr_value in list(namespace.items()):
+            if isinstance(attr_value, types.FunctionType):
+                sig = inspect.signature(attr_value)
+                if sig.return_annotation is None:
+                    noreturn_names = namespace.get("__noreturn__", [])
+                    noreturn_names.append(attr_name)
+                    namespace["__noreturn__"] = noreturn_names
+        return super().__new__(cls, name, bases, namespace)
+
+
+class BaseWebGPUHandle(metaclass=_BaseWebGPUHandleMetaClass):
     handle: JsProxy
 
     def __init__(self, handle):
         self.handle = handle
+        self.handle._noreturn_names.update(getattr(self, "__noreturn__", []))
 
     def destroy(self):
         pass
@@ -1150,14 +1165,16 @@ class CommandEncoder(BaseWebGPUHandle):
         label: str = "",
     ) -> "RenderPassEncoder":
 
-        return self.handle.beginRenderPass(
-            RenderPassDescriptor(
-                colorAttachments=colorAttachments,
-                depthStencilAttachment=depthStencilAttachment,
-                occlusionQuerySet=occlusionQuerySet,
-                timestampWrites=timestampWrites,
-                label=label,
-            ).toJS()
+        return RenderPassEncoder(
+            self.handle.beginRenderPass(
+                RenderPassDescriptor(
+                    colorAttachments=colorAttachments,
+                    depthStencilAttachment=depthStencilAttachment,
+                    occlusionQuerySet=occlusionQuerySet,
+                    timestampWrites=timestampWrites,
+                    label=label,
+                )
+            )
         )
 
     def copyBufferToBuffer(
@@ -1360,7 +1377,7 @@ class Device(BaseWebGPUHandle):
         primitive: PrimitiveState = field(default_factory=PrimitiveState),
         multisample: MultisampleState = field(default_factory=MultisampleState),
         label: str = "",
-    ) -> None:
+    ):
         return self.handle.createRenderPipeline(
             RenderPipelineDescriptor(
                 layout=layout,
@@ -1512,7 +1529,7 @@ class Queue(BaseWebGPUHandle):
         data: bytes,
         dataOffset: int = 0,
         size: int | None = None,
-    ):
+    ) -> None:
         self.handle.writeBuffer(
             buffer.handle,
             bufferOffset,
@@ -1765,7 +1782,6 @@ class Texture(BaseWebGPUHandle):
         return TextureUsage(self.handle.usage())
 
     def destroy(self) -> None:
-        print("destroy texture")
         return self.handle.destroy()
 
     def __del__(self):

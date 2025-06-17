@@ -1,8 +1,8 @@
+import threading
 from typing import Callable
 
 from .platform import is_pyodide
 from .utils import to_js
-import threading
 
 
 class InputHandler:
@@ -100,7 +100,7 @@ class InputHandler:
 
         options = to_js({"capture": True})
         for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout"]:
-            js_handler = create_proxy(self._handle_js_event(event))
+            js_handler = create_proxy(self._handle_js_event(event), ignore_return_value=True)
             self.html_canvas["on" + event] = js_handler
             self._js_handlers[event] = js_handler
 

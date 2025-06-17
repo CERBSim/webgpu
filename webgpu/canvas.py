@@ -181,9 +181,7 @@ class Canvas:
             canvas.height = self.height
             ctx = canvas.getContext("2d")
             u8 = platform.js.Uint8ClampedArray._new(data.tobytes())
-            image_data = platform.js.ImageData._new(
-                u8, self.width, self.height
-            )
+            image_data = platform.js.ImageData._new(u8, self.width, self.height)
             ctx.putImageData(image_data, 0, 0)
             canvas.remove()
             path.write_bytes(b64decode(canvas.toDataURL(format).split(",")[1]))
