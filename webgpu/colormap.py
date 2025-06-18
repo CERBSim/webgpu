@@ -153,10 +153,16 @@ class Colorbar(Renderer):
     n_vertices: int = 3
 
     def __init__(
-        self, colormap: Colormap | None = None, position=(-0.9, 0.9), width=1, height=0.05
+        self,
+        colormap: Colormap | None = None,
+        position=(-0.9, 0.9),
+        width=1,
+        height=0.05,
+        number_format=None,
     ):
         super().__init__()
         self.colormap = colormap or Colormap()
+        self.number_format = number_format
         self.labels = Labels([], [], font_size=14, h_align="center", v_align="top")
         self.uniforms = None
 
@@ -217,7 +223,7 @@ class Colorbar(Renderer):
         self.n_instances = 2 * self.colormap.n_colors
 
         self.labels.labels = [
-            format_number(v)
+            format_number(v, self.number_format)
             for v in [
                 self.colormap.minval + i / 4 * (self.colormap.maxval - self.colormap.minval)
                 for i in range(6)

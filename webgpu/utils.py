@@ -560,7 +560,9 @@ def max_bounding_box(boxes):
     return (pmin, pmax)
 
 
-def format_number(n):
+def format_number(n, format=None):
+    if format is not None:
+        return format % n
     if n == 0:
         return "0"
     abs_n = abs(n)
