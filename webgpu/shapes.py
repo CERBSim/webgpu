@@ -305,6 +305,10 @@ class ShapeRenderer(Renderer):
         elif n_colors == 2:
             color_stride = 0
             color_top_offset = itemsize
+        else:
+            raise ValueError(
+                f"Invalid number of colors/values: {n_colors}. Expected {self.n_instances}, {2 * self.n_instances}, 1, or 2."
+            )
 
         bmin, bmax = self.shape_data.get_bounding_box()
         z_range = [bmin[2], bmax[2]]

@@ -1710,9 +1710,9 @@ class RenderPassEncoder(BaseWebGPUHandle):
     def setVertexBuffer(
         self,
         slot: int = 0,
-        buffer: "Buffer | None" = None,
+        buffer: Buffer | None = None,
         offset: int = 0,
-        size: int = 0,
+        size: int | None = None,
     ) -> None:
         return self.handle.setVertexBuffer(
             slot, None if buffer is None else buffer.handle, offset, size
@@ -1720,14 +1720,12 @@ class RenderPassEncoder(BaseWebGPUHandle):
 
     def setIndexBuffer(
         self,
-        buffer: "Buffer | None" = None,
-        format: "IndexFormat | None" = None,
+        buffer: Buffer | None = None,
+        format: IndexFormat | None = None,
         offset: int = 0,
-        size: int = 0,
+        size: int | None = None,
     ) -> None:
-        return self.handle.setIndexBuffer(
-            None if buffer is None else buffer.handle, format, offset, size
-        )
+        return self.handle.setIndexBuffer(buffer and buffer.handle, format, offset, size)
 
     def beginOcclusionQuery(self, queryIndex: int = 0) -> None:
         return self.handle.beginOcclusionQuery(queryIndex)
