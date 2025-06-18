@@ -1101,8 +1101,14 @@ class Adapter(BaseWebGPUHandle):
         return Device(device)
 
 
+class _DummyNone:
+    pass
+
+
 class Buffer(BaseWebGPUHandle):
-    async def mapAsync(self, mode: MapMode, offset: int = 0, size: int = 0) -> None:
+    async def mapAsync(
+        self, mode: MapMode, offset: int = 0, size: int = 0
+    ) -> _DummyNone:  # don't return None, as this would ignore the blocking wait
         return await self.handle.mapAsync(mode, offset, size)
 
     def getMappedRange(self, offset: int = 0, size: int = 0) -> int:
