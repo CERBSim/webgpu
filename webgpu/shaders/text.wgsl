@@ -56,5 +56,14 @@ fn vertexText(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) cha
     position.x += w * shift.x * f32(text.length);
     position.y += h * shift.y;
 
+    // snap position to pixel grid
+    let resolution = vec2f(f32(u_font.width), f32(u_font.height)) / vec2f(u_font.width_normalized, u_font.height_normalized);
+    let ndc = position.xy / position.w;
+    let screen = (ndc * 0.5 + vec2f(0.5)) * resolution;
+    let snapped_screen = floor(screen) + 0.5;
+    let snapped_ndc = (snapped_screen / resolution - vec2f(0.5)) * 2.0;
+    position.x = snapped_ndc.x * position.w;
+    position.y = snapped_ndc.y * position.w;
+
     return fontCalc(text.char, position, vertexId);
 }

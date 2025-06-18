@@ -12,7 +12,7 @@ struct FontUniforms {
 fn fontGetTexCoord(char: u32, vertexId: u32) -> vec2<f32> {
     return vec2<f32>(
         f32((char - 32) * u_font.width),
-        f32(u_font.height)
+        f32(u_font.height-1)
     );
 }
 
@@ -25,7 +25,7 @@ struct FontFragmentInput {
 fn fragmentFont(@location(0) tex_coord: vec2<f32>) -> @location(0) vec4<f32> {
     let alpha: f32 = textureLoad(
         u_font_texture,
-        vec2i(floor(tex_coord)),
+        vec2i(tex_coord+0.5),
         0
     ).x;
 
@@ -47,7 +47,7 @@ fn fontCalc(char: u32, position: vec4<f32>, vertexId: u32) -> FontFragmentInput 
 
     if vertexId == 1 || vertexId == 2 || vertexId == 4 {
         p.x += u_font.width_normalized * p.w;
-        tex_coord.x += f32(u_font.width);
+        tex_coord.x += f32(u_font.width-1);
     }
   return FontFragmentInput(p, tex_coord);
 }
