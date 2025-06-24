@@ -22,22 +22,22 @@ def init_device_sync():
     options = RequestAdapterOptions(
         powerPreference=PowerPreference.low_power,
     ).toJS()
-    adapter = reqAdapter(options)
+    adapter = Adapter(reqAdapter(options))
+    maxBufferSize = adapter.limits.maxBufferSize
+    maxStorageBufferBindingSize = adapter.limits.maxStorageBufferBindingSize
     if not adapter:
         platform.js.alert("WebGPU is not supported")
         sys.exit(1)
-    one_gig = 1024**3
-    _device = Device(
-        adapter.requestDevice(
-            [],
-            Limits(
-                maxBufferSize=one_gig - 16,
-                maxStorageBufferBindingSize=one_gig - 16,
-            ),
-            None,
-            "WebGPU device",
-        )
+    _device = adapter.requestDeviceSync(
+        requiredLimits=Limits(
+            maxBufferSize=maxBufferSize,
+            maxStorageBufferBindingSize=maxStorageBufferBindingSize,
+        ),
+        label="WebGPU device",
     )
+    limits = _device.limits
+    platform.js.console.log("adapter info\n", adapter.info)
+    platform.js.console.log("device limits\n", limits)
     return _device
 
 
@@ -56,13 +56,13 @@ async def init_device() -> Device:
     else:
         print("no timestamp query")
 
-    one_meg = 1024**2
-    one_gig = 1024**3
+    maxBufferSize = adapter.limits.maxBufferSize
+    maxStorageBufferBindingSize = adapter.limits.maxStorageBufferBindingSize
     _device = adapter.requestDevice(
         label="WebGPU device",
         requiredLimits=Limits(
-            maxBufferSize=one_gig - 16,
-            maxStorageBufferBindingSize=one_gig - 16,
+            maxBufferSize=maxBufferSize,
+            maxStorageBufferBindingSize=maxStorageBufferBindingSize,
         ),
     )
     try:
@@ -450,7 +450,14 @@ def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array") -> B
     buffer = device.createBuffer(
         array.size * array.itemsize, usage=usage | BufferUsage.COPY_DST, label=label
     )
-    device.queue.writeBuffer(buffer, 0, array.tobytes())
+    data = array.tobytes()
+    chunk_size = 99 * 1024**2
+    if len(data) > chunk_size:
+        for i in range(0, len(data), chunk_size):
+            size = len(data[i : i + chunk_size])
+            device.queue.writeBuffer(buffer, i, data[i : i + chunk_size], 0, size)
+    else:
+        device.queue.writeBuffer(buffer, 0, data, 0, len(data))
     return buffer
 
 

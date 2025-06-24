@@ -17,6 +17,11 @@ js = None
 websocket_server = None
 link = None
 
+
+def create_event_handler(func, prevent_default=True):
+    pass
+
+
 try:
     import js
     import pyodide.ffi

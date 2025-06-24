@@ -13,6 +13,24 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
+def _pack_message(data: dict) -> tuple[dict, bytes | str]:
+    buffer = data.pop("buffer", None)
+    if buffer is None:
+        return data, json.dumps(data)
+
+    offset = 0
+    offsets = [0]
+    for b in buffer:
+        offset += len(b)
+        offsets.append(offset)
+    data["buffer_offsets"] = offsets
+
+    bdata = json.dumps(data).encode("utf-8")
+    bdata = len(bdata).to_bytes(4, "little") + bdata + b"".join(buffer)
+
+    return data, bdata
+
+
 class LinkBase:
     _request_id: itertools.count
     _requests: dict
@@ -20,9 +38,53 @@ class LinkBase:
     _cache: dict
 
     _serializers: dict[type, Callable] = {}
+    _max_message_size = 100 * 1024 * 1024  # 100 MB
 
-    def _send_data(self, data, key=None):
+    def _send_data(self, metadata, data, key=None):
         raise NotImplementedError
+
+    def _split_and_send(self, data, key=None):
+        request_id = data.get("request_id", None)
+        metadata, data = _pack_message(data)
+
+        size = len(data)
+
+        if size <= self._max_message_size:
+            return self._send_data(metadata, data, key)
+
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+            data = len(data).to_bytes(4, "little") + data
+
+        # Split the data into chunks
+        chunks = []
+        while len(data) > self._max_message_size:
+            chunk = data[: self._max_message_size]
+            data = data[self._max_message_size :]
+            chunks.append(chunk)
+
+        if data:
+            chunks.append(data)
+
+        for i, chunk in enumerate(chunks):
+            mchunk, dchunk = _pack_message(
+                {
+                    "parent_request_id": request_id,
+                    "type": "chunk",
+                    "buffer": [chunk],
+                    "chunk_id": i,
+                    "offset": i * self._max_message_size,
+                    "size": len(chunk),
+                    "total_size": size,
+                    "n_chunks": len(chunks),
+                }
+            )
+            if i == len(chunks) - 1:
+                mchunk["request_id"] = request_id
+                mchunk["key"] = key
+                return self._send_data(mchunk, dchunk)
+            else:
+                self._send_data(mchunk, dchunk)
 
     @staticmethod
     def register_serializer(type_, serializer):
@@ -35,50 +97,59 @@ class LinkBase:
         self._cache = {}
 
     def _call_data(self, id, prop, args, ignore_result=False):
+        buffer = []
+        args = self._dump_data(args, buffer)
         return {
             "request_id": next(self._request_id) if not ignore_result else None,
             "prop": prop,
             "type": "call",
             "id": id,
-            "args": self._dump_data(args),
+            "args": args,
+            "buffer": buffer if buffer else None,
         }
 
     def call_new(self, id=None, prop=None, args=[], ignore_result=False):
-        return self._send_data(self._call_data(id, prop, args, ignore_result) | {"type": "new"})
+        return self._split_and_send(
+            self._call_data(id, prop, args, ignore_result) | {"type": "new"}
+        )
 
     def call_method(self, id=None, prop=None, args=[], ignore_result=False):
-        return self._send_data(self._call_data(id, prop, args, ignore_result))
+        return self._split_and_send(self._call_data(id, prop, args, ignore_result))
 
     def call_method_ignore_return(self, id=None, prop=None, args=[]):
         return self.call(id, prop=prop, args=args, ignore_result=True)
 
     def call(self, id, args=[], parent_id=None, ignore_result=False, prop=None):
-        return self._send_data(
+        return self._split_and_send(
             self._call_data(id, prop, args, ignore_result) | {"parent_id": parent_id}
         )
 
     def set_item(self, id, key, value):
-        return self._send_data(
+        buffer = []
+        value = self._dump_data(value, buffer)
+        return self._split_and_send(
             {
                 "type": "set",
                 "id": id,
                 "key": key,
-                "value": self._dump_data(value),
+                "value": value,
+                "buffer": buffer if buffer else None,
             }
         )
 
     def set(self, id, prop, value):
-        return self._send_data(
+        value = self._dump_data(value)
+        return self._split_and_send(
             {
                 "type": "set",
                 "id": id,
                 "prop": prop,
-                "value": self._dump_data(value),
+                "value": value,
             }
         )
 
     def get_keys(self, id):
-        return self._send_data(
+        return self._split_and_send(
             {
                 "request_id": next(self._request_id),
                 "type": "get_keys",
@@ -87,7 +158,7 @@ class LinkBase:
         )
 
     def get_item(self, id, key):
-        return self._send_data(
+        return self._split_and_send(
             {
                 "request_id": next(self._request_id),
                 "type": "get",
@@ -100,7 +171,7 @@ class LinkBase:
         if (id, prop) in self._cache:
             return self._cache[(id, prop)]
 
-        return self._send_data(
+        return self._split_and_send(
             {
                 "request_id": next(self._request_id),
                 "type": "get",
@@ -115,7 +186,7 @@ class LinkBase:
         self._objects[id_] = obj
         return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
 
-    def _dump_data(self, data):
+    def _dump_data(self, data, buffer=None):
         from .proxy import Proxy
 
         type_ = type(data)
@@ -128,20 +199,25 @@ class LinkBase:
             return data
 
         if isinstance(data, (bytes, memoryview)):
+            if buffer is None:
+                return {
+                    "__is_crosslink_type__": True,
+                    "type": "bytes",
+                    "value": base64.b64encode(data).decode(),
+                }
+            index = len(buffer)
+            buffer.append(bytes(data))
             return {
                 "__is_crosslink_type__": True,
-                "type": "bytes",
-                "value": base64.b64encode(data).decode(),
+                "type": "buffer",
+                "index": index,
             }
 
-        if isinstance(data, dict):
-            return {k: self._dump_data(data[k]) for k in list(data.keys())}
-
-        if isinstance(data, Mapping):
-            return {k: self._dump_data(data[k]) for k in list(data.keys())}
-
         if isinstance(data, (list, tuple)):
-            return [self._dump_data(v) for v in data]
+            return [self._dump_data(v, buffer) for v in data]
+
+        if isinstance(data, (dict, Mapping)):
+            return {k: self._dump_data(data[k], buffer) for k in list(data.keys())}
 
         if isinstance(data, Proxy):
             return {
@@ -197,13 +273,16 @@ class LinkBase:
         if type(data) is bytes:
             data = request_id.to_bytes(4, "big") + data
         else:
+            buffer = []
+            value = self._dump_data(data, buffer)
             data = {
                 "request_id": request_id,
                 "type": "response",
-                "value": self._dump_data(data),
+                "value": value,
+                "buffer": buffer if buffer else None,
             }
 
-        self._send_data(data)
+            self._split_and_send(data)
 
     def _get_obj(self, data):
         obj = self._objects
@@ -343,19 +422,19 @@ class PyodideLink(LinkBase):
             "ignore_return_value": ignore_return_value,
         }
 
-    def _send_data(self, data, key=None):
+    def _send_data(self, metadata, data, key=None):
         if type(data) is bytes:
             self._send_message(data)
         else:
             if (
-                data.get("request_id", None) is not None
-                and data["type"] != "response"
-                and not data.get("ignore_return_value", False)
+                metadata.get("request_id", None) is not None
+                and metadata["type"] != "response"
+                and not metadata.get("ignore_return_value", False)
             ):
                 import js
 
                 js.Atomics.store(self._size_buffer, 0, 0)
-                self._send_message(json.dumps(data))
+                self._send_message(data)
                 js.Atomics.wait(self._size_buffer, 0, 0, 10000)
                 n = self._size_buffer[0]
                 res = bytes(self._result_buffer.slice(0, n))
@@ -363,7 +442,7 @@ class PyodideLink(LinkBase):
                 data = json.loads(s)
                 return self._load_data(data.get("value", None))
             else:
-                self._send_message(json.dumps(data))
+                self._send_message(data)
 
 
 class LinkBaseAsync(LinkBase):
@@ -399,21 +478,20 @@ class LinkBaseAsync(LinkBase):
             "ignore_return_value": ignore_return_value,
         }
 
-    def _send_data(self, data, key=None):
+    def _send_data(self, metadata, data, key=None):
         """Send data to the remote environment,
         if request_id is set, (blocking-)wait for the response and return it"""
         # print("send data", data)
 
-        request_id = data.get("request_id", None)
-        type = data.get("type", None)
+        request_id = metadata.get("request_id", None)
+        type = metadata.get("type", None)
         # print("send response", data)
-        message = json.dumps(data)
         event = None
         if type != "response" and request_id is not None:
             event = threading.Event()
             self._requests[request_id] = event, key
 
-        asyncio.run_coroutine_threadsafe(self._send_async(message), self._send_loop)
+        asyncio.run_coroutine_threadsafe(self._send_async(data), self._send_loop)
         if event:
             event.wait()
             return self._requests.pop(request_id)

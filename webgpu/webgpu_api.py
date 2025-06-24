@@ -78,7 +78,7 @@ def fromJS(obj):
 
 class BaseWebGPUObject:
     def toJS(self):
-        return self.__dict__
+        return {k: v for k, v in self.__dict__.items() if v is not None}
 
 
 class Sampler(BaseWebGPUHandle):
@@ -1076,6 +1076,25 @@ class Adapter(BaseWebGPUHandle):
     @property
     def isFallbackAdapter(self) -> bool:
         return self.handle.isFallbackAdapter
+
+    def requestDeviceSync(
+        self,
+        requiredFeatures: list["FeatureName"] | None = None,
+        requiredLimits: Limits | None = None,
+        defaultQueue: QueueDescriptor | None = None,
+        label: str = "",
+    ) -> "Device":
+
+        device = self.handle.requestDevice(
+            DeviceDescriptor(
+                requiredFeatures=requiredFeatures,
+                requiredLimits=requiredLimits.toJS() if requiredLimits else None,
+                defaultQueue=defaultQueue,
+                label=label,
+            ).toJS()
+        )
+
+        return Device(device)
 
     async def requestDevice(
         self,

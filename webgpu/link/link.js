@@ -303,7 +303,7 @@ class CrossLink {
     };
   }
 
-  _loadValue(value) {
+  _loadValue(value, buffer) {
     if (value instanceof ArrayBuffer) return value;
     if (value === null || value === undefined) return undefined;
     if (!value.__is_crosslink_type__) return value;
@@ -317,21 +317,27 @@ class CrossLink {
         value.parent_id,
         value.ignore_return_value
       );
+    if (value.type == 'buffer') {
+      const index = value.index;
+      const start = buffer.offsets[index];
+      const end = buffer.offsets[index + 1];
+      return buffer.data.slice(start, end);
+    }
 
     console.error('Cannot load value, unknown value type:', value);
   }
 
-  _loadData(data) {
+  _loadData(data, buffer) {
     if (
       data === undefined ||
       data === null ||
       typeof data !== 'object' ||
       data.__is_crosslink_type__
     )
-      return this._loadValue(data);
+      return this._loadValue(data, buffer);
 
     Object.keys(data).map((key) => {
-      data[key] = this._loadData(data[key]);
+      data[key] = this._loadData(data[key], buffer);
     });
     return data;
   }
@@ -353,20 +359,38 @@ class CrossLink {
     });
   }
 
+  _decodeBinaryMessage(bdata) {
+    const metadata_size = new Uint32Array(bdata, 0, 1)[0];
+    const decoder = new TextDecoder('utf-8');
+    const decoded = decoder.decode(new Uint8Array(bdata, 4, metadata_size));
+    const data = JSON.parse(decoded);
+    const buffer = {
+      offsets: data.buffer_offsets,
+      data: new Uint8Array(bdata, 4 + metadata_size),
+    };
+
+    return {
+      data,
+      buffer,
+    };
+  }
+
   async onMessage(event) {
     let data = event.data;
     let request_id = undefined;
+    let result_action = undefined;
+    let buffer = undefined;
 
     if (event.data instanceof ArrayBuffer) {
-      console.log('received binary data', event.data);
-      request_id = new Uint32Array(event.data, 0, 1)[0];
-      data = {
-        value: event.data.slice(4),
-        type: 'response',
-      };
+      const decoded_message = this._decodeBinaryMessage(event.data);
+      data = decoded_message.data;
+      buffer = decoded_message.buffer;
     } else {
-      data = JSON.parse(event.data);
+      if (typeof event.data === 'string') {
+        data = JSON.parse(event.data);
+      }
       request_id = data.request_id;
+      result_action = data.result_action || 'send';
     }
 
     let obj = data.id ? this.objects[data.id] : window;
@@ -377,7 +401,7 @@ class CrossLink {
     switch (data.type) {
       case 'call':
       case 'new':
-        const args = this._loadData(data.args);
+        const args = this._loadData(data.args, buffer);
         let self = null;
         if (data.prop) {
           self = this.objects[data.id];
@@ -387,6 +411,7 @@ class CrossLink {
         }
 
         if (data.type === 'call') {
+          // console.log("call", data.id, data.prop, obj, args);
           response = obj.apply(self, args);
         } else {
           response = Reflect.construct(obj, args);
@@ -405,7 +430,7 @@ class CrossLink {
         }
         break;
       case 'set':
-        const value = this._loadData(data.value);
+        const value = this._loadData(data.value, buffer);
         if (data.prop) obj[data.prop] = value;
         if (data.key) obj[data.key] = value;
         break;
@@ -413,8 +438,22 @@ class CrossLink {
         this.objects[data.id] = undefined;
         break;
       case 'response':
-        this.requests[request_id](this._loadData(data.value));
-        return;
+        this.requests[request_id](this._loadData(data.value, buffer));
+        break;
+      case 'chunk':
+        const id = 'chunk_' + data.parent_request_id;
+
+        if (this.objects[id] === undefined)
+          this.objects[id] = new Uint8Array(data.total_size);
+        this.objects[id].set(buffer.data, data.offset);
+        if (data.n_chunks === data.chunk_id + 1) {
+          const combined_data = this.objects[id].buffer;
+          delete this.objects[id];
+          this.onMessage({
+            data: combined_data,
+          });
+        }
+        break;
       default:
         console.error('Unknown message type:', data, data.type);
     }
@@ -422,10 +461,19 @@ class CrossLink {
     if (request_id !== undefined && data.type !== 'response') {
       response = await response;
       if (data.result_callback) {
-        const callback = this._loadData(data.result_callback);
+        const callback = this._loadData(data.result_callback, buffer);
         await callback(response);
       } else {
-        this.sendResponse(response, request_id);
+        if (result_action === 'send') this.sendResponse(response, request_id);
+        else if (result_action === 'store')
+          this.objects['result_' + request_id] = response;
+        else if (result_action !== 'ignore')
+          console.error(
+            'Unknown result action:',
+            result_action,
+            data,
+            response
+          );
       }
     }
   }
