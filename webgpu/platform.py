@@ -18,8 +18,20 @@ websocket_server = None
 link = None
 
 
-def create_event_handler(func, prevent_default=True):
-    pass
+def create_event_handler(
+    func,
+    prevent_default=True,
+    stop_propagation=False,
+    stop_immediate_propagation=False,
+    return_value=None,
+):
+    options = {
+        "preventDefault": prevent_default,
+        "stopPropagation": stop_propagation,
+        "stopImmediatePropagation": stop_immediate_propagation,
+        "returnValue": return_value,
+    }
+    return js.createEventHandler(func, options)
 
 
 try:
@@ -97,6 +109,7 @@ if not is_pyodide:
 
 if is_pyodide:
     import json
+
     import js as pyodide_js
 
     from .link.base import LinkBase

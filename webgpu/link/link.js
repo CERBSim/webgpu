@@ -153,6 +153,7 @@ class CrossLink {
       this.connection.onOpen(() => {
         this.expose('importPackage', window.importPackage);
         this.expose('addStyleFile', window.addStyleFile);
+        this.expose('createEventHandler', window.createEventHandler);
         console.log('connection open');
         resolve();
       });
@@ -595,4 +596,20 @@ window.patchedRequestAnimationFrame = (device, context, target) => {
 
     device.queue.submit([encoder.finish()]);
   });
+};
+
+window.createEventHandler = (callback, options = {}) => {
+  return (ev) => {
+    if (options.preventDefault) {
+      ev.preventDefault();
+    }
+    if (options.stopPropagation) {
+      ev.stopPropagation();
+    }
+    if (options.stopImmediatePropagation) {
+      ev.stopImmediatePropagation();
+    }
+    callback(ev);
+    return options.returnValue;
+  };
 };
