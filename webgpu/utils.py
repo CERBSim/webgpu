@@ -447,10 +447,13 @@ def texture_from_data(width, height, data, format, label=""):
 
 def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array") -> Buffer:
     device = get_device()
-    buffer = device.createBuffer(
-        array.size * array.itemsize, usage=usage | BufferUsage.COPY_DST, label=label
-    )
+
     data = array.tobytes()
+    if len(data) % 4:
+        data = data + b"\x00" * (4 - len(data) % 4)  # pad to 4 bytes
+
+    buffer = device.createBuffer(len(data), usage=usage | BufferUsage.COPY_DST, label=label)
+
     chunk_size = 99 * 1024**2
     if len(data) > chunk_size:
         for i in range(0, len(data), chunk_size):
