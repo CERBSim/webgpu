@@ -49,7 +49,7 @@ class Colormap(BaseRenderer):
         self.n_colors = 8
         self.uniforms = None
         self.sampler = None
-
+        self._callbacks = []
         self.set_colormap(colormap)
 
     def update(self, options: RenderOptions):
@@ -82,12 +82,16 @@ class Colormap(BaseRenderer):
 
         self.colors = colormap
         self.set_needs_update()
+        for callback in self._callbacks:
+            callback()
 
     def set_n_colors(self, n_colors):
         self.n_instances = 2 * n_colors
         if self.uniforms is not None:
             self.uniforms.n_colors = n_colors
             self.uniforms.update_buffer()
+        for callback in self._callbacks:
+            callback()
 
     def set_min_max(self, minval, maxval, set_autoscale=True):
         self.minval = minval
@@ -98,6 +102,8 @@ class Colormap(BaseRenderer):
             self.uniforms.min = minval
             self.uniforms.max = maxval
             self.uniforms.update_buffer()
+        for callback in self._callbacks:
+            callback()
 
     def set_min(self, minval):
         self.minval = minval
@@ -105,6 +111,8 @@ class Colormap(BaseRenderer):
         if self.uniforms is not None:
             self.uniforms.min = minval
             self.uniforms.update_buffer()
+        for callback in self._callbacks:
+            callback()
 
     def set_max(self, maxval):
         self.maxval = maxval
@@ -112,6 +120,8 @@ class Colormap(BaseRenderer):
         if self.uniforms is not None:
             self.uniforms.max = maxval
             self.uniforms.update_buffer()
+        for callback in self._callbacks:
+            callback()
 
     def get_bindings(self):
         return [
@@ -169,6 +179,7 @@ class Colorbar(Renderer):
         self._position = position
         self._width = width
         self._height = height
+        colormap._callbacks.append(self.set_needs_update)
 
     @property
     def position(self):
