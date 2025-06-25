@@ -390,9 +390,10 @@ class CrossLink {
       if (typeof event.data === 'string') {
         data = JSON.parse(event.data);
       }
-      request_id = data.request_id;
-      result_action = data.result_action || 'send';
     }
+
+    request_id = data.request_id;
+    result_action = data.result_action || 'send';
 
     let obj = data.id ? this.objects[data.id] : window;
     // console.log('onMessage', data, obj);
