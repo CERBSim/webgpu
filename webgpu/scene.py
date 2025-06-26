@@ -1,5 +1,3 @@
-from threading import Lock
-
 import numpy as np
 import time
 
@@ -47,7 +45,7 @@ class Scene:
                 camera.transform.rotate(20, 0)
         light = light or Light()
         self.options = RenderOptions(camera, light)
-        self._render_mutex = Lock()
+        self._render_mutex = None
 
         self._id = id
         self.render_objects = render_objects
@@ -75,7 +73,7 @@ class Scene:
         self.options = state["render_options"]
         self.canvas = None
         self.input_handler = InputHandler()
-        self._render_mutex = Lock()
+        self._render_mutex = None
 
         if is_pyodide:
             _scenes_by_id[self._id] = self
@@ -95,6 +93,8 @@ class Scene:
         self.canvas = canvas
         self.input_handler.set_canvas(canvas.canvas)
         self.options.set_canvas(canvas)
+
+        self._render_mutex = canvas._update_mutex
 
         with self._render_mutex:
             self.options.timestamp = time.time()

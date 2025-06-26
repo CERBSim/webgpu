@@ -12,6 +12,12 @@ from .webgpu_api import *
 _TARGET_FPS = 60
 
 
+@dataclass
+class _DebounceData:
+    t_last: float | None = None
+    timer: threading.Timer | None = None
+
+
 def debounce(arg=None):
     def decorator(func):
         if platform.is_pyodide:
@@ -19,31 +25,37 @@ def debounce(arg=None):
 
         # Render only once every 1/_TARGET_FPS seconds
         @functools.wraps(func)
-        def debounced(*args, **kwargs):
-            if debounced.timer is not None:
+        def debounced(obj, *args, **kwargs):
+            if not hasattr(obj, "_debounce_data"):
+                obj._debounce_data = {}
+
+            fname = func.__name__
+            if obj._debounce_data.get(fname, None) is None:
+                obj._debounce_data[fname] = _DebounceData(None, None)
+
+            data = obj._debounce_data[fname]
+
+            if data.timer is not None:
                 # we already have a render scheduled, so do nothing
                 return
 
             def f():
                 # clear the timer, so we can schedule a new one with the next function call
                 t = time.time()
-                func(*args, **kwargs)
-                debounced.timer = None
-                debounced.t_last = t
+                func(obj, *args, **kwargs)
+                data.timer = None
+                data.t_last = t
 
-            if debounced.t_last is None:
+            if data.t_last is None:
                 # first call -> just call the function immediately
-                debounced.t_last = time.time()
+                data.t_last = time.time()
                 f()
                 return
 
-            t_wait = max(1 / target_fps - (time.time() - debounced.t_last), 0)
-            debounced.timer = threading.Timer(t_wait, f)
-            debounced.timer.start()
+            t_wait = max(1 / target_fps - (time.time() - data.t_last), 0)
+            data.timer = threading.Timer(t_wait, f)
+            data.timer.start()
 
-        debounced.timer = None
-        debounced.t_last = None
-        debounced._original = func
         return debounced
 
     if callable(arg):
@@ -77,7 +89,7 @@ class Canvas:
     _on_update_html_canvas: list[Callable]
 
     def __init__(self, device, canvas, multisample_count=4):
-        self._update_mutex = threading.Lock()
+        self._update_mutex = threading.RLock()
         self.target_texture = None
 
         self._on_resize_callbacks = []
@@ -168,11 +180,11 @@ class Canvas:
             self._resize_observer.observe(self.canvas)
             self._intersection_observer.observe(self.canvas)
 
-        for func in self._on_update_html_canvas:
-            func(html_canvas)
+            for func in self._on_update_html_canvas:
+                func(html_canvas)
 
-        self.width = self.height = 0  # force resize
-        self.resize._original(self)
+            self.width = self.height = 0  # force resize
+            self.resize()
 
     def on_resize(self, func: Callable):
         self._on_resize_callbacks.append(func)
@@ -181,9 +193,6 @@ class Canvas:
         self._on_update_html_canvas.append(func)
 
     def save_screenshot(self, filename: str):
-        if self.target_texture is None:
-            self.resize._original(self)
-
         with self._update_mutex:
             path = pathlib.Path(filename)
             format = path.suffix[1:]
