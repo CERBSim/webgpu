@@ -43,6 +43,7 @@ def debounce(arg=None):
 
         debounced.timer = None
         debounced.t_last = None
+        debounced._original = func
         return debounced
 
     if callable(arg):
@@ -170,7 +171,7 @@ class Canvas:
             func(html_canvas)
 
         self.width = self.height = 0  # force resize
-        self.resize()
+        self.resize._original(self)
 
     def on_resize(self, func: Callable):
         self._on_resize_callbacks.append(func)
