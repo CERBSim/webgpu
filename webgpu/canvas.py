@@ -181,10 +181,10 @@ class Canvas:
         self._on_update_html_canvas.append(func)
 
     def save_screenshot(self, filename: str):
-        with self._update_mutex:
-            if self.target_texture is None:
-                self.resize._original(self)
+        if self.target_texture is None:
+            self.resize._original(self)
 
+        with self._update_mutex:
             path = pathlib.Path(filename)
             format = path.suffix[1:]
             data = read_texture(self.target_texture)
