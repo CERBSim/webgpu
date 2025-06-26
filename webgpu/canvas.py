@@ -31,12 +31,18 @@ def debounce(arg=None):
                 debounced.timer = None
                 debounced.t_last = t
 
+            if debounced.t_last is None:
+                # first call -> just call the function immediately
+                debounced.t_last = time.time()
+                f()
+                return
+
             t_wait = max(1 / target_fps - (time.time() - debounced.t_last), 0)
             debounced.timer = threading.Timer(t_wait, f)
             debounced.timer.start()
 
         debounced.timer = None
-        debounced.t_last = time.time()
+        debounced.t_last = None
         return debounced
 
     if callable(arg):
@@ -61,6 +67,7 @@ class Canvas:
     depth_texture: Texture
     multisample_texture: Texture
     multisample: MultisampleState
+    target_texture: Texture
 
     width: int = 0
     height: int = 0
