@@ -78,6 +78,7 @@ class Canvas:
 
     def __init__(self, device, canvas, multisample_count=4):
         self._update_mutex = threading.Lock()
+        self.target_texture = None
 
         self._on_resize_callbacks = []
         self._on_update_html_canvas = []
@@ -181,6 +182,9 @@ class Canvas:
 
     def save_screenshot(self, filename: str):
         with self._update_mutex:
+            if self.target_texture is None:
+                self.resize._original(self)
+
             path = pathlib.Path(filename)
             format = path.suffix[1:]
             data = read_texture(self.target_texture)
