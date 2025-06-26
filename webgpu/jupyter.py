@@ -45,7 +45,7 @@ def create_package_zip(module_name="webgpu"):
 _id_counter = itertools.count()
 
 
-def _init_html(scene, width, height):
+def _init_html(scene, width, height, flex=None):
     from IPython.display import HTML, display
 
     if isinstance(scene, Renderer):
@@ -55,6 +55,10 @@ def _init_html(scene, width, height):
 
     id_ = f"__webgpu_{next(_id_counter)}_"
 
+    style = f"background-color: #d0d0d0; width: {width}px; height: {height}px;"
+    if flex is not None:
+        style += f" flex: {flex};"
+
     display(
         HTML(
             f"""
@@ -63,7 +67,7 @@ def _init_html(scene, width, height):
             >
                 <canvas 
                     id='{id_}canvas'
-                    style='background-color: #d0d0d0; flex: 3; width: {width}px; height: {height}px;'
+                    style='{style}'
                 >
                 </canvas>
                 <div id='{id_}lilgui'
@@ -123,10 +127,15 @@ def _DrawHTML(
 
 def Draw(
     scene: Scene | list[Renderer] | Renderer,
-    width=640,
-    height=640,
+    width: int | None = None,
+    height: int | None = None,
 ):
-    scene, id_ = _init_html(scene, width, height)
+    flex = 3 if width is None else None
+
+    width = width if width is not None else 640
+    height = height if height is not None else 640
+
+    scene, id_ = _init_html(scene, width, height, flex)
     _draw_scene(scene, width, height, id_)
     return scene
 
