@@ -22,7 +22,7 @@ fn textLoadData(i: u32) -> TextData {
     let itext = u_text.data[ offset ];
     let char_data = u_text.data[ offset + 1 ];
     let ichar = extractBits(char_data, 0u, 16u);
-    let char = extractBits(char_data, 16u, 8u);
+    let char = extractBits(char_data, 16u, 16u);
 
     let offset_text = itext * 4;
     let pos = vec3f(bitcast<f32>(u_text.data[offset_text]), bitcast<f32>(u_text.data[offset_text + 1]), bitcast<f32>(u_text.data[offset_text + 2]));
@@ -47,17 +47,16 @@ fn vertexText(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) cha
         position = cameraMapPoint(text.pos);
     }
 
-    let w: f32 = u_font.width_normalized * position.w;
-    let h: f32 = u_font.height_normalized * position.w;
+    let char_size = fontGetSizeOnScreen();
 
-    position.x += f32(text.ichar) * w;
+    position.x += f32(text.ichar) * char_size.z * position.w;
 
     let shift = text.shift;
-    position.x += w * shift.x * f32(text.length);
-    position.y += h * shift.y;
+    position.x += char_size.x * shift.x * f32(text.length) * position.w;
+    position.y += char_size.y * shift.y * position.w;
 
     // snap position to pixel grid
-    let resolution = vec2f(f32(u_font.width), f32(u_font.height)) / vec2f(u_font.width_normalized, u_font.height_normalized);
+    let resolution = vec2f(f32(u_camera.width), f32(u_camera.height));
     let ndc = position.xy / position.w;
     let screen = (ndc * 0.5 + vec2f(0.5)) * resolution;
     let snapped_screen = floor(screen) + 0.5;

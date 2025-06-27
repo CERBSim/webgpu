@@ -50,8 +50,7 @@ class Labels(Renderer):
             [
                 ("itext", np.uint32),
                 ("ichar", np.uint16),
-                ("char", np.uint8),
-                ("padding", np.uint8),
+                ("char", np.uint16),
             ]
         )
         char_data = np.zeros(n_chars, dtype=char_t)
@@ -78,6 +77,9 @@ class Labels(Renderer):
             "left": 0,
         }
 
+        self.font = Font(options.canvas, self.font_size)
+        char_map = self.font.atlas.char_map
+
         ichar = 0
         for i, label, pos in zip(range(len(self.labels)), self.labels, self.positions):
             h_align = self.h_align if isinstance(self.h_align, str) else self.h_align[i]
@@ -99,10 +101,8 @@ class Labels(Renderer):
             for c in label:
                 char_data[ichar]["itext"] = i
                 char_data[ichar]["ichar"] = ichar - i0
-                char_data[ichar]["char"] = ord(c)
+                char_data[ichar]["char"] = char_map.get(ord(c), char_map.get(ord("?"), 0))
                 ichar += 1
-
-        self.font = Font(options.canvas, self.font_size)
 
         data = (
             np.array([len(self.labels)], dtype=np.uint32).tobytes()

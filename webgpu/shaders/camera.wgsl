@@ -4,10 +4,10 @@ struct CameraUniforms {
   rot_mat: mat4x4<f32>,
   normal_mat: mat4x4<f32>,
   aspect: f32,
+  width: u32,
+  height: u32,
 
-  padding0: u32,
-  padding1: u32,
-  padding2: u32,
+  padding: u32,
 };
 
 @group(0) @binding(0) var<uniform> u_camera : CameraUniforms;

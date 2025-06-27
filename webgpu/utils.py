@@ -424,10 +424,9 @@ def run_compute_shader(
 
 def texture_from_data(width, height, data, format, label=""):
     """Create texture from data (bytes or numpy array)"""
-    tex_width = width * (127 - 32)
     device = get_device()
     texture = device.createTexture(
-        size=[tex_width, height, 1],
+        size=[width, height, 1],
         usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
         format=format,
         label=label,
@@ -436,11 +435,13 @@ def texture_from_data(width, height, data, format, label=""):
     if not isinstance(data, bytes):
         data = data.tobytes()
 
+    bytes_per_pixel = len(data) // (width * height)
+
     device.queue.writeTexture(
         TexelCopyTextureInfo(texture),
         data,
-        TexelCopyBufferLayout(bytesPerRow=tex_width),
-        size=[tex_width, height, 1],
+        TexelCopyBufferLayout(bytesPerRow=width * bytes_per_pixel),
+        size=[width, height, 1],
     )
     return texture
 

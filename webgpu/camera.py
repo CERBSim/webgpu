@@ -15,7 +15,9 @@ class CameraUniforms(UniformBase):
         ("rot_mat", ct.c_float * 16),
         ("normal_mat", ct.c_float * 16),
         ("aspect", ct.c_float),
-        ("padding", ct.c_uint32 * 3),
+        ("width", ct.c_uint32),
+        ("height", ct.c_uint32),
+        ("padding", ct.c_uint32),
     ]
 
 
@@ -212,4 +214,6 @@ class Camera:
         self.uniforms.model_view_projection[:] = model_view_proj.transpose().flatten()
         self.uniforms.normal_mat[:] = normal_mat.flatten()
         self.uniforms.rot_mat[:] = self.transform._rot_mat.flatten()
+        self.uniforms.width = self.canvas.width
+        self.uniforms.height = self.canvas.height
         self.uniforms.update_buffer()

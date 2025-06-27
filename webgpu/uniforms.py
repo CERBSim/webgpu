@@ -21,6 +21,7 @@ class Binding:
     CLIPPING = 1
     FONT = 2
     FONT_TEXTURE = 3
+    FONT_SAMPLER = 4
     COLORMAP = 5
     COLORMAP_TEXTURE = 6
     COLORMAP_SAMPLER = 7
