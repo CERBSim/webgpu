@@ -130,7 +130,7 @@ class Scene:
 
         have_select_callback = False
         for obj in objects:
-            if obj.active and obj._select_pipeline and obj._on_select:
+            if obj.active and obj.on_select_set:
                 have_select_callback = True
                 break
 
@@ -168,10 +168,11 @@ class Scene:
 
             ev = SelectEvent(x, y, read_buffer(buffer))
             if ev.obj_id > 0:
-                for obj in objects:
-                    if obj._id == ev.obj_id:
-                        obj._handle_on_select(ev)
-                        break
+                for parent in objects:
+                    for obj in parent.all_renderer():
+                        if obj._id == ev.obj_id:
+                            obj._handle_on_select(ev)
+                            break
 
             return ev
 

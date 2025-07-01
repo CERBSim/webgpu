@@ -148,6 +148,13 @@ class BaseRenderer:
     def update(self, options: RenderOptions) -> None:
         pass
 
+    def all_renderer(self):
+        return [self]
+
+    @property
+    def on_select_set(self):
+        return bool(self._on_select)
+
     @check_timestamp
     def _update_and_create_render_pipeline(self, options: RenderOptions) -> None:
         self.update(options)
@@ -205,6 +212,9 @@ class MultipleRenderer(BaseRenderer):
         for r in self.render_objects:
             r.update(options)
 
+    def all_renderer(self):
+        return [self] + self.render_objects
+
     @check_timestamp
     def _update_and_create_render_pipeline(self, options: RenderOptions) -> None:
         self.update(options)
@@ -213,7 +223,13 @@ class MultipleRenderer(BaseRenderer):
 
     def render(self, options: RenderOptions) -> None:
         for r in self.render_objects:
-            r.render(options)
+            if r.active:
+                r.render(options)
+
+    def select(self, options: RenderOptions, x: int, y: int) -> None:
+        for r in self.render_objects:
+            if r.active:
+                r.select(options, x, y)
 
     def set_needs_update(self) -> None:
         super().set_needs_update()
@@ -227,6 +243,10 @@ class MultipleRenderer(BaseRenderer):
             ret = ret or r.needs_update
 
         return ret
+
+    @property
+    def on_select_set(self):
+        return any(r.on_select_set for r in self.render_objects)
 
 
 class Renderer(BaseRenderer):
