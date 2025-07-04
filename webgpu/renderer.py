@@ -176,10 +176,11 @@ class BaseRenderer:
     def get_shader_code(self) -> str:
         raise NotImplementedError
 
-    def _get_preprocessed_shader_code(self) -> str:
+    def _get_preprocessed_shader_code(self, defines: dict | None = None) -> str:
+        defines = defines or {}
         return preprocess_shader_code(
             self.get_shader_code(),
-            defines=self.shader_defines | {"RENDER_OBJECT_ID": str(self._id)},
+            defines=self.shader_defines | defines | {"RENDER_OBJECT_ID": str(self._id)},
         )
 
     def add_options_to_gui(self, gui):
@@ -296,17 +297,22 @@ class Renderer(BaseRenderer):
         )
 
         if self.select_entry_point:
+            select_shader_module = self.device.createShaderModule(
+                self._get_preprocessed_shader_code({"SELECT_PIPELINE": "1"})
+            )
+            vertex_state.module = select_shader_module
             self._select_pipeline = self.device.createRenderPipeline(
                 pipeline_layout,
                 vertex=vertex_state,
                 fragment=FragmentState(
-                    module=shader_module,
+                    module=select_shader_module,
                     entryPoint=self.select_entry_point,
                     targets=[options.canvas.select_target],
                 ),
                 primitive=PrimitiveState(topology=self.topology),
                 depthStencil=depth_stencil,
                 multisample=MultisampleState(),
+                label=self.label + " (select)",
             )
         else:
             self._select_pipeline = None
