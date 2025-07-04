@@ -33,7 +33,7 @@ fn textLoadData(i: u32) -> TextData {
     let x_align = f32(extractBits(text_data, 24u, 2u));
     let y_align = f32(extractBits(text_data, 26u, 2u));
 
-    let shift = vec2<f32>(-0.5 * x_align, -0.5 * y_align);
+    let shift = vec2<f32>(-0.5 * x_align - 0.278/f32(length), -0.5 * y_align - 0.20);
 
   return TextData(pos, shift, length, ichar, char, apply_camera);
 }
