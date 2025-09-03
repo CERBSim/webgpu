@@ -159,7 +159,7 @@ class Camera:
         input_handler.on_mouseup(self._on_mouseup)
         input_handler.on_mouseout(self._on_mouseup)
         input_handler.on_mousemove(self._on_mousemove)
-        input_handler.on_dblclick(self._dblclick)
+        input_handler.on_dblclick(self._on_dblclick)
         input_handler.on_wheel(self._on_wheel)
 
     def unregister_callbacks(self, input_handler):
@@ -170,7 +170,7 @@ class Camera:
         input_handler.unregister("dblclick", self._on_dblclick)
         input_handler.unregister("wheel", self._on_wheel)
 
-    def _dblclick(self, ev):
+    def _on_dblclick(self, ev):
         p = self._get_event_position(ev["canvasX"], ev["canvasY"])
         if p is not None:
             self.transform.set_center(p)
