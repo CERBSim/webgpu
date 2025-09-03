@@ -160,6 +160,7 @@ class Colormap(BaseRenderer):
 class Colorbar(Renderer):
     vertex_entry_point: str = "colormap_vertex"
     fragment_entry_point: str = "colormap_fragment"
+    select_entry_point: str = ""
     n_vertices: int = 3
 
     def __init__(
