@@ -274,7 +274,7 @@ class Renderer(BaseRenderer):
     depthBiasSlopeScale: int = 0
     vertex_entry_point: str = "vertex_main"
     fragment_entry_point: str = "fragment_main"
-    select_entry_point: str = ""
+    select_entry_point: str = "fragment_select_default"
     vertex_buffer_layouts: list[VertexBufferLayout] = []
     vertex_buffers: list[Buffer] = []
 
