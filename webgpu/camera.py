@@ -24,13 +24,13 @@ class CameraUniforms(UniformBase):
 class Transform:
     def __init__(self):
         self._mat = np.identity(4)
-        self._mat = np.identity(4)
         self._center = np.zeros(3)
 
     def init(self, pmin, pmax):
         center = 0.5 * (pmin + pmax)
         self._center = center
         scale = 2 / np.linalg.norm(pmax - pmin)
+        self._mat = np.identity(4)
         self.translate(-center[0], -center[1], -center[2])
         self.scale(scale)
         if not (pmin[2] == 0 and pmax[2] == 0):
@@ -131,6 +131,10 @@ class Camera:
 
     def __getstate__(self):
         return {"transform": self.transform}
+
+    def reset(self, pmin, pmax):
+        self.transform.init(pmin, pmax)
+        self._update_uniforms()
 
     def set_canvas(self, canvas):
         self.canvas = canvas
