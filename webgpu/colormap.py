@@ -1,3 +1,5 @@
+import numpy as np
+
 from .labels import Labels
 from .renderer import BaseRenderer, Renderer, RenderOptions
 from .uniforms import Binding, UniformBase, ct
@@ -15,7 +17,6 @@ from .webgpu_api import (
     TextureFormat,
     TextureUsage,
 )
-import numpy as np
 
 
 class ColormapUniforms(UniformBase):
@@ -409,6 +410,40 @@ _colormaps = {
         [196, 0, 0],
         [159, 0, 0],
     ],
+    "matplotlib:coolwarm": [
+        [59, 76, 192],
+        [68, 90, 204],
+        [78, 104, 216],
+        [88, 117, 225],
+        [98, 130, 234],
+        [108, 143, 241],
+        [119, 154, 247],
+        [130, 166, 251],
+        [141, 176, 254],
+        [152, 185, 255],
+        [163, 194, 254],
+        [174, 201, 252],
+        [185, 208, 249],
+        [195, 213, 244],
+        [204, 217, 237],
+        [213, 219, 229],
+        [221, 220, 220],
+        [229, 216, 209],
+        [236, 211, 197],
+        [241, 204, 184],
+        [245, 196, 172],
+        [247, 186, 159],
+        [247, 176, 147],
+        [246, 165, 134],
+        [244, 152, 122],
+        [240, 139, 110],
+        [235, 125, 98],
+        [228, 110, 86],
+        [221, 95, 75],
+        [212, 78, 65],
+        [202, 59, 55],
+        [190, 36, 46],
+    ],
 }
 
 
@@ -426,7 +461,7 @@ def create_colormap(name: str, n_colors: int = 32):
 
 if __name__ == "__main__":
     print("_colormaps = {")
-    for name in ["viridis", "plasma", "cet_l20", "matlab:jet"]:
+    for name in ["viridis", "plasma", "cet_l20", "matlab:jet", "matplotlib:coolwarm"]:
         colors = create_colormap(name, n_colors=32)
         print(f"  '{name}' : [")
         for i in range(32):
