@@ -81,9 +81,9 @@ class Transform:
             self._mat = rotation_x @ rotation_y @ self._mat
 
     def set_center(self, center):
-        self._center = np.array(center)
-        center = self.map_point(center)
-        self.translate(-center)
+        center = np.array(center)
+        self.translate(-self.map_point(center))
+        self._center = center
 
     @property
     def mat(self):
