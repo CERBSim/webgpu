@@ -37,7 +37,6 @@ def init_device_sync():
             ),
             label="WebGPU device",
         )
-        print("device created", _device)
         limits = _device.limits
         platform.js.console.log("adapter info\n", adapter.info)
         platform.js.console.log("device limits\n", limits)

@@ -139,7 +139,6 @@ class FontAtlas:
         )
 
     def get_uniform_settings(self):
-        print("image shape", self.image.shape)
         s = {
             "x_shift": self.x_shift,
             "y_shift": self.y_shift,
@@ -149,7 +148,6 @@ class FontAtlas:
             "aspect": self.char_width / self.char_height,
             "advance": self.advance,
         }
-        print("FontAtlas.get_uniform_settings", s)
         return s
 
 
@@ -171,8 +169,6 @@ def get_font_atlas():
             font_file = webgpu_fonts.get_default_font_file()
         except ImportError:
             pass
-
-        print("loading font", font_file)
 
         _default_font_atlas = FontAtlas.load(font_file)
     return _default_font_atlas
