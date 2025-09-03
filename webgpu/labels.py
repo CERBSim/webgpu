@@ -10,6 +10,7 @@ from .webgpu_api import *
 class Labels(Renderer):
     vertex_entry_point: str = "vertexText"
     fragment_entry_point: str = "fragmentFont"
+    select_entry_point: str = ""
     n_vertices: int = 6
 
     """Render a list of strings on screen

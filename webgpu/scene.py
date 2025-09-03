@@ -206,7 +206,6 @@ class Scene:
 
             ev = SelectEvent(x, y, read_buffer(buffer))
             if ev.obj_id > 0:
-                p = ev.calculate_position(self.options.camera)
                 for parent in objects:
                     for obj in parent.all_renderer():
                         if obj._id == ev.obj_id:

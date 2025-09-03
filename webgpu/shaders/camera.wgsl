@@ -20,9 +20,10 @@ fn cameraMapNormal(n: vec3f) -> vec4f {
     return u_camera.normal_mat * vec4(n, 1.0);
 }
 
-
-@fragment fn fragment_select_default(
+#ifdef SELECT_PIPELINE
+@fragment fn fragment_select_no_clipping(
     @builtin(position) p: vec4f,
 ) -> @location(0) vec4<u32> {
     return vec4<u32>(@RENDER_OBJECT_ID@, bitcast<u32>(p.z), 0, 0);
 }
+#endif SELECT_PIPELINE

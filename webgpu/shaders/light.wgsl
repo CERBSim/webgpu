@@ -20,7 +20,10 @@ fn lightCalcBrightness(p: vec3f, normal: vec3f) -> vec2f {
 
     let dim = 1.0;
     var spec = pow( max( dot(r,view) , 0.0 ), u_light.shininess );
-    let sDotN = max( dot( normalize(u_light.direction), n ), 0.0 );
+    var sDotN =  dot( normalize(u_light.direction), n );
+    if (sDotN < 0.0) {
+      sDotN = -0.5*sDotN;
+    }
     let diffuse = u_light.diffuse * sDotN;
     if(diffuse==0.0 || u_light.shininess ==0.0) {
       spec = 0.0;

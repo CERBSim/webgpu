@@ -33,3 +33,12 @@ fn checkClipping(p: vec3<f32>) {
     }
 }
 
+#ifdef SELECT_PIPELINE
+@fragment fn fragment_select_default(
+    @builtin(position) p: vec4f,
+    @location(0) p3: vec3f,
+) -> @location(0) vec4<u32> {
+    checkClipping(p3);
+    return vec4<u32>(@RENDER_OBJECT_ID@, bitcast<u32>(p.z), 0, 0);
+}
+#endif SELECT_PIPELINE
