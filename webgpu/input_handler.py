@@ -50,6 +50,9 @@ class InputHandler:
             for func in self._callbacks[event]:
                 func(*args)
 
+    def on_dblclick(self, func):
+        self.on("dblclick", func)
+
     def on_click(self, func):
         self.on("click", func)
 
@@ -95,7 +98,7 @@ class InputHandler:
     def register_callbacks(self):
         from .platform import create_event_handler
 
-        for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout"]:
+        for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout", "dblclick"]:
             js_handler = create_event_handler(
                 self._handle_js_event(event),
                 prevent_default=True,

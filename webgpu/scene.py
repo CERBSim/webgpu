@@ -104,7 +104,7 @@ class Scene:
 
             camera = self.options.camera
             self._js_render = platform.create_proxy(self._render_direct)
-            camera.register_callbacks(self.input_handler, self.render)
+            camera.register_callbacks(self.input_handler, self.render, self.get_position)
             # if is_pyodide:
             #     _scenes_by_id[self.id] = self
 
@@ -123,6 +123,44 @@ class Scene:
     def __on_update_html_canvas(self, html_canvas):
         self.input_handler.unregister_callbacks()
         self.input_handler.set_canvas(html_canvas)
+
+    def get_position(self, x: int, y: int):
+        objects = self.render_objects
+
+        with self._render_mutex:
+            select_texture = self.canvas.select_texture
+            bytes_per_row = (select_texture.width * 16 + 255) // 256 * 256
+
+            options = self.options
+            options.update_buffers()
+            options.command_encoder = self.device.createCommandEncoder()
+
+            if not self._select_buffer_valid:
+                for obj in objects:
+                    if obj.active:
+                        obj._update_and_create_render_pipeline(options)
+
+                for obj in objects:
+                    if obj.active:
+                        obj.select(options, x, y)
+
+                self._select_buffer_valid = True
+
+            buffer = self._select_buffer
+            options.command_encoder.copyTextureToBuffer(
+                TexelCopyTextureInfo(select_texture, origin=Origin3d(x, y, 0)),
+                TexelCopyBufferInfo(buffer, 0, bytes_per_row),
+                [1, 1, 1],
+            )
+
+            self.device.queue.submit([options.command_encoder.finish()])
+            options.command_encoder = None
+
+            ev = SelectEvent(x, y, read_buffer(buffer))
+            if ev.obj_id > 0:
+                p = ev.calculate_position(self.options.camera)
+                return p
+            return None
 
     @debounce
     def select(self, x: int, y: int):
@@ -168,6 +206,7 @@ class Scene:
 
             ev = SelectEvent(x, y, read_buffer(buffer))
             if ev.obj_id > 0:
+                p = ev.calculate_position(self.options.camera)
                 for parent in objects:
                     for obj in parent.all_renderer():
                         if obj._id == ev.obj_id:
@@ -246,6 +285,7 @@ class Scene:
             if self.canvas is not None:
                 self.options.camera.unregister_callbacks(self.input_handler)
                 self.options.camera._render_function = None
+                self.options.camera._get_position_function = None
                 self.input_handler.unregister_callbacks()
                 platform.destroy_proxy(self._js_render)
                 del self._js_render

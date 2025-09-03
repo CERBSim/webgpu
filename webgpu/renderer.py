@@ -1,5 +1,6 @@
-from typing import Callable
 import itertools
+from typing import Callable
+
 import numpy as np
 
 from .camera import Camera
@@ -13,11 +14,11 @@ from .webgpu_api import (
     DepthStencilState,
     Device,
     FragmentState,
+    MultisampleState,
     PrimitiveState,
     PrimitiveTopology,
     VertexBufferLayout,
     VertexState,
-    MultisampleState,
 )
 
 
@@ -30,21 +31,34 @@ class SelectEvent:
         self.x = x
         self.y = y
         self.data = data
+        self.z = np.frombuffer(self.data[4:8], dtype=np.float32)[0]
+        self.user_data = data[8:]
 
     def __repr__(self):
         return f"SelectEvent(x={self.x}, y={self.y}, data={self.data})"
 
     @property
     def uint32(self):
-        return np.frombuffer(self.data[4:], dtype=np.uint32)
+        return np.frombuffer(self.user_data, dtype=np.uint32)
 
     @property
     def float32(self):
-        return np.frombuffer(self.data[4:], dtype=np.float32)
+        return np.frombuffer(self.user_data, dtype=np.float32)
 
     @property
     def obj_id(self):
         return np.frombuffer(self.data[:4], dtype=np.uint32)[0]
+
+    def calculate_position(self, camera: Camera):
+        x = self.x / camera.canvas.width * 2 - 1
+        y = 1 - self.y / camera.canvas.height * 2
+        z = self.z
+
+        mat = camera.model_view_proj
+        inv_mat = np.linalg.inv(mat)
+        ndc = np.array([x, y, z, 1.0], dtype=np.float32)
+        pos = inv_mat @ ndc
+        return pos[:3] / pos[3]
 
 
 class RenderOptions:

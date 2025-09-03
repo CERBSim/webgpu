@@ -24,18 +24,34 @@ class CameraUniforms(UniformBase):
 class Transform:
     def __init__(self):
         self._mat = np.identity(4)
-        self._rot_mat = np.identity(4)
-        self._center = (0.5, 0.5, 0)
-        self._scale = 1
+        self._mat = np.identity(4)
+        self._center = np.zeros(3)
+
+    def init(self, pmin, pmax):
+        center = 0.5 * (pmin + pmax)
+        self._center = center
+        scale = 2 / np.linalg.norm(pmax - pmin)
+        self.translate(-center[0], -center[1], -center[2])
+        self.scale(scale)
+        if not (pmin[2] == 0 and pmax[2] == 0):
+            self.rotate(270, 0)
+            self.rotate(0, -20)
+            self.rotate(20, 0)
 
     def translate(self, dx=0.0, dy=0.0, dz=0.0):
+        if isinstance(dx, (list, tuple, np.ndarray)) and len(dx) == 3:
+            dx, dy, dz = dx
         translation = np.array([[1, 0, 0, dx], [0, 1, 0, dy], [0, 0, 1, dz], [0, 0, 0, 1]])
         self._mat = translation @ self._mat
 
-    def scale(self, s):
-        self._scale *= s
+    def scale(self, s, center=None):
+        with self._centering(center):
+            self._mat = (
+                np.array([[s, 0, 0, 0], [0, s, 0, 0], [0, 0, s, 0], [0, 0, 0, 1]]) @ self._mat
+            )
 
-    def rotate(self, ang_x, ang_y=0):
+    def rotate(self, ang_x, ang_y=0, center=None):
+
         rx = np.radians(ang_x)
         cx = np.cos(rx)
         sx = np.sin(rx)
@@ -61,25 +77,37 @@ class Transform:
             ]
         )
 
-        self._rot_mat = rotation_x @ rotation_y @ self._rot_mat
+        with self._centering(center):
+            self._mat = rotation_x @ rotation_y @ self._mat
+
+    def set_center(self, center):
+        self._center = np.array(center)
+        center = self.map_point(center)
+        self.translate(-center)
 
     @property
     def mat(self):
-        return self._mat @ self._rot_mat @ self._scale_mat @ self._center_mat
+        return self._mat
 
-    @property
-    def normal_mat(self):
-        return self._mat @ self._rot_mat @ self._scale_mat @ self._center_mat
+    def map_point(self, point):
+        p = np.array([*point, 1.0])
+        p = self._mat @ p
+        return p[0:3] / p[3]
 
-    @property
-    def _center_mat(self):
-        cx, cy, cz = self._center
-        return np.array([[1, 0, 0, -cx], [0, 1, 0, -cy], [0, 0, 1, -cz], [0, 0, 0, 1]])
+    class _CenteringContext:
+        def __init__(self, transform, center):
+            self.transform = transform
+            center = transform._center if center is None else center
+            self.center = transform.map_point(center)
 
-    @property
-    def _scale_mat(self):
-        s = self._scale
-        return np.array([[s, 0, 0, 0], [0, s, 0, 0], [0, 0, s, 0], [0, 0, 0, 1]])
+        def __enter__(self):
+            self.transform.translate(-self.center[0], -self.center[1], -self.center[2])
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.transform.translate(self.center[0], self.center[1], self.center[2])
+
+    def _centering(self, center):
+        return self._CenteringContext(self, center)
 
 
 class Camera:
@@ -88,6 +116,7 @@ class Camera:
         self.canvas = None
         self.transform = Transform()
         self._render_function = None
+        self._get_position_function = None
         self._is_moving = False
         self._is_rotating = False
 
@@ -96,6 +125,7 @@ class Camera:
         self.canvas = None
         self.uniforms = None
         self._render_function = None
+        self._get_position_function = None
         self._is_moving = False
         self._is_rotating = False
 
@@ -118,12 +148,14 @@ class Camera:
     def __del__(self):
         del self.uniforms
 
-    def register_callbacks(self, input_handler, redraw_function):
+    def register_callbacks(self, input_handler, redraw_function, get_position_function=None):
         self._render_function = redraw_function
+        self._get_position_function = get_position_function
         input_handler.on_mousedown(self._on_mousedown)
         input_handler.on_mouseup(self._on_mouseup)
         input_handler.on_mouseout(self._on_mouseup)
         input_handler.on_mousemove(self._on_mousemove)
+        input_handler.on_dblclick(self._dblclick)
         input_handler.on_wheel(self._on_wheel)
 
     def unregister_callbacks(self, input_handler):
@@ -131,7 +163,14 @@ class Camera:
         input_handler.unregister("mouseup", self._on_mouseup)
         input_handler.unregister("mouseout", self._on_mouseup)
         input_handler.unregister("mousemove", self._on_mousemove)
+        input_handler.unregister("dblclick", self._on_dblclick)
         input_handler.unregister("wheel", self._on_wheel)
+
+    def _dblclick(self, ev):
+        p = self._get_event_position(ev["canvasX"], ev["canvasY"])
+        if p is not None:
+            self.transform.set_center(p)
+            self._render()
 
     def _on_mousedown(self, ev):
         if ev["button"] == 0:
@@ -145,7 +184,8 @@ class Camera:
         self._is_zooming = False
 
     def _on_wheel(self, ev):
-        self.transform.scale(1 - ev["deltaY"] / 1000)
+        p = self._get_event_position(ev["canvasX"], ev["canvasY"])
+        self.transform.scale(1 - ev["deltaY"] / 1000, p)
         self._render()
         if hasattr(ev, "preventDefault"):
             ev.preventDefault()
@@ -164,6 +204,11 @@ class Camera:
         self._update_uniforms()
         if self._render_function:
             self._render_function()
+
+    def _get_event_position(self, x, y):
+        if self._get_position_function:
+            return self._get_position_function(x, y)
+        return None
 
     def _update_uniforms(self):
         if self.canvas is None:
@@ -208,12 +253,13 @@ class Camera:
         model_view = view_mat @ self.transform.mat
         model_view_proj = proj_mat @ model_view
         normal_mat = np.linalg.inv(model_view)
+        self.model_view_proj = model_view_proj
 
         self.uniforms.aspect = aspect
         self.uniforms.model_view[:] = model_view.transpose().flatten()
         self.uniforms.model_view_projection[:] = model_view_proj.transpose().flatten()
         self.uniforms.normal_mat[:] = normal_mat.flatten()
-        self.uniforms.rot_mat[:] = self.transform._rot_mat.flatten()
+        # self.uniforms.rot_mat[:] = self.transform._rot_mat.flatten()
         self.uniforms.width = self.canvas.width
         self.uniforms.height = self.canvas.height
         self.uniforms.update_buffer()
