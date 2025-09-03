@@ -5,40 +5,43 @@ from pathlib import Path
 from . import platform
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
+import threading
 
 _device: Device = None
 
-
+_lock_init_device = threading.Lock()
 def init_device_sync():
     global _device
-    if _device is not None:
+    with _lock_init_device:
+        if _device is not None:
+            return _device
+
+        if not platform.js.navigator.gpu:
+            platform.js.alert("WebGPU is not supported")
+            sys.exit(1)
+
+        reqAdapter = platform.js.navigator.gpu.requestAdapter
+        options = RequestAdapterOptions(
+            powerPreference=PowerPreference.low_power,
+        ).toJS()
+        adapter = Adapter(reqAdapter(options))
+        maxBufferSize = adapter.limits.maxBufferSize
+        maxStorageBufferBindingSize = adapter.limits.maxStorageBufferBindingSize
+        if not adapter:
+            platform.js.alert("WebGPU is not supported")
+            sys.exit(1)
+        _device = adapter.requestDeviceSync(
+            requiredLimits=Limits(
+                maxBufferSize=maxBufferSize,
+                maxStorageBufferBindingSize=maxStorageBufferBindingSize,
+            ),
+            label="WebGPU device",
+        )
+        print("device created", _device)
+        limits = _device.limits
+        platform.js.console.log("adapter info\n", adapter.info)
+        platform.js.console.log("device limits\n", limits)
         return _device
-
-    if not platform.js.navigator.gpu:
-        platform.js.alert("WebGPU is not supported")
-        sys.exit(1)
-
-    reqAdapter = platform.js.navigator.gpu.requestAdapter
-    options = RequestAdapterOptions(
-        powerPreference=PowerPreference.low_power,
-    ).toJS()
-    adapter = Adapter(reqAdapter(options))
-    maxBufferSize = adapter.limits.maxBufferSize
-    maxStorageBufferBindingSize = adapter.limits.maxStorageBufferBindingSize
-    if not adapter:
-        platform.js.alert("WebGPU is not supported")
-        sys.exit(1)
-    _device = adapter.requestDeviceSync(
-        requiredLimits=Limits(
-            maxBufferSize=maxBufferSize,
-            maxStorageBufferBindingSize=maxStorageBufferBindingSize,
-        ),
-        label="WebGPU device",
-    )
-    limits = _device.limits
-    platform.js.console.log("adapter info\n", adapter.info)
-    platform.js.console.log("device limits\n", limits)
-    return _device
 
 
 async def init_device() -> Device:
