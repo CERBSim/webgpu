@@ -152,9 +152,11 @@ class Camera:
     def __del__(self):
         del self.uniforms
 
-    def register_callbacks(self, input_handler, redraw_function, get_position_function=None):
+    def set_render_functions(self, redraw_function, get_position_function=None):
         self._render_function = redraw_function
         self._get_position_function = get_position_function
+
+    def register_callbacks(self, input_handler):
         input_handler.on_mousedown(self._on_mousedown)
         input_handler.on_mouseup(self._on_mouseup)
         input_handler.on_mouseout(self._on_mouseup)

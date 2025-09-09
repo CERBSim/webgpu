@@ -10,6 +10,8 @@ import threading
 _device: Device = None
 
 _lock_init_device = threading.Lock()
+
+
 def init_device_sync():
     global _device
     with _lock_init_device:

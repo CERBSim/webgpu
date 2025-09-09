@@ -77,10 +77,12 @@ class Canvas:
 
     device: Device
     depth_format: TextureFormat
-    depth_texture: Texture
-    multisample_texture: Texture
-    multisample: MultisampleState
-    target_texture: Texture
+    depth_texture: Texture = None
+    multisample_texture: Texture = None
+    multisample: MultisampleState = None
+    target_texture: Texture = None
+    select_depth_texture: Texture = None
+    select_texture: Texture = None
 
     width: int = 0
     height: int = 0
@@ -142,6 +144,14 @@ class Canvas:
                 self.context.unconfigure()
 
             self.canvas = html_canvas
+            self.destroy_textures()
+
+            if html_canvas is None:
+                self.context = None
+                for func in self._on_update_html_canvas:
+                    func(html_canvas)
+                return
+
             self.context = html_canvas.getContext("webgpu")
             self.context.configure(
                 {
@@ -207,10 +217,24 @@ class Canvas:
             canvas.remove()
             path.write_bytes(b64decode(canvas.toDataURL(format).split(",")[1]))
 
+    def destroy_textures(self):
+        with self._update_mutex:
+            for tex in [
+                self.target_texture,
+                self.multisample_texture,
+                self.depth_texture,
+                self.select_texture,
+                self.select_depth_texture,
+            ]:
+                if tex is not None:
+                    tex.destroy()
+
     @debounce(5)
     def resize(self):
         with self._update_mutex:
             canvas = self.canvas
+            if canvas is None:
+                return
             rect = canvas.getBoundingClientRect()
             width = int(rect.width)
             height = int(rect.height)
@@ -229,6 +253,9 @@ class Canvas:
             canvas.height = height
 
             device = self.device
+
+            self.destroy_textures()
+
             self.target_texture = device.createTexture(
                 size=[width, height, 1],
                 sampleCount=1,

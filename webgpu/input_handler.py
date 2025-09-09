@@ -20,7 +20,8 @@ class InputHandler:
         if self.html_canvas:
             self.unregister_callbacks()
         self.html_canvas = html_canvas
-        self.register_callbacks()
+        if self.html_canvas:
+            self.register_callbacks()
 
     def __on_mousedown(self, _):
         self._is_mousedown = True

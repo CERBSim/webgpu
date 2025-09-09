@@ -104,7 +104,8 @@ class Scene:
 
             camera = self.options.camera
             self._js_render = platform.create_proxy(self._render_direct)
-            camera.register_callbacks(self.input_handler, self.render, self.get_position)
+            camera.set_render_functions(self.render, self.get_position)
+            camera.register_callbacks(self.input_handler)
             # if is_pyodide:
             #     _scenes_by_id[self.id] = self
 
@@ -121,9 +122,11 @@ class Scene:
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
 
     def __on_update_html_canvas(self, html_canvas):
-        self.input_handler.unregister_callbacks()
         self.input_handler.set_canvas(html_canvas)
-        self.options.camera.register_callbacks(self.input_handler, self.render, self.get_position)
+        if html_canvas is not None:
+            camera = self.options.camera
+            camera.set_render_functions(self.render, self.get_position)
+            camera.set_canvas(self.canvas)
 
     def get_position(self, x: int, y: int):
         objects = self.render_objects
