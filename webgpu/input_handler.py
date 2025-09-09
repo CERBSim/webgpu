@@ -76,6 +76,7 @@ class InputHandler:
             with self._mutex:
                 for event, func in self._js_handlers.items():
                     self.html_canvas["on" + event] = None
+                self._js_handlers = {}
 
     def _handle_js_event(self, event_type):
         def wrapper(event):

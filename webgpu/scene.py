@@ -123,6 +123,7 @@ class Scene:
     def __on_update_html_canvas(self, html_canvas):
         self.input_handler.unregister_callbacks()
         self.input_handler.set_canvas(html_canvas)
+        self.options.camera.register_callbacks(self.input_handler, self.render, self.get_position)
 
     def get_position(self, x: int, y: int):
         objects = self.render_objects
