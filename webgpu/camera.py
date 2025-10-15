@@ -26,6 +26,12 @@ class Transform:
         self._mat = np.identity(4)
         self._center = np.zeros(3)
 
+    def copy(self):
+        t = Transform()
+        t._mat = self._mat.copy()
+        t._center = self._center.copy()
+        return t
+
     def init(self, pmin, pmax):
         center = 0.5 * (pmin + pmax)
         self._center = center
