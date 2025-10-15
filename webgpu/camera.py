@@ -168,7 +168,7 @@ class Camera:
         input_handler.on_mouseout(self._on_mouseup)
         input_handler.on_mousemove(self._on_mousemove)
         input_handler.on_dblclick(self._on_dblclick)
-        input_handler.on_wheel(self._on_wheel)
+        input_handler.on_wheel(self._on_wheel, shift=None)
 
     def unregister_callbacks(self, input_handler):
         input_handler.unregister("mousedown", self._on_mousedown)
@@ -196,7 +196,10 @@ class Camera:
         self._is_zooming = False
 
     def _on_wheel(self, ev):
-        p = self._get_event_position(ev["canvasX"], ev["canvasY"])
+        if ev["shiftKey"]:
+            p = self._get_event_position(ev["canvasX"], ev["canvasY"])
+        else:
+            p = self.transform._center
         self.transform.scale(1 - ev["deltaY"] / 1000, p)
         self._render()
         if hasattr(ev, "preventDefault"):
@@ -264,6 +267,7 @@ class Camera:
         view_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, -3], [0, 0, 0, 1]])
         model_view = view_mat @ self.transform.mat
         model_view_proj = proj_mat @ model_view
+        self.model_view = model_view
         normal_mat = np.linalg.inv(model_view)
         self.model_view_proj = model_view_proj
 
