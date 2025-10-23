@@ -6,7 +6,7 @@ import numpy as np
 from .camera import Camera
 from .canvas import Canvas
 from .light import Light
-from .utils import BaseBinding, create_bind_group, get_device, preprocess_shader_code
+from .utils import BaseBinding, buffer_from_array, create_bind_group, get_device, preprocess_shader_code
 from .webgpu_api import (
     Buffer,
     CommandEncoder,
@@ -155,6 +155,8 @@ class BaseRenderer:
             self.label = self.__class__.__name__
         else:
             self.label = label
+
+        self._have_pipeline = False
 
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return None

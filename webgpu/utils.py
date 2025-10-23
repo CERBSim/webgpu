@@ -450,14 +450,19 @@ def texture_from_data(width, height, data, format, label=""):
     return texture
 
 
-def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array") -> Buffer:
+def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array", reuse:Buffer|None =None) -> Buffer:
     device = get_device()
 
     data = array.tobytes()
     if len(data) % 4:
         data = data + b"\x00" * (4 - len(data) % 4)  # pad to 4 bytes
 
-    buffer = device.createBuffer(len(data), usage=usage | BufferUsage.COPY_DST, label=label)
+    if reuse is not None and reuse.size >= len(data):
+        buffer = reuse
+    else:
+        if reuse is not None:
+            reuse.destroy()
+        buffer = device.createBuffer(len(data), usage=usage | BufferUsage.COPY_DST, label=label)
 
     chunk_size = 99 * 1024**2
     if len(data) > chunk_size:
@@ -469,8 +474,8 @@ def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array") -> B
     return buffer
 
 
-def uniform_from_array(array, label="") -> Buffer:
-    return buffer_from_array(array, usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST, label=label)
+def uniform_from_array(array, label="", reuse:Buffer|None=None) -> Buffer:
+    return buffer_from_array(array, usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST, label=label, reuse=reuse)
 
 
 def write_array_to_buffer(buffer: Buffer, array):
