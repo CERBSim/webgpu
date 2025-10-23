@@ -450,7 +450,9 @@ def texture_from_data(width, height, data, format, label=""):
     return texture
 
 
-def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array", reuse:Buffer|None =None) -> Buffer:
+def buffer_from_array(
+    array, usage=BufferUsage.STORAGE, label="from_array", reuse: Buffer | None = None
+) -> Buffer:
     device = get_device()
 
     data = array.tobytes()
@@ -474,8 +476,10 @@ def buffer_from_array(array, usage=BufferUsage.STORAGE, label="from_array", reus
     return buffer
 
 
-def uniform_from_array(array, label="", reuse:Buffer|None=None) -> Buffer:
-    return buffer_from_array(array, usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST, label=label, reuse=reuse)
+def uniform_from_array(array, label="", reuse: Buffer | None = None) -> Buffer:
+    return buffer_from_array(
+        array, usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST, label=label, reuse=reuse
+    )
 
 
 def write_array_to_buffer(buffer: Buffer, array):
