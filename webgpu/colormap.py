@@ -52,6 +52,7 @@ class Colormap(BaseRenderer):
         self.sampler = None
         self._callbacks = []
         self.set_colormap(colormap)
+        self._needs_new_texture = True
 
     def update(self, options: RenderOptions):
         if self.uniforms is None:
@@ -68,13 +69,10 @@ class Colormap(BaseRenderer):
                 minFilter="linear",
             )
 
-        if self.texture is None:
+        if self.texture is None or self._needs_new_texture:
             self._create_texture()
 
     def set_colormap(self, colormap: list | str):
-        if self.texture is not None:
-            self.texture.destroy()
-            self.texture = None
         if isinstance(colormap, str):
             if colormap in _colormaps:
                 colormap = _colormaps[colormap]
@@ -85,6 +83,8 @@ class Colormap(BaseRenderer):
         self.set_needs_update()
         for callback in self._callbacks:
             callback()
+
+        self._needs_new_texture = True
 
     def set_n_colors(self, n_colors):
         self.n_instances = 2 * n_colors
@@ -132,9 +132,6 @@ class Colormap(BaseRenderer):
         ]
 
     def _create_texture(self):
-        if self.texture is not None:
-            self.texture.destroy()
-
         data = self.colors
         n = len(data)
         if len(data[0]) == 4:
@@ -144,12 +141,14 @@ class Colormap(BaseRenderer):
         data = sum(v4, [])
 
         device = get_device()
-        self.texture = device.createTexture(
-            size=[n, 1, 1],
-            usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
-            format=TextureFormat.rgba8unorm,
-            dimension="1d",
-        )
+        if self.texture is None or self.texture.width != n:
+            self.texture = device.createTexture(
+                size=[n, 1, 1],
+                usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
+                format=TextureFormat.rgba8unorm,
+                dimension="1d",
+            )
+
         device.queue.writeTexture(
             TexelCopyTextureInfo(self.texture),
             np.array(data, dtype=np.uint8).tobytes(),
