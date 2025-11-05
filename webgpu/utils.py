@@ -459,12 +459,15 @@ def create_buffer(
     device = get_device()
 
     if reuse is not None and reuse.size >= size:
+        reuse._used_size = size
         return reuse
 
     if reuse is not None:
         reuse.destroy()
 
-    return device.createBuffer(size, usage=usage, label=label)
+    buffer = device.createBuffer(size, usage=usage, label=label)
+    buffer._used_size = size
+    return buffer
 
 
 def buffer_from_array(
@@ -523,13 +526,12 @@ class ReadBuffer:
 def read_buffer(buffer, dtype=None, offset=0, size=0):
     """Reads a buffer and returns it as a numpy array. If dtype is not specified, return bytes object"""
     device = get_device()
-    size = size or buffer.size - offset
+    size = size or (buffer.size - offset)
 
     need_extra_buffer = not (buffer.usage & BufferUsage.MAP_READ)
-    tmp_buffer = buffer
     if need_extra_buffer:
         tmp_buffer = device.createBuffer(
-            size=buffer.size,
+            size=size,
             usage=BufferUsage.COPY_DST | BufferUsage.MAP_READ,
             label="read_buffer_tmp",
         )
@@ -537,17 +539,19 @@ def read_buffer(buffer, dtype=None, offset=0, size=0):
         encoder.copyBufferToBuffer(buffer, offset, tmp_buffer, 0, size)
         device.queue.submit([encoder.finish()])
 
-    tmp_buffer.handle.mapAsync(MapMode.READ, 0, buffer.size)
-    data = tmp_buffer.handle.getMappedRange(0, buffer.size)
+        tmp_buffer.handle.mapAsync(MapMode.READ, 0, size)
+        data = tmp_buffer.handle.getMappedRange(0, size)
+        tmp_buffer.unmap()
+        tmp_buffer.destroy()
+    else:
+        buffer.handle.mapAsync(MapMode.READ, offset, size)
+        data = buffer.handle.getMappedRange(offset, size)
 
     if dtype:
         import numpy as np
 
         data = np.frombuffer(data, dtype=dtype)
 
-    tmp_buffer.unmap()
-    if need_extra_buffer:
-        tmp_buffer.destroy()
     return data
 
 

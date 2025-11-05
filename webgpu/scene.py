@@ -283,6 +283,11 @@ class Scene:
                 self.canvas.target_texture,
             )
 
+        for obj in self.render_objects:
+            if obj.active and obj.needs_update:
+                self.render()
+                return
+
     def cleanup(self):
         with self._render_mutex:
             if self.canvas is not None:

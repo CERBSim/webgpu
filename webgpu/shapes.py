@@ -15,6 +15,7 @@ from .utils import (
     read_shader_file,
 )
 from .webgpu_api import (
+    Buffer,
     BufferUsage,
     IndexFormat,
     VertexAttribute,
@@ -161,8 +162,8 @@ class ShapeRenderer(Renderer):
     def __init__(
         self,
         shape_data: ShapeData,
-        positions: np.ndarray,
-        directions: np.ndarray,
+        positions: np.ndarray | None = None,
+        directions: np.ndarray | None = None,
         values: np.ndarray | None = None,
         colors: np.ndarray | None = None,
         label=None,
@@ -171,28 +172,35 @@ class ShapeRenderer(Renderer):
 
         super().__init__(label=label)
 
-        if positions is None:
-            positions = []
+        if positions is not None:
+            positions = np.array(positions, dtype=np.float32).reshape(-1)
+        self._positions = positions
 
-        if directions is None:
-            directions = []
+        if directions is not None:
+            directions = np.array(directions, dtype=np.float32).reshape(-1)
+        self._directions = directions
 
-        self.colormap = colormap or Colormap()
-        self._positions = np.array(positions, dtype=np.float32).reshape(-1)
-        self._values = (
-            np.array(values, dtype=np.float32).reshape(-1) if values is not None else None
-        )
-        self._directions = np.array(directions, dtype=np.float32).reshape(-1)
+        if values is not None:
+            values = np.array(values, dtype=np.float32).reshape(-1)
+        self._values = values
 
-        if colors:
+        if colors is not None:
             colors = np.array(colors, dtype=np.float32).reshape(-1)
             colors = np.array(np.round(255 * colors), dtype=np.uint8).flatten()
         self._colors = colors
+
+        self.colormap = colormap or Colormap()
         self._scale = 1.0
         self._scale_mode = ShapeRenderer.SCALE_UNIFORM
         self._scale_range = (0.01, 2, 0.01)
         self._uniforms = None
         self.shape_data = shape_data
+
+        self.positions_buffer = None
+        self.colors_buffer = None
+        self.values_buffer = None
+        self.directions_buffer = None
+        self.total_height_buffer = None
 
     def get_bindings(self):
         return self.colormap.get_bindings() + self._uniforms.get_bindings()
@@ -203,7 +211,12 @@ class ShapeRenderer(Renderer):
 
     @positions.setter
     def positions(self, value):
-        self._positions = np.array(value, dtype=np.float32).reshape(-1)
+        if isinstance(value, Buffer):
+            self.positions_buffer = value
+            self._positions = None
+        else:
+            self._positions = np.array(value, dtype=np.float32).reshape(-1)
+
         self.set_needs_update()
 
     @property
@@ -234,7 +247,11 @@ class ShapeRenderer(Renderer):
 
     @directions.setter
     def directions(self, value):
-        self._directions = np.array(value, dtype=np.float32).reshape(-1)
+        if isinstance(value, Buffer):
+            self.directions_buffer = value
+            self._directions = None
+        else:
+            self._directions = np.array(value, dtype=np.float32).reshape(-1)
         self.set_needs_update()
 
     @property
@@ -243,7 +260,12 @@ class ShapeRenderer(Renderer):
 
     @values.setter
     def values(self, value):
-        self._values = np.array(value, dtype=np.float32).reshape(-1)
+        if isinstance(value, Buffer):
+            self.values_buffer = value
+            self._values = None
+        else:
+            self._values = np.array(value, dtype=np.float32).reshape(-1)
+
         self.set_needs_update()
 
     @property
@@ -252,14 +274,34 @@ class ShapeRenderer(Renderer):
 
     @colors.setter
     def colors(self, value):
-        self._colors = np.array(value, dtype=np.uint8).reshape(-1)
+        if isinstance(value, Buffer):
+            self.colors_buffer = value
+            self._colors = None
+        else:
+            self._colors = np.array(value, dtype=np.uint8).reshape(-1)
         self.set_needs_update()
 
     def update(self, options: RenderOptions):
-        if self.colors is None and self.values is None:
+        for name in ["values", "colors", "positions", "directions"]:
+            buffer_attr = f"{name}_buffer"
+            array_attr = f"_{name}"
+            buffer = getattr(self, buffer_attr)
+            array = getattr(self, array_attr)
+
+            if array is not None:
+                buffer = buffer_from_array(
+                    array,
+                    label=name,
+                    usage=BufferUsage.VERTEX | BufferUsage.COPY_DST,
+                    reuse=buffer,
+                )
+                setattr(self, buffer_attr, buffer)
+
+        if self.colors_buffer is None and self.values_buffer is None:
             raise ValueError("Either colors or values must be provided")
+
         self.n_vertices = self.shape_data.triangles.size
-        self.n_instances = self.positions.size // 3
+        self.n_instances = self.positions_buffer._used_size // 12
         self.colormap.update(options)
         self._uniforms = ShapeUniforms()
         self._uniforms.scale = self.scale
@@ -267,32 +309,21 @@ class ShapeRenderer(Renderer):
         self._uniforms.update_buffer()
         buffers = self.shape_data.create_buffers()
         self.triangle_buffer = buffers["triangles"]
-        positions_buffer = buffer_from_array(
-            self.positions, label="positions", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
-        )
-        directions_buffer = buffer_from_array(
-            self.directions, label="directions", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
-        )
 
-        if self.colors is not None:
-            itemsize = self.colors.itemsize * 4
+        if self.colors_buffer is not None:
             color_format = VertexFormat.unorm8x4
-            n_colors = self.colors.size // 4
+            n_colors = self.colors_buffer._used_size // 4
             self.fragment_entry_point = "shape_fragment_main_color"
-            colors_buffer = buffer_from_array(
-                self.colors, label="colors", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
-            )
+            colors_buffer = self.colors_buffer
         else:
-            itemsize = self.values.itemsize
             color_format = VertexFormat.float32
-            n_colors = self.values.size
-            if self.colormap.autoscale and len(self.values):
+            n_colors = self.values_buffer._used_size // 4
+            if self.colormap.autoscale and self.values is not None and len(self.values):
                 self.colormap.set_min_max(self.values.min(), self.values.max(), set_autoscale=False)
             self.fragment_entry_point = "shape_fragment_main_value"
-            colors_buffer = buffer_from_array(
-                self.values, label="values", usage=BufferUsage.VERTEX | BufferUsage.COPY_DST
-            )
+            colors_buffer = self.values_buffer
 
+        itemsize = 4
         if n_colors == self.n_instances:
             color_stride = itemsize
             color_top_offset = 0
@@ -312,20 +343,21 @@ class ShapeRenderer(Renderer):
 
         bmin, bmax = self.shape_data.get_bounding_box()
         z_range = [bmin[2], bmax[2]]
-        total_height_buffer = buffer_from_array(
+        self.total_height_buffer = buffer_from_array(
             np.array(z_range, dtype=np.float32),
             label="z_range",
             usage=BufferUsage.VERTEX | BufferUsage.COPY_DST,
+            reuse=self.total_height_buffer,
         )
         self.vertex_buffers = [
             buffers["vertex_data"],
-            positions_buffer,
-            directions_buffer,
+            self.positions_buffer,
+            self.directions_buffer,
             colors_buffer,
-            total_height_buffer,
+            self.total_height_buffer,
         ]
 
-        direction_stride = 0 if self.directions.size == 3 else self.directions.itemsize * 3
+        direction_stride = 0 if self.directions_buffer._used_size // 4 == 3 else 12
 
         self.vertex_buffer_layouts = [
             VertexBufferLayout(
@@ -447,7 +479,7 @@ class ShapeRenderer(Renderer):
         render_pass.end()
 
     def get_bounding_box(self):
-        if self.positions.size == 0:
+        if self.positions is None or self.positions.size == 0:
             return None
         bmin, bmax = self.shape_data.get_bounding_box()
         r = np.linalg.norm(bmax - bmin) / 2
