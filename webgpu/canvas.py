@@ -42,8 +42,8 @@ def debounce(arg=None):
             def f():
                 # clear the timer, so we can schedule a new one with the next function call
                 t = time.time()
-                func(obj, *args, **kwargs)
                 data.timer = None
+                func(obj, *args, **kwargs)
                 data.t_last = t
 
             if data.t_last is None:
