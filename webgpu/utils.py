@@ -546,6 +546,7 @@ def read_buffer(buffer, dtype=None, offset=0, size=0):
     else:
         buffer.handle.mapAsync(MapMode.READ, offset, size)
         data = buffer.handle.getMappedRange(offset, size)
+        buffer.unmap()
 
     if dtype:
         import numpy as np
