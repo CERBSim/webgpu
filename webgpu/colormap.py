@@ -124,6 +124,14 @@ class Colormap(BaseRenderer):
         for callback in self._callbacks:
             callback()
 
+    def set_discrete(self, discrete: bool):
+        self.discrete = 1 if discrete else 0
+        if self.uniforms is not None:
+            self.uniforms.discrete = self.discrete
+            self.uniforms.update_buffer()
+        for callback in self._callbacks:
+            callback()
+
     def get_bindings(self):
         return [
             TextureBinding(Binding.COLORMAP_TEXTURE, self.texture),
