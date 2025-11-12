@@ -88,6 +88,7 @@ class Colormap(BaseRenderer):
 
     def set_n_colors(self, n_colors):
         self.n_instances = 2 * n_colors
+        self.n_colors = n_colors
         if self.uniforms is not None:
             self.uniforms.n_colors = n_colors
             self.uniforms.update_buffer()
