@@ -300,6 +300,7 @@ class LinkBase:
 
     async def _on_message_async(self, message: str):
         data = json.loads(message)
+        obj = None
         try:
             msg_type = data.get("type", None)
             request_id = data.get("request_id", None)
@@ -316,7 +317,7 @@ class LinkBase:
                     return
 
                 case "call":
-                    func = self._get_obj(data)
+                    func = obj = self._get_obj(data)
                     args = self._load_data(data["args"])
                     response = func(*args)
                     try:
@@ -327,7 +328,7 @@ class LinkBase:
                         print("error in call", type(e), str(e))
 
                 case "get":
-                    response = self._get_obj(data)
+                    response = obj = self._get_obj(data)
 
                 case "get_keys":
                     response = []
@@ -350,7 +351,7 @@ class LinkBase:
             import sys
             import traceback
 
-            print("error in on_message", data, type(e), str(e), file=sys.stderr)
+            print("error in on_message", data, obj, type(e), str(e), file=sys.stderr)
             if not isinstance(e, str):
                 traceback.print_exception(*sys.exc_info(), file=sys.stderr)
 
