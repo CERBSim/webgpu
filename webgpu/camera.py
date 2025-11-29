@@ -39,7 +39,7 @@ class Transform:
         self._mat = np.identity(4)
         self.translate(-center[0], -center[1], -center[2])
         self.scale(scale)
-        if not (pmin[2] == 0 and pmax[2] == 0):
+        if not (abs(pmin[2]) < 1e-12 and abs(pmax[2]) < 1e-12):
             self.rotate(270, 0)
             self.rotate(0, -20)
             self.rotate(20, 0)

@@ -36,13 +36,7 @@ class Scene:
         self.bounding_box = (pmin, pmax)
         if camera is None:
             camera = Camera()
-            camera.transform.set_center(0.5 * (pmin + pmax))
-            camera.transform.scale(2 / np.linalg.norm(pmax - pmin))
-
-            if not (pmin[2] == 0 and pmax[2] == 0):
-                camera.transform.rotate(270, 0)
-                camera.transform.rotate(0, -20)
-                camera.transform.rotate(20, 0)
+            camera.reset(pmin, pmax)
         light = light or Light()
         self.options = RenderOptions(camera, light)
         self._render_mutex = None
