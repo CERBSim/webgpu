@@ -1,18 +1,72 @@
-# WebGPU API for Python using Pyodide
+# WebGPU API for Python for local and Pyodide development
 
-This repository contains a Python wrapper for the WebGPU API to be used in browser environments (for instance plain HTML or Jupyter Notebooks).
+This library provides a Python wrapper around the WebGPU API that runs in the browser via Pyodide or connects to a local Python instance. It is intended for interactive visualization and compute in environments such as Jupyter notebooks and plain HTML pages.
 
-An example jupyter notebook file is [here](example.ipynb), the executed html is available [here](https://cerbsim.github.io/webgpu/).
+The package bundles a small rendering framework (scenes, cameras, labels, colormaps) and utilities to work with WGSL shaders from Python. It is used in higher level frameworks like ngsolve_webgpu for GPU-accelerated finite element visualizations in the browser.
 
-## Setup
+---
 
-To get started, just install the python package and run the jupyter notebook.
+## Features
+
+- **Browser-based GPU access** via WebGPU from local Python and Pyodide.
+- **Python-first API** for creating renderers, scenes and simple GUI controls.
+- **Jupyter integration** through a `webgpu.jupyter` helper module.
+- **WGSL tooling**:
+  - simple `#import` mechanism for shader code
+  - conditional compilation using `#ifdef/#else/#endif`
+- **Ready-to-use building blocks**:
+  - `Renderer`, `Scene`, `Camera`, `Labels`, `Colormap`, `Clipping`, `Font`
+  - utilities for GPU buffers and bindings
+
+---
+
+## Requirements
+
+- Python 3.8 or newer
+- A browser with WebGPU support (for example a recent Chrome or Edge)
+- For notebook use: JupyterLab or Jupyter Notebook
+
+To check WebGPU support in your browser, you can use common WebGPU capability pages (for example WebGPU report pages linked from the project website).
+
+---
+
+## Installation
+
+### From PyPI
 
 ```bash
-git clone https://github.com/cerbsim/webgpu
-cd webgpu
-python3 -m pip install .
-python3 -m jupyter notebook example.ipynb
+pip install webgpu
 ```
 
-Note that your browser needs WebGPU support, you can verify that by opening the [WebGPU Report](https://webgpureport.org) website. See [here](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) for more information about the current status and needed settings.
+### From source
+
+```bash
+git clone https://github.com/CERBSim/webgpu
+cd webgpu
+pip install -e .
+```
+
+## Examples
+
+The repository contains several examples:
+
+- examples/first_shader.ipynb – minimal example drawing a triangle with custom WGSL shader code.
+- examples/websocket.ipynb – example using the websocket link.
+- docs/introduction.ipynb – overview and introductory material.
+
+Additional, more advanced examples in docs/*.ipynb (compute, instanced shapes, selection).
+
+## Browser support
+
+This library relies on the browser’s WebGPU implementation. In practice this means:
+
+- A recent Chromium-based browser (Chrome, Edge) or Firefox is recommended.
+- Some platforms may require enabling experimental WebGPU flags.
+- Mobile and non-Chromium browsers may have partial or no support.
+
+If WebGPU is not available, initialization will fail. See project documentation and browser-specific WebGPU status pages for details and troubleshooting.
+
+## License
+
+This project is licensed under the terms of the LGPL-2.1-or-later. See the LICENSE file for details.
+
