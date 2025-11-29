@@ -36,8 +36,8 @@ class Scene:
         self.bounding_box = (pmin, pmax)
         if camera is None:
             camera = Camera()
-            camera.transform._center = 0.5 * (pmin + pmax)
-            camera.transform._scale = 2 / np.linalg.norm(pmax - pmin)
+            camera.transform.set_center(0.5 * (pmin + pmax))
+            camera.transform.scale(2 / np.linalg.norm(pmax - pmin))
 
             if not (pmin[2] == 0 and pmax[2] == 0):
                 camera.transform.rotate(270, 0)
