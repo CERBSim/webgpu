@@ -91,6 +91,27 @@ class Transform:
         self.translate(-self.map_point(center))
         self._center = center
 
+    def reset_xy(self, flip: bool = False):
+        pos = self.map_point(self._center)
+        self._mat = np.identity(4)
+        self.translate(-self._center[0], -self._center[1], -self._center[2])
+        self.translate(pos[0], pos[1], pos[2])
+        if flip:
+            self.rotate(0, 180)
+
+    def reset_xz(self, flip: bool = False):
+        self.reset_xy()
+        self.rotate(-90, 0)
+        if flip:
+            self.rotate(0, 180)
+
+    def reset_yz(self, flip: bool = False):
+        self.reset_xy()
+        self.rotate(-90, 0)
+        self.rotate(0, -90)
+        if flip:
+            self.rotate(0, 180)
+
     @property
     def mat(self):
         return self._mat
@@ -140,6 +161,18 @@ class Camera:
 
     def reset(self, pmin, pmax):
         self.transform.init(pmin, pmax)
+        self._update_uniforms()
+
+    def reset_xy(self, flip: bool = False):
+        self.transform.reset_xy(flip)
+        self._update_uniforms()
+
+    def reset_xz(self, flip: bool = False):
+        self.transform.reset_xz(flip)
+        self._update_uniforms()
+
+    def reset_yz(self, flip: bool = False):
+        self.transform.reset_yz(flip)
         self._update_uniforms()
 
     def set_canvas(self, canvas):
