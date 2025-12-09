@@ -213,11 +213,15 @@ class Scene:
             return ev
 
     def _render_objects(self, to_canvas=True):
+        if self.canvas is None:
+            return
         self._select_buffer_valid = False
         options = self.options
         for obj in self.render_objects:
             if obj.active:
                 obj._update_and_create_render_pipeline(options)
+                if obj.needs_update:
+                    print("warning: object still needs update after update was done:", obj)
 
         options.command_encoder = self.device.createCommandEncoder()
         for obj in self.render_objects:
@@ -260,7 +264,7 @@ class Scene:
         self._render_objects(to_canvas=True)
 
     @debounce
-    def render(self, t=0):
+    def render(self, t=0, rerender_if_update_needed=True):
         if self.canvas is None or self.canvas.height == 0:
             return
 
@@ -269,6 +273,8 @@ class Scene:
             return
 
         with self._render_mutex:
+            if self.canvas is None or self.canvas.height == 0:
+                return
             self._render_objects(to_canvas=False)
 
             platform.js.patchedRequestAnimationFrame(
@@ -277,10 +283,11 @@ class Scene:
                 self.canvas.target_texture,
             )
 
-        for obj in self.render_objects:
-            if obj.active and obj.needs_update:
-                self.render()
-                return
+        if rerender_if_update_needed:
+            for obj in self.render_objects:
+                if obj.active and obj.needs_update:
+                    self.render(rerender_if_update_needed=False)
+                    return
 
     def cleanup(self):
         with self._render_mutex:
