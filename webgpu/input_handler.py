@@ -1,5 +1,5 @@
-import threading
 from typing import Callable
+from .utils import Lock
 
 
 class InputHandler:
@@ -24,7 +24,7 @@ class InputHandler:
             return s
 
     def __init__(self):
-        self._mutex = threading.Lock()
+        self._mutex = Lock(True)
         self._callbacks = {}
         self._js_handlers = {}
         self._is_mousedown = False

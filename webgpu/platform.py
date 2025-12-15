@@ -35,7 +35,7 @@ def create_event_handler(
 
 
 try:
-    import js
+    import js as pyodide_js
     import pyodide.ffi
     from pyodide.ffi import JsPromise, JsProxy
     from pyodide.ffi import create_proxy as _create_proxy
@@ -48,7 +48,7 @@ try:
 
     is_pyodide = True
     try:
-        is_pyodide_main_thread = bool(js.window.document)
+        is_pyodide_main_thread = bool(pyodide_js.window.document)
     except:
         is_pyodide_main_thread = False
 
@@ -88,7 +88,7 @@ try:
         value = _convert(value)
         ret = pyodide.ffi.to_js(
             value,
-            dict_converter=js.Object.fromEntries,
+            dict_converter=pyodide_js.Object.fromEntries,
             default_converter=_default_converter,
             create_pyproxies=False,
         )

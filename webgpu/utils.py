@@ -5,12 +5,38 @@ from pathlib import Path
 from . import platform
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
-import threading
 
+try:
+    import pyodide.ffi
+    import asyncio
+    class Lock():
+        def __init__(self, do: bool = False):
+            self._lock = asyncio.Lock()
+            self.do = do
+
+        def __enter__(self):
+            if self.do:
+                pyodide.ffi.run_sync(self._lock.acquire())
+
+        def __exit__(self, exc_type, exc, tb):
+            if self.do:
+                self._lock.release()
+
+except ImportError:
+    from threading import RLock
+
+    class Lock():
+        def __init__(self, do: bool = True):
+            self._lock = RLock()
+
+        def __enter__(self):
+            self._lock.acquire()
+
+        def __exit__(self, exc_type, exc, tb):
+            self._lock.release()
+
+_lock_init_device = Lock()
 _device: Device = None
-
-_lock_init_device = threading.Lock()
-
 
 def init_device_sync():
     global _device

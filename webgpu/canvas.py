@@ -6,7 +6,7 @@ import functools
 import pathlib
 
 from . import platform
-from .utils import get_device, read_texture
+from .utils import get_device, read_texture, Lock
 from .webgpu_api import *
 
 _TARGET_FPS = 60
@@ -20,9 +20,6 @@ class _DebounceData:
 
 def debounce(arg=None):
     def decorator(func):
-        if platform.is_pyodide:
-            return arg
-
         # Render only once every 1/_TARGET_FPS seconds
         @functools.wraps(func)
         def debounced(obj, *args, **kwargs):
@@ -35,16 +32,25 @@ def debounce(arg=None):
 
             data = obj._debounce_data[fname]
 
-            if data.timer is not None:
-                # we already have a render scheduled, so do nothing
-                return
+            # check if we already have a render scheduled
+            if platform.is_pyodide:
+                if data.timer is not None and not data.timer.done():
+                    return
+            else:
+                if data.timer is not None:
+                    return
 
             def f():
                 # clear the timer, so we can schedule a new one with the next function call
                 t = time.time()
                 data.timer = None
-                func(obj, *args, **kwargs)
-                data.t_last = t
+                if platform.is_pyodide:
+                    # due to async nature, we need to update t_last before calling func
+                    data.t_last = t
+                    func(obj, *args, **kwargs)
+                else:
+                    func(obj, *args, **kwargs)
+                    data.t_last = t
 
             if data.t_last is None:
                 # first call -> just call the function immediately
@@ -53,8 +59,16 @@ def debounce(arg=None):
                 return
 
             t_wait = max(1 / target_fps - (time.time() - data.t_last), 0)
-            data.timer = threading.Timer(t_wait, f)
-            data.timer.start()
+            if platform.is_pyodide:
+                import asyncio
+                async def _runner():
+                    if t_wait > 0:
+                        await asyncio.sleep(t_wait)
+                    f()
+                data.timer = asyncio.create_task(_runner())
+            else:
+                data.timer = threading.Timer(t_wait, f)
+                data.timer.start()
 
         return debounced
 
@@ -91,7 +105,7 @@ class Canvas:
     _on_update_html_canvas: list[Callable]
 
     def __init__(self, device, canvas, multisample_count=4):
-        self._update_mutex = threading.RLock()
+        self._update_mutex = Lock()
         self.target_texture = None
 
         self._on_resize_callbacks = []

@@ -2,6 +2,7 @@ import asyncio
 import base64
 import itertools
 import json
+import time
 import threading
 from collections.abc import Mapping
 from typing import Callable
@@ -95,6 +96,8 @@ class LinkBase:
         self._requests = {}
         self._objects = {}
         self._cache = {}
+
+        next(self._request_id) # make sure first id is 1, in case 0 is interpreted as None
 
     def _call_data(self, id, prop, args, ignore_result=False):
         buffer = []
@@ -313,7 +316,11 @@ class LinkBase:
                     self._requests[request_id] = self._load_data(data.get("value", None))
                     if key and data.get("cache", False):
                         self._cache[key] = self._requests[request_id]
-                    event.set()
+                    
+                    if isinstance(event, asyncio.Future):
+                        event.set_result(self._requests[request_id])
+                    else:
+                        event.set()
                     return
 
                 case "call":
@@ -407,11 +414,10 @@ class LinkBase:
 
 
 class PyodideLink(LinkBase):
-    def __init__(self, send_message, size_buffer, result_buffer):
+    def __init__(self, send_message):
         super().__init__()
         self._send_message = send_message
-        self._size_buffer = size_buffer
-        self._result_buffer = result_buffer
+        self._requests = {}
 
     def create_proxy(self, func, ignore_return_value=False):
         id_ = id(func)
@@ -424,26 +430,23 @@ class PyodideLink(LinkBase):
         }
 
     def _send_data(self, metadata, data, key=None):
-        if type(data) is bytes:
-            self._send_message(data)
-        else:
-            if (
-                metadata.get("request_id", None) is not None
-                and metadata["type"] != "response"
-                and not metadata.get("ignore_return_value", False)
-            ):
-                import js
+        """Send data to the remote environment,
+        if request_id is set, (blocking-)wait for the response and return it"""
+        request_id = metadata.get("request_id", None)
+        type = metadata.get("type", None)
+        event = None
+        self._send_message(data)
+        if type != "response" and request_id is not None:
+            # from pyodide.ffi import run_sync
+            import asyncio
+            event = asyncio.Future()
+            self._requests[request_id] = event, key
+            # todo: this shouldn't be necessary
+            # but run_sync(event) gives an error
+            while not event.done():
+                time.sleep(0.001)
 
-                js.Atomics.store(self._size_buffer, 0, 0)
-                self._send_message(data)
-                js.Atomics.wait(self._size_buffer, 0, 0, 10000)
-                n = self._size_buffer[0]
-                res = bytes(self._result_buffer.slice(0, n))
-                s = res.decode("utf-8")
-                data = json.loads(s)
-                return self._load_data(data.get("value", None))
-            else:
-                self._send_message(data)
+            return self._requests.pop(request_id)
 
 
 class LinkBaseAsync(LinkBase):

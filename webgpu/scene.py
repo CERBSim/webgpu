@@ -5,7 +5,7 @@ from . import platform
 from .canvas import Canvas, debounce
 from .input_handler import InputHandler
 from .renderer import BaseRenderer, RenderOptions, SelectEvent
-from .utils import max_bounding_box, read_buffer
+from .utils import max_bounding_box, read_buffer, Lock
 from .platform import is_pyodide, is_pyodide_main_thread
 from .webgpu_api import *
 from .camera import Camera
@@ -88,7 +88,7 @@ class Scene:
         self.input_handler.set_canvas(canvas.canvas)
         self.options.set_canvas(canvas)
 
-        self._render_mutex = canvas._update_mutex
+        self._render_mutex = Lock(True) if is_pyodide else canvas._update_mutex
 
         with self._render_mutex:
             self.options.timestamp = time.time()
@@ -110,7 +110,6 @@ class Scene:
             )
             self._select_buffer_valid = False
 
-            canvas._update_mutex = self._render_mutex
             canvas.on_resize(self.render)
 
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
