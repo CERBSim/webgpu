@@ -10,6 +10,7 @@ class CameraUniforms(UniformBase):
     _binding = Binding.CAMERA
 
     _fields_ = [
+        ("view", ct.c_float * 16),
         ("model_view", ct.c_float * 16),
         ("model_view_projection", ct.c_float * 16),
         ("rot_mat", ct.c_float * 16),
@@ -305,6 +306,7 @@ class Camera:
         self.model_view_proj = model_view_proj
 
         self.uniforms.aspect = aspect
+        self.uniforms.view[:] = view_mat.transpose().flatten()
         self.uniforms.model_view[:] = model_view.transpose().flatten()
         self.uniforms.model_view_projection[:] = model_view_proj.transpose().flatten()
         self.uniforms.normal_mat[:] = normal_mat.flatten()

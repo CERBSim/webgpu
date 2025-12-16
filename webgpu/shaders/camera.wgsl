@@ -1,4 +1,5 @@
 struct CameraUniforms {
+  view: mat4x4<f32>,
   model_view: mat4x4<f32>,
   model_view_projection: mat4x4<f32>,
   rot_mat: mat4x4<f32>,
