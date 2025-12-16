@@ -239,9 +239,17 @@ class MultipleRenderer(BaseRenderer):
         return [self] + self.render_objects
 
     @check_timestamp
-    def _update_and_create_render_pipeline(self, options: RenderOptions) -> None:
+    def _update_and_create_render_pipeline(self, options: RenderOptions):
+        # Let the subclass update itself and its children
         self.update(options)
+
+        # Children are part of the same logical object, so once this
+        # group is updated for this timestamp, they should be too.
         for r in self.render_objects:
+            # Mark child as up-to-date for this options.timestamp
+            # since check_timestamp won't be called on them directly.
+            if hasattr(r, "_timestamp") and hasattr(options, "timestamp"):
+                r._timestamp = options.timestamp
             r.create_render_pipeline(options)
 
     def render(self, options: RenderOptions) -> None:
