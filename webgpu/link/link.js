@@ -586,13 +586,45 @@ window.patchedRequestAnimationFrame = (device, context, target) => {
   // Thus, in order to render from python asynchroniously, we are always rendering into a separate texture
   // The actual callback here only copies the rendered image from the separate render target texture to the current texture
   requestAnimationFrame((t) => {
-    const current = context.getCurrentTexture();
+    // If the render target was destroyed (e.g. due to a resize),
+    // skip submitting commands that reference it.
+    if (!target || target.__webgpu_destroyed__) {
+      return;
+    }
+
+    if (!context || !device || !device.queue || !device.createCommandEncoder) {
+      return;
+    }
+
+    const getCurrentTexture = context.getCurrentTexture && context.getCurrentTexture.bind(context);
+    if (!getCurrentTexture) {
+      return;
+    }
+
+    let current;
+    try {
+      current = getCurrentTexture();
+    } catch (e) {
+      return;
+    }
+
+    if (!current) {
+      return;
+    }
+
+    const width = Math.min(target.width || 0, current.width || 0);
+    const height = Math.min(target.height || 0, current.height || 0);
+
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
     const encoder = device.createCommandEncoder();
 
     encoder.copyTextureToTexture(
       { texture: target },
       { texture: current },
-      { width: current.width, height: current.height }
+      { width, height, depthOrArrayLayers: 1 }
     );
 
     device.queue.submit([encoder.finish()]);

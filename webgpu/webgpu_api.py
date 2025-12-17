@@ -1805,7 +1805,11 @@ class Texture(BaseWebGPUHandle):
         return TextureUsage(self.handle.usage())
 
     def destroy(self) -> None:
-        return self.handle.destroy()
+        # Mark the underlying JS texture so async JS code (e.g. patchedRequestAnimationFrame)
+        # can detect that it has been destroyed and avoid using it in new commands.
+        handle = self.handle
+        self.handle.__webgpu_destroyed__ = True
+        return handle.destroy()
 
     def __del__(self):
         self.destroy()

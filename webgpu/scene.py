@@ -228,11 +228,25 @@ class Scene:
                 obj.render(options)
 
         if to_canvas:
-            options.command_encoder.copyTextureToTexture(
-                TexelCopyTextureInfo(self.canvas.target_texture),
-                TexelCopyTextureInfo(self.canvas.context.getCurrentTexture()),
-                [self.canvas.width, self.canvas.height, 1],
-            )
+                target_texture = self.canvas.target_texture
+                if target_texture is not None:
+                    # Skip if the underlying JS texture has been destroyed already.
+                    handle = getattr(target_texture, "handle", None)
+                    if handle is not None and getattr(handle, "__webgpu_destroyed__", False):
+                        current_texture = None
+                    else:
+                        current_texture = self.canvas.context.getCurrentTexture()
+
+                    if current_texture is not None:
+                        copy_width = min(target_texture.width, current_texture.width)
+                        copy_height = min(target_texture.height, current_texture.height)
+
+                        if copy_width > 0 and copy_height > 0:
+                            options.command_encoder.copyTextureToTexture(
+                                TexelCopyTextureInfo(target_texture),
+                                TexelCopyTextureInfo(current_texture),
+                                [copy_width, copy_height, 1],
+                            )
         self.device.queue.submit([options.command_encoder.finish()])
         options.command_encoder = None
 
