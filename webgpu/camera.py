@@ -23,6 +23,8 @@ class CameraUniforms(UniformBase):
 
 
 class Transform:
+    """3D transform with translation/rotation/scale around a configurable center."""
+
     def __init__(self):
         self._mat = np.identity(4)
         self._center = np.zeros(3)
@@ -34,6 +36,7 @@ class Transform:
         return t
 
     def init(self, pmin, pmax):
+        """Initialize the transform to frame the axis-aligned box [pmin, pmax]."""
         center = 0.5 * (pmin + pmax)
         self._center = center
         scale = 2 / np.linalg.norm(pmax - pmin)
@@ -93,6 +96,7 @@ class Transform:
         self._center = center
 
     def reset_xy(self, flip: bool = False):
+        """Reset to a view looking along +Z onto the XY plane, optionally flipped."""
         pos = self.map_point(self._center)
         self._mat = np.identity(4)
         self.translate(-self._center[0], -self._center[1], -self._center[2])
@@ -101,12 +105,14 @@ class Transform:
             self.rotate(0, 180)
 
     def reset_xz(self, flip: bool = False):
+        """Reset to a view looking along +Y onto the XZ plane, optionally flipped."""
         self.reset_xy()
         self.rotate(-90, 0)
         if flip:
             self.rotate(0, 180)
 
     def reset_yz(self, flip: bool = False):
+        """Reset to a view looking along +X onto the YZ plane, optionally flipped."""
         self.reset_xy()
         self.rotate(-90, 0)
         self.rotate(0, -90)
@@ -137,8 +143,9 @@ class Transform:
     def _centering(self, center):
         return self._CenteringContext(self, center)
 
-
 class Camera:
+    """Interactive camera that maps a 3D scene to clip space and updates GPU uniforms."""
+
     def __init__(self):
         self.uniforms = None
         self.canvas = None
@@ -149,6 +156,7 @@ class Camera:
         self._is_rotating = False
 
     def __setstate__(self, state):
+        """Restore pickled camera state (only the transform)."""
         self.transform = state["transform"]
         self.canvas = None
         self.uniforms = None
@@ -158,25 +166,31 @@ class Camera:
         self._is_rotating = False
 
     def __getstate__(self):
+        """Return a minimal picklable representation of the camera."""
         return {"transform": self.transform}
 
     def reset(self, pmin, pmax):
+        """Fit the camera to the axis-aligned box [pmin, pmax] and update uniforms."""
         self.transform.init(pmin, pmax)
         self._update_uniforms()
 
     def reset_xy(self, flip: bool = False):
+        """Reset to a top-down XY view of the current center and update uniforms."""
         self.transform.reset_xy(flip)
         self._update_uniforms()
 
     def reset_xz(self, flip: bool = False):
+        """Reset to an XZ view of the current center and update uniforms."""
         self.transform.reset_xz(flip)
         self._update_uniforms()
 
     def reset_yz(self, flip: bool = False):
+        """Reset to a YZ view of the current center and update uniforms."""
         self.transform.reset_yz(flip)
         self._update_uniforms()
 
     def set_canvas(self, canvas):
+        """Attach the camera to a canvas, register resize handling, and allocate uniforms."""
         self.canvas = canvas
         canvas.on_resize(self._update_uniforms)
         if self.uniforms is None:
@@ -193,6 +207,7 @@ class Camera:
         del self.uniforms
 
     def set_render_functions(self, redraw_function, get_position_function=None):
+        """Install callbacks for triggering redraws and mapping screen to world positions."""
         self._render_function = redraw_function
         self._get_position_function = get_position_function
 
@@ -260,6 +275,7 @@ class Camera:
         return None
 
     def _update_uniforms(self):
+        """Recompute projection/model-view matrices and write them into the GPU uniforms."""
         if self.canvas is None:
             return
         if self.uniforms is None:

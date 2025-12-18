@@ -3,10 +3,12 @@ import pickle
 
 from .draw import Draw as DrawPyodide
 from .lilgui import LilGUI
-from .renderer import Renderer, _render_objects
+from .renderer import Renderer
 from .scene import Scene
-from .utils import _is_pyodide, reload_package
+from .utils import reload_package
+from .platform import is_pyodide
 
+_render_objects = {}
 
 def create_package_zip(module_name="webgpu"):
     """
@@ -140,9 +142,19 @@ async function draw() {{
 draw();
     """
 
-if not _is_pyodide:
+if not is_pyodide:
+    # check if we run in jupyter notebook
     from IPython.core.magic import register_cell_magic
     from IPython.display import HTML, Javascript, display
+
+    # For docu build (when IPython is not available)
+    try:
+        @register_cell_magic
+        def test(line, cell):
+            pass
+    except NameError:
+        def register_cell_magic(func):
+            return func
 
     display(Javascript(_init_js_code))
 
@@ -284,7 +296,7 @@ draw();
 
 
 def pyodide_install_packages(packages):
-    if not _is_pyodide:
+    if not is_pyodide:
         display(
             Javascript(
                 f"window.webgpu_ready = window.webgpu_ready.then(() => {{ return window.pyodide.loadPackage({packages}); }})"
@@ -293,7 +305,7 @@ def pyodide_install_packages(packages):
 
 
 def update_render_object(id, **kwargs):
-    if _is_pyodide:
+    if is_pyodide:
         obj = _render_objects[id]
         obj.update(**kwargs)
     else:

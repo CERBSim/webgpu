@@ -1,23 +1,65 @@
 
-dl.class > dt:first-of-type {
-    display: block !important;
+/* Compact, denser API reference styling for autodoc Python objects */
+
+article.bd-article dl.py {
+    margin-top: 0.35em;
+    margin-bottom: 0.35em;
+}
+
+article.bd-article dl.py > dt.sig.sig-object.py {
+    display: block;
+    padding: 0.2em 0.5em;
+    border-radius: 0.25em;
     background-color: var(--pst-color-primary-bg);
 }
 
-dl.function > dt:first-of-type {
-    display: block !important;
+article.bd-article dl.py.class > dt.sig.sig-object.py {
     background-color: var(--pst-color-secondary-bg);
 }
 
-dl.class > dd:first-of-type {
-    display: block !important;
-    background-color: var(--pst-color-surface);
-    padding: 0.5em;
+article.bd-article dl.py > dd {
+    margin-left: 1.5em;
+    margin-top: 0.15em;
+    margin-bottom: 0.25em;
 }
 
-dl.function > dd:first-of-type {
-    display: block !important;
-    background-color: var(--pst-color-surface);
-    padding: 0.5em;
+/* Make nested API items (methods/attributes) tighter as well */
+article.bd-article dl.py > dd > dl.py {
+    margin-top: 0.15em;
+    margin-bottom: 0.15em;
+}
+
+article.bd-article dl.py > dd > dl.py > dt.sig.sig-object.py {
+    padding: 0.1em 0.4em;
+    background-color: transparent;
+}
+
+/* Reduce excess vertical whitespace inside API doc entries */
+article.bd-article dl.py > dd > p {
+    margin-top: 0.15em;
+    margin-bottom: 0.25em;
+}
+
+/* Put long parameter lists on a single (wrapped) line */
+article.bd-article dt.sig dl {
+    margin: 0;
+}
+
+article.bd-article dt.sig dl dd {
+    display: inline;
+    margin: 0;
+}
+
+/* Make code, signatures, and code blocks smaller and tighter */
+article.bd-article .sig,
+article.bd-article pre,
+article.bd-article code {
+    font-size: 0.8em;
+    line-height: 1.25;
+}
+
+/* Avoid chunky inline-code styling in the dense API listing */
+article.bd-article code.literal {
+    padding: 0.05em 0.15em;
 }
 
