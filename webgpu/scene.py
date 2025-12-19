@@ -13,6 +13,7 @@ from .light import Light
 
 
 class Scene:
+    """Container that ties render objects, camera, canvas, and input into a live WebGPU scene."""
     canvas: Canvas = None
     render_objects: list[BaseRenderer]
     options: RenderOptions
@@ -26,6 +27,7 @@ class Scene:
         camera: Camera | None = None,
         light: Light | None = None,
     ):
+        """Create a scene from render objects and optional canvas/camera/light overrides."""
         if id is None:
             import uuid
 
@@ -54,6 +56,7 @@ class Scene:
         self.input_handler = InputHandler()
 
     def __getstate__(self):
+        """Return picklable state so scenes can be serialized between processes/notebooks."""
         state = {
             "render_objects": self.render_objects,
             "id": self._id,
@@ -62,6 +65,7 @@ class Scene:
         return state
 
     def __setstate__(self, state):
+        """Restore a pickled scene and reinitialize input handling (canvas is set later)."""
         self.render_objects = state["render_objects"]
         self._id = state["id"]
         self.options = state["render_options"]
@@ -84,6 +88,7 @@ class Scene:
         return self.canvas.device
 
     def init(self, canvas):
+        """Attach the scene to a canvas and initialize GPU resources and event handlers."""
         self.canvas = canvas
         self.input_handler.set_canvas(canvas.canvas)
         self.options.set_canvas(canvas)
@@ -115,6 +120,7 @@ class Scene:
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
 
     def __on_update_html_canvas(self, html_canvas):
+        """Update event wiring when the underlying HTML canvas element changes."""
         self.input_handler.set_canvas(html_canvas)
         if html_canvas is not None:
             camera = self.options.camera
@@ -122,6 +128,7 @@ class Scene:
             camera.set_canvas(self.canvas)
 
     def get_position(self, x: int, y: int):
+        """Return the 3D position under canvas pixel (x, y) using the selection buffer."""
         objects = self.render_objects
 
         with self._render_mutex:
@@ -161,6 +168,7 @@ class Scene:
 
     @debounce
     def select(self, x: int, y: int):
+        """Perform an object selection at (x, y) and dispatch callbacks on matching renderers."""
         objects = self.render_objects
 
         have_select_callback = False
@@ -212,6 +220,7 @@ class Scene:
             return ev
 
     def _render_objects(self, to_canvas=True):
+        """Update pipelines and render all active objects, optionally copying to the canvas."""
         if self.canvas is None:
             return
         self._select_buffer_valid = False
@@ -251,6 +260,7 @@ class Scene:
         options.command_encoder = None
 
     def _redraw_blocking(self):
+        """Synchronously update pipelines and issue a single render call under the render mutex."""
         with self._render_mutex:
             import time
 
@@ -265,19 +275,23 @@ class Scene:
         self._redraw_blocking()
 
     def redraw(self, blocking=False):
+        """Request a redraw, either blocking immediately or debounced on the event loop."""
         if blocking:
             self._redraw_blocking()
         else:
             self._redraw_debounced()
 
     def _render(self):
+        """Schedule a frame render via requestAnimationFrame on the JS side."""
         platform.js.requestAnimationFrame(self._js_render)
 
     def _render_direct(self, t=0):
+        """Internal render entry point used from JS, rendering directly to the canvas texture."""
         self._render_objects(to_canvas=True)
 
     @debounce
     def render(self, t=0, rerender_if_update_needed=True):
+        """Main render loop: enqueue a frame and optionally keep rendering while objects update."""
         if self.canvas is None or self.canvas.height == 0:
             return
 
@@ -303,6 +317,7 @@ class Scene:
                     return
 
     def cleanup(self):
+        """Detach the scene from its canvas, unregister callbacks, and release JS proxies."""
         with self._render_mutex:
             if self.canvas is not None:
                 self.options.camera.unregister_callbacks(self.input_handler)

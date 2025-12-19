@@ -7,3 +7,6 @@ __pycache__
 docs/html
 *.html
 
+/webgpu/_version.py
+/docs/.virtual_documents/
+/.virtual_documents/
