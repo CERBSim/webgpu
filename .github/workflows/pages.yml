@@ -1,52 +1,64 @@
-name: deploy-book
+name: Docs
 
-# Run this when the master or main branch changes
 on:
   push:
     branches:
-    - readme
-    # If your git repository has the Jupyter Book within some-subfolder next to
-    # unrelated files, you can make this run only if a file within that specific
-    # folder has been modified.
-    #
-    # paths:
-    # - some-subfolder/**
+      - main
+    paths:
+      - 'docs/**'
+      - 'webgpu/**'
+      - 'pyproject.toml'
+      - 'README.md'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
 
-# This job installs dependencies, builds the book, and pushes it to `gh-pages`
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
 jobs:
-  deploy-book:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
+
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: 'true'
 
-    # Install dependencies
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.12
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        pip install -e .
-        pip install jupyter 
+      - name: Install documentation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install sphinx nbsphinx pydata-sphinx-theme ipykernel jupyter
 
-    # Build the book
-    - name: Build the book
-      run: |
-        mkdir -p _build
-        jupyter nbconvert --execute --to html example.ipynb
-        mv example.html _build/index.html
+      - name: Build Sphinx documentation
+        run: |
+          sphinx-build -b html -D docs docs/_build/html
 
-    # Upload the book's HTML as an artifact
-    - name: Upload artifact
-      uses: actions/upload-pages-artifact@v2
-      with:
-        path: "_build"
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'docs/_build/html'
 
-    # Deploy the book's HTML to GitHub Pages
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v2
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

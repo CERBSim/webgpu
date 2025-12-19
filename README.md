@@ -46,6 +46,12 @@ cd webgpu
 pip install -e .
 ```
 
+## Documentation
+
+The full project documentation, including API reference, tutorials and user guide, is published at:
+
+- https://cerbsim.github.io/webgpu/
+
 ## Examples
 
 The repository contains several examples:
