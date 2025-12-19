@@ -24,6 +24,9 @@ dependencies = ["numpy", "requests", "packaging"]
 version_file = "webgpu/_version.py"
 local_scheme = "no-local-version"
 
+[tool.setuptools]
+packages = ["webgpu"]
+
 [tool.setuptools.package-data]
 "webgpu" = ["shaders/*.wgsl", "fonts.json"]
 
