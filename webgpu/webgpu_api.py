@@ -3,12 +3,50 @@ import sys
 import types
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
-from functools import wraps
 
 from . import platform
 from .platform import JsPromise, JsProxy, create_proxy, is_pyodide, toJS
 
 DEBUG_LABELS = False
+
+# decorator to print number of JS calls
+def print_communications(func):
+    import functools
+    import time
+    @functools.wraps(func)
+    def wrapper_print_communications(*args, **kwargs):
+        from .platform import link
+        id_before = None
+        if hasattr(link, "_request_id"):
+            id_before = int(str(link._request_id).replace("count(", "").replace(")", ""))
+        t0 = time.time()
+        value = func(*args, **kwargs)
+        t1 = time.time()
+        if id_before is not None:
+            id_after = int(str(link._request_id).replace("count(", "").replace(")", ""))
+            if id_after > id_before + 10:
+                print(f"{func}: {id_after - id_before} messages sent")
+                print(f"  took {1000*(t1 - t0):.3f} ms")
+        return value
+
+    return wrapper_print_communications
+
+# decorator to print time taken by a function
+def print_time(func):
+    import time
+    import functools
+
+    @functools.wraps(func)
+    def wrapper_print_time(*args, **kwargs):
+        start_time = time.time()
+        value = func(*args, **kwargs)
+        end_time = time.time()
+        t = 1000*(end_time - start_time)
+        if t> 1.0:
+            print(f"Function {func} took {t:.3f} ms")
+        return value
+
+    return wrapper_print_time
 
 
 def _get_label_from_stack():
@@ -1125,6 +1163,8 @@ class _DummyNone:
 
 
 class Buffer(BaseWebGPUHandle):
+    _size = None
+
     async def mapAsync(
         self, mode: MapMode, offset: int = 0, size: int = 0
     ) -> _DummyNone:  # don't return None, as this would ignore the blocking wait
@@ -1142,7 +1182,9 @@ class Buffer(BaseWebGPUHandle):
 
     @property
     def size(self) -> int:
-        return self.handle.size
+        if self._size is None:
+            self._size = self.handle.size
+        return self._size
 
     @property
     def mapState(self) -> BufferMapState:

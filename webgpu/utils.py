@@ -250,12 +250,10 @@ class BaseBinding:
         visibility=ShaderStage.ALL,
         resource=None,
         layout=None,
-        binding=None,
     ):
         self.nr = nr
         self.visibility = visibility
         self._layout_data = layout or {}
-        self._binding_data = binding or {}
         self._resource = resource or {}
 
     @property
@@ -271,6 +269,17 @@ class BaseBinding:
             "binding": self.nr,
             "resource": self._resource,
         }
+
+    def __eq__(self, other):
+        if type(other) != type(self):
+            return False
+
+        return (
+            self.nr == other.nr
+            and self.visibility == other.visibility
+            and self._layout_data == other._layout_data
+            and self._resource == other._resource
+        )
 
 
 class UniformBinding(BaseBinding):
@@ -327,6 +336,18 @@ class TextureBinding(BaseBinding):
                 }
             },
             resource=texture.createView(),
+        )
+        self.texture = texture
+
+    def __eq__(self, other):
+        if type(other) != type(self):
+            return False
+
+        return (
+            self.nr == other.nr
+            and self.visibility == other.visibility
+            and self._layout_data == other._layout_data
+            and self.texture == other.texture
         )
 
 
@@ -497,16 +518,27 @@ def create_buffer(
 
 
 def buffer_from_array(
-    array, usage=BufferUsage.STORAGE, label="from_array", reuse: Buffer | None = None
+    data, usage=BufferUsage.STORAGE, label="from_array", reuse: Buffer | None = None
 ) -> Buffer:
+
     device = get_device()
 
-    data = array.tobytes()
-    if len(data) % 4:
-        data = data + b"\x00" * (4 - len(data) % 4)  # pad to 4 bytes
+    if not isinstance(data, bytes):
+        data = data.tobytes()
+
+    n = len(data)
+
+    if n < 1024:
+        if reuse and hasattr(reuse, '_data') and data == reuse._data:
+            return reuse
+        ori_data = data
+
+    if n % 4:
+        data = data + b"\x00" * (4 - n % 4)  # pad to 4 bytes
+        n = n + (4 - n % 4)
 
     buffer = create_buffer(
-        size=len(data), usage=usage | BufferUsage.COPY_DST, label=label, reuse=reuse
+        size=n, usage=usage | BufferUsage.COPY_DST, label=label, reuse=reuse
     )
 
     chunk_size = 99 * 1024**2
@@ -516,6 +548,10 @@ def buffer_from_array(
             device.queue.writeBuffer(buffer, i, data[i : i + chunk_size], 0, size)
     else:
         device.queue.writeBuffer(buffer, 0, data, 0, len(data))
+
+    if n < 1024:
+        buffer._data = ori_data
+
     return buffer
 
 

@@ -294,7 +294,14 @@ class Renderer(BaseRenderer):
     vertex_buffer_layouts: list[VertexBufferLayout] = []
     vertex_buffers: list[Buffer] = []
 
+    _last_bindings: list[BaseBinding] = []
+
     def create_render_pipeline(self, options: RenderOptions) -> None:
+        bindings = options.get_bindings() + self.get_bindings()
+
+        if bindings == self._last_bindings:
+            return
+
         shader_module = self.device.createShaderModule(self._get_preprocessed_shader_code())
         layout, self.group = create_bind_group(
             self.device, options.get_bindings() + self.get_bindings()
@@ -347,12 +354,13 @@ class Renderer(BaseRenderer):
         else:
             self._select_pipeline = None
 
+        self._last_bindings = bindings
+
     def render(self, options: RenderOptions) -> None:
         render_pass = options.begin_render_pass()
         render_pass.setPipeline(self.pipeline)
         render_pass.setBindGroup(0, self.group)
         for i, vertex_buffer in enumerate(self.vertex_buffers):
-            print("render: bind vertex buffer", i, vertex_buffer.label, vertex_buffer.size)
             render_pass.setVertexBuffer(i, vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
@@ -364,7 +372,6 @@ class Renderer(BaseRenderer):
         render_pass.setPipeline(self._select_pipeline)
         render_pass.setBindGroup(0, self.group)
         for i, vertex_buffer in enumerate(self.vertex_buffers):
-            print("select: bind vertex buffer", i, vertex_buffer.label, vertex_buffer.size)
             render_pass.setVertexBuffer(i, vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()

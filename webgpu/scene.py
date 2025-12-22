@@ -1,11 +1,10 @@
-import numpy as np
 import time
 
 from . import platform
 from .canvas import Canvas, debounce
 from .input_handler import InputHandler
 from .renderer import BaseRenderer, RenderOptions, SelectEvent
-from .utils import max_bounding_box, read_buffer, Lock
+from .utils import max_bounding_box, read_buffer, Lock, print_communications
 from .platform import is_pyodide, is_pyodide_main_thread
 from .webgpu_api import *
 from .camera import Camera
@@ -45,11 +44,6 @@ class Scene:
 
         self._id = id
         self.render_objects = render_objects
-
-        # if is_pyodide:
-        #     _scenes_by_id[id] = self
-        #     if canvas is not None:
-        #         self.init(canvas)
 
         self.t_last = 0
 
@@ -105,8 +99,6 @@ class Scene:
             self._js_render = platform.create_proxy(self._render_direct)
             camera.set_render_functions(self.render, self.get_position)
             camera.register_callbacks(self.input_handler)
-            # if is_pyodide:
-            #     _scenes_by_id[self.id] = self
 
             self._select_buffer = self.device.createBuffer(
                 size=4 * 4,
@@ -219,6 +211,7 @@ class Scene:
 
             return ev
 
+    # @print_communications
     def _render_objects(self, to_canvas=True):
         """Update pipelines and render all active objects, optionally copying to the canvas."""
         if self.canvas is None:
@@ -259,27 +252,13 @@ class Scene:
         self.device.queue.submit([options.command_encoder.finish()])
         options.command_encoder = None
 
-    def _redraw_blocking(self):
-        """Synchronously update pipelines and issue a single render call under the render mutex."""
-        with self._render_mutex:
-            import time
-
-            self.options.timestamp = time.time()
-            for obj in self.render_objects:
-                obj._update_and_create_render_pipeline(self.options)
-
-            self.render()
-
-    @debounce
-    def _redraw_debounced(self):
-        self._redraw_blocking()
-
-    def redraw(self, blocking=False):
+    def redraw(self, blocking=False, fps=10):
         """Request a redraw, either blocking immediately or debounced on the event loop."""
+        self.options.timestamp = time.time()
         if blocking:
-            self._redraw_blocking()
+            self.render._original(self)
         else:
-            self._redraw_debounced()
+            self.render()
 
     def _render(self):
         """Schedule a frame render via requestAnimationFrame on the JS side."""
@@ -310,12 +289,6 @@ class Scene:
                 self.canvas.target_texture,
             )
 
-        if rerender_if_update_needed:
-            for obj in self.render_objects:
-                if obj.active and obj.needs_update:
-                    self.render(rerender_if_update_needed=False)
-                    return
-
     def cleanup(self):
         """Detach the scene from its canvas, unregister callbacks, and release JS proxies."""
         with self._render_mutex:
@@ -329,16 +302,3 @@ class Scene:
                 self.canvas._on_resize_callbacks.remove(self.render)
                 self.canvas._on_update_html_canvas.remove(self.__on_update_html_canvas)
                 self.canvas = None
-
-                # if is_pyodide:
-                #     del _scenes_by_id[self.id]
-
-
-# if is_pyodide:
-#     _scenes_by_id: dict[str, Scene] = {}
-#
-#     def get_scene(id: str) -> Scene:
-#         return _scenes_by_id[id]
-#
-#     def redraw_scene(id: str):
-#         get_scene(id).redraw()

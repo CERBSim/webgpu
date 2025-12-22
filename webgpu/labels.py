@@ -3,7 +3,7 @@ import numpy as np
 from .font import Font
 from .renderer import Renderer, RenderOptions, check_timestamp
 from .uniforms import Binding
-from .utils import BufferBinding, read_shader_file
+from .utils import BufferBinding, buffer_from_array, read_shader_file
 from .webgpu_api import *
 
 
@@ -42,6 +42,8 @@ class Labels(Renderer):
         self.v_align = v_align
         self.buffer = None
 
+        self.font = None
+
     def update(self, options: RenderOptions):
         n_chars = sum(len(label) for label in self.labels)
         n_labels = len(self.labels)
@@ -78,7 +80,11 @@ class Labels(Renderer):
             "left": 0,
         }
 
-        self.font = Font(options.canvas, self.font_size)
+        if self.font is None:
+            self.font = Font(options.canvas, self.font_size)
+        else:
+            self.font.set_font_size(self.font_size)
+
         char_map = self.font.atlas.char_map
 
         ichar = 0
@@ -111,15 +117,7 @@ class Labels(Renderer):
             + char_data.tobytes()
         )
 
-        if self.buffer is None or self.buffer.size != len(data):
-            if self.buffer is not None:
-                self.buffer.destroy()
-            self.buffer = self.device.createBuffer(
-                len(data),
-                usage=BufferUsage.STORAGE | BufferUsage.COPY_DST,
-                label="labels",
-            )
-        self.device.queue.writeBuffer(self.buffer, 0, data)
+        self.buffer = buffer_from_array(data, BufferUsage.STORAGE | BufferUsage.COPY_DST, "labels", self.buffer)
 
     def get_shader_code(self):
         return read_shader_file("text.wgsl")

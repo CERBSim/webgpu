@@ -63,6 +63,8 @@ class UniformBase(ct.Structure):
             label=type(self).__name__,
         )
 
+        self._last_update_values = None
+
         size = len(bytes(self))
         if size % 16:
             raise ValueError(
@@ -70,7 +72,11 @@ class UniformBase(ct.Structure):
             )
 
     def update_buffer(self):
-        get_device().queue.writeBuffer(self._buffer, 0, bytes(self))
+        data = bytes(self)
+        if self._last_update_values == data:
+            return
+        get_device().queue.writeBuffer(self._buffer, 0, data)
+        self._last_update_values = data
 
     def get_bindings(self) -> list[BaseBinding]:
         return [UniformBinding(self._binding, self._buffer)]

@@ -49,8 +49,11 @@ def debounce(arg=None):
                     data.t_last = t
                     func(obj, *args, **kwargs)
                 else:
-                    func(obj, *args, **kwargs)
                     data.t_last = t
+                    func(obj, *args, **kwargs)
+
+            if data.timer is not None:
+                return
 
             if data.t_last is None:
                 # first call -> just call the function immediately
@@ -70,6 +73,7 @@ def debounce(arg=None):
                 data.timer = threading.Timer(t_wait, f)
                 data.timer.start()
 
+        debounced._original = func
         return debounced
 
     if callable(arg):

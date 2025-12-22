@@ -184,7 +184,7 @@ class Font:
             n_rows=self.atlas.n_rows,
             **self.atlas.get_uniform_settings(),
         )
-        self.update()
+        self._update()
 
     def get_bindings(self):
         return [
@@ -197,12 +197,17 @@ class Font:
         return read_shader_file("font.wgsl")
 
     def set_font_size(self, font_size: float):
+        if self.uniforms.font_size == font_size:
+            return
         self.uniforms.size = font_size
-        self.update()
+        self._update()
 
     def update(self):
-        self.atlas.update()
         self.uniforms.update_buffer()
+
+    def _update(self):
+        self.atlas.update()
+        self.update()
 
 
 if __name__ == "__main__":
