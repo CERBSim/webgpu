@@ -115,11 +115,17 @@ function createProxy(link, id, parent_id, ignore_return = false) {
       if (prop === 'call') {
         return target.callFunction;
       }
-      if (prop === 'then') return Reflect.get(...arguments);
-      if (prop.startsWith('__')) return Reflect.get(...arguments);
-      if (prop === 'callMethodIgnoreResult') return Reflect.get(...arguments);
-      if (prop === 'callMethod') return Reflect.get(...arguments);
-      if (prop === '_is_webapp_proxy') return true;
+      if (
+        [
+          'then',
+          'callMethod',
+          'callMethodIgnoreResult',
+          Symbol.toStringTag,
+        ].includes(prop)
+      )
+        return Reflect.get(...arguments);
+      if (typeof prop === 'string' && prop.startsWith('__'))
+        return Reflect.get(...arguments);
 
       return link.getProp(id, prop);
     },
@@ -252,12 +258,6 @@ class CrossLink {
   async _dumpData(data) {
     if (data === null) return undefined;
     if (data === undefined) return undefined;
-    if (data._is_webapp_proxy) {
-      return {
-        type: 'object',
-        id: data._id,
-      };
-    }
 
     if (data instanceof MouseEvent) return serializeEvent(data);
     if (data instanceof Event) return serializeEvent(data);
@@ -278,11 +278,16 @@ class CrossLink {
       return result;
     }
 
-    if (data.__is_crosslink_type__) return data;
+    if (
+      data.__is_crosslink_type__ &&
+      typeof data.__is_crosslink_type__ == 'boolean'
+    )
+      return data;
 
     if (isPrimitiveDict(data)) {
       return data;
     }
+
     if (data.constructor === Object) {
       const result = {};
       await Promise.all(
@@ -349,7 +354,7 @@ class CrossLink {
     }
 
     const value = await this._dumpData(await Promise.resolve(data));
-    //console.log('encoded data', value);
+    // console.log('encoded response data', request_id, value);
 
     this.connection.send({
       type: 'response',
@@ -382,13 +387,15 @@ class CrossLink {
     let result_action = undefined;
     let buffer = undefined;
 
-    if (event.data instanceof ArrayBuffer) {
-      const decoded_message = this._decodeBinaryMessage(event.data);
+    if (event.data instanceof Uint8Array) data = data.buffer;
+
+    if (data instanceof ArrayBuffer) {
+      const decoded_message = this._decodeBinaryMessage(data);
       data = decoded_message.data;
       buffer = decoded_message.buffer;
     } else {
-      if (typeof event.data === 'string') {
-        data = JSON.parse(event.data);
+      if (typeof data === 'string') {
+        data = JSON.parse(data);
       }
     }
 
@@ -466,6 +473,7 @@ class CrossLink {
         const callback = this._loadData(data.result_callback, buffer);
         await callback(response);
       } else {
+        // console.log('sending response', result_action, typeof(response), response);
         if (result_action === 'send') this.sendResponse(response, request_id);
         else if (result_action === 'store')
           this.objects['result_' + request_id] = response;
@@ -493,10 +501,6 @@ export function WebsocketLink(url) {
 
 export function WebworkerLink(worker) {
   // wait for first message, which means the worker has loaded and is ready
-  const buffer = new SharedArrayBuffer(1024 * 1024 * 100);
-  const size_buffer = new Int32Array(buffer, 0, 1);
-  const result_buffer = new Uint8Array(buffer, 4);
-  worker.postMessage(buffer);
   worker.postMessage(
     JSON.stringify({
       type: 'settings',
@@ -514,14 +518,6 @@ export function WebworkerLink(worker) {
   });
   return new CrossLink({
     send: (data) => {
-      if (data.type === 'response') {
-        const str = JSON.stringify(data);
-        const bytes = new TextEncoder().encode(str);
-        result_buffer.set(bytes);
-        Atomics.store(size_buffer, 0, bytes.length);
-        Atomics.notify(size_buffer, 0, 1);
-        return;
-      }
       worker.postMessage(JSON.stringify(data));
     },
     onMessage: async (callback) => {
@@ -596,7 +592,8 @@ window.patchedRequestAnimationFrame = (device, context, target) => {
       return;
     }
 
-    const getCurrentTexture = context.getCurrentTexture && context.getCurrentTexture.bind(context);
+    const getCurrentTexture =
+      context.getCurrentTexture && context.getCurrentTexture.bind(context);
     if (!getCurrentTexture) {
       return;
     }
