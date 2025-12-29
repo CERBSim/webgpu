@@ -531,6 +531,39 @@ export function WebworkerLink(worker) {
   });
 }
 
+export function SharedWebworkerLink(worker) {
+  // wait for first message, which means the worker has loaded and is ready
+  worker.port.start();
+  worker.port.postMessage(
+    JSON.stringify({
+      type: 'settings',
+      value: { base_url: window.__webapp_router_base },
+    })
+  );
+  const workerReady = new Promise((resolve) => {
+    worker.port.addEventListener(
+      'message',
+      (event) => {
+        resolve();
+      },
+      { once: true }
+    );
+  });
+  return new CrossLink({
+    send: (data) => {
+      worker.port.postMessage(JSON.stringify(data));
+    },
+    onMessage: async (callback) => {
+      await workerReady;
+      worker.port.addEventListener('message', callback);
+    },
+    onOpen: async (callback) => {
+      await workerReady;
+      callback();
+    },
+  });
+}
+
 window.createLilGUI = async (args) => {
   if (window.lil === undefined) {
     const url = 'https://cdn.jsdelivr.net/npm/lil-gui@0.20';
