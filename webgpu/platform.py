@@ -8,6 +8,7 @@
 """
 
 from collections.abc import Mapping
+import threading
 
 is_pyodide = False
 is_pyodide_main_thread = False
@@ -127,16 +128,37 @@ _funcs_after_init = []
 
 
 def execute_when_init(func):
+    """Register a callback to run once the JS side is ready.
+
+    If the platform has already been initialized, the callback is executed
+    immediately. Otherwise it is queued and executed from ``init`` once the
+    websocket connection has been established and ``js`` is set.
+    """
+
     if js is not None:
         func(js)
     else:
         _funcs_after_init.append(func)
 
 
-def init(before_wait_for_connection=None):
+def init(before_wait_for_connection=None, block_on_connection: bool = True):
+    """Initialize the websocket link to the browser.
+
+    In the default (classic Jupyter) mode, this blocks until the browser has
+    connected via websocket so that ``js`` is ready to use.
+
+    In environments like VS Code notebooks, outputs are typically only
+    processed once the cell has finished executing. In that situation calling
+    ``init`` with ``block_on_connection=False`` avoids a deadlock by moving the
+    blocking ``wait_for_connection`` part to a background thread. Code that
+    depends on ``js`` should use :func:`execute_when_init` so it runs once the
+    connection is ready.
+    """
+
     global js, create_proxy, destroy_proxy, websocket_server, link
     if is_pyodide or js is not None:
         return
+
     websocket_server = WebsocketLinkServer()
     create_proxy = websocket_server.create_proxy
     destroy_proxy = websocket_server.destroy_proxy
@@ -147,19 +169,30 @@ def init(before_wait_for_connection=None):
     if before_wait_for_connection:
         before_wait_for_connection(websocket_server)
 
-    websocket_server.wait_for_connection()
-    js = websocket_server.get(None, None)
-
     from .link.base import LinkBase
     from .webgpu_api import BaseWebGPUHandle, BaseWebGPUObject
 
-    LinkBase.register_serializer(BaseWebGPUHandle, lambda _, v: v.handle)
-    LinkBase.register_serializer(BaseWebGPUObject, lambda _, v: v.__dict__ or None)
+    def _finish_init():
+        websocket_server.wait_for_connection()
+        js_local = websocket_server.get(None, None)
 
-    websocket_server._start_handling_messages.set()
-    for func in _funcs_after_init:
-        func(js)
-    _funcs_after_init.clear()
+        LinkBase.register_serializer(BaseWebGPUHandle, lambda _, v: v.handle)
+        LinkBase.register_serializer(
+            BaseWebGPUObject, lambda _, v: v.__dict__ or None
+        )
+
+        # Publish js and run any deferred callbacks.
+        globals()["js"] = js_local
+        websocket_server._start_handling_messages.set()
+        for func in _funcs_after_init:
+            func(js_local)
+        _funcs_after_init.clear()
+
+    if block_on_connection:
+        _finish_init()
+    else:
+        thread = threading.Thread(target=_finish_init, daemon=True)
+        thread.start()
 
 
 def init_pyodide(link_):
