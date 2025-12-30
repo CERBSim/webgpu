@@ -138,12 +138,7 @@ def Draw(
 
     scene, id_ = _init_html(scene, width, height, flex)
 
-    # In classic Jupyter we already have a websocket connection at import
-    # time, so this callback runs immediately. In VS Code, outputs are only
-    # processed once the cell has finished executing; using execute_when_init
-    # ensures that drawing happens once the websocket connection is ready
-    # instead of blocking the import.
-    platform.execute_when_init(lambda js: _draw_scene(scene, width, height, id_))
+    draw_scene(scene, width, height, id_)
     return scene
 
 
@@ -187,13 +182,6 @@ if not platform.is_pyodide:
     else:
         # Not exporting and not running in pyodide -> Start a websocket server
         # and wait for the client to connect.
-        #
-        # In VS Code notebooks, outputs are typically only processed once the
-        # cell has completed execution. If we were to block here waiting for
-        # the websocket connection, the JavaScript that establishes the
-        # connection would never run, leading to a deadlock. We therefore
-        # avoid blocking on the connection in that environment and instead
-        # defer drawing until the link is ready via execute_when_init.
 
         def _webgpu_js(server):
             js = _link_js_code + """
@@ -206,5 +194,5 @@ WebsocketLink('ws://' + __webgpu_host + ':{port}');
         is_vscode = "VSCODE_PID" in os.environ
         platform.init(
             before_wait_for_connection=_webgpu_js,
-            block_on_connection=not is_vscode,
+            block_on_connection=True,
         )
