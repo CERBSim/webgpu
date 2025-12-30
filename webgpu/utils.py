@@ -529,7 +529,7 @@ def buffer_from_array(
     n = len(data)
 
     if n < 1024:
-        if reuse and hasattr(reuse, '_data') and data == reuse._data:
+        if reuse and hasattr(reuse, '_data') and data == reuse._data and not (reuse.usage & BufferUsage.COPY_SRC):
             return reuse
         ori_data = data
 
