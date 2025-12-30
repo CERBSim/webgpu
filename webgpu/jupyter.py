@@ -91,7 +91,8 @@ def _draw_scene(scene: Scene, width, height, id_):
     html_canvas.height = height
     gui_element = platform.js.document.getElementById(f"{id_}lilgui")
 
-    canvas = Canvas(utils.get_device(), html_canvas)
+    # Lazily initialize the WebGPU device the first time we draw.
+    canvas = Canvas(init_device_sync(), html_canvas)
     scene.gui = LilGUI(gui_element, scene)
     scene.init(canvas)
     scene.render()
@@ -136,7 +137,13 @@ def Draw(
     height = height if height is not None else 640
 
     scene, id_ = _init_html(scene, width, height, flex)
-    _draw_scene(scene, width, height, id_)
+
+    # In classic Jupyter we already have a websocket connection at import
+    # time, so this callback runs immediately. In VS Code, outputs are only
+    # processed once the cell has finished executing; using execute_when_init
+    # ensures that drawing happens once the websocket connection is ready
+    # instead of blocking the import.
+    platform.execute_when_init(lambda js: _draw_scene(scene, width, height, id_))
     return scene
 
 
@@ -178,12 +185,26 @@ if not platform.is_pyodide:
         js_code += f"\nwindow.pyodide_ready = init_pyodide('{webgpu_module_b64}');"
         display(Javascript(js_code))
     else:
-        # Not exporting and not running in pyodide -> Start a websocket server and wait for the client to connect
+        # Not exporting and not running in pyodide -> Start a websocket server
+        # and wait for the client to connect.
+        #
+        # In VS Code notebooks, outputs are typically only processed once the
+        # cell has completed execution. If we were to block here waiting for
+        # the websocket connection, the JavaScript that establishes the
+        # connection would never run, leading to a deadlock. We therefore
+        # avoid blocking on the connection in that environment and instead
+        # defer drawing until the link is ready via execute_when_init.
+
+        def _webgpu_js(server):
+            js = _link_js_code + """
+const __is_vscode = (typeof location !== 'undefined' && location.protocol === 'vscode-webview:');
+const __webgpu_host = __is_vscode ? '127.0.0.1' : ((typeof location !== 'undefined' && location.hostname) || '127.0.0.1');
+WebsocketLink('ws://' + __webgpu_host + ':{port}');
+""".format(port=server.port)
+            display(Javascript(js))
+
+        is_vscode = "VSCODE_PID" in os.environ
         platform.init(
-            before_wait_for_connection=lambda server: display(
-                Javascript(
-                    _link_js_code + f"WebsocketLink('ws://'+location.hostname+':{server.port}');"
-                )
-            )
+            before_wait_for_connection=_webgpu_js,
+            block_on_connection=not is_vscode,
         )
-        device = init_device_sync()
