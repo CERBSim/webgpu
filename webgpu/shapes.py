@@ -317,8 +317,8 @@ class ShapeRenderer(Renderer):
         else:
             color_format = VertexFormat.float32
             n_colors = self.values_buffer._used_size // 4
-            if self.colormap.autoscale and self.values is not None and len(self.values):
-                self.colormap.set_min_max(self.values.min(), self.values.max(), set_autoscale=False)
+            if self.gpu_objects.colormap.autoscale and self.values is not None and len(self.values):
+                self.gpu_objects.colormap.set_min_max(self.values.min(), self.values.max(), set_autoscale=False)
             self.fragment_entry_point = "shape_fragment_main_value"
             colors_buffer = self.values_buffer
 
