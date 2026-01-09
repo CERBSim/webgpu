@@ -53,6 +53,7 @@ class Colormap(BaseRenderer):
         self._callbacks = []
         self.set_colormap(colormap)
         self._needs_new_texture = True
+        super().__init__("Colormap")
 
     def update(self, options: RenderOptions):
         if self.uniforms is None:
@@ -181,9 +182,9 @@ class Colorbar(Renderer):
         number_format=None,
     ):
         super().__init__()
-        self.colormap = colormap or Colormap()
+        self.gpu_objects.colormap = colormap or Colormap()
         self.number_format = number_format
-        self.labels = Labels([], [], font_size=14, h_align="center", v_align="top")
+        self.gpu_objects.labels = Labels([], [], font_size=14, h_align="center", v_align="top")
         self.uniforms = None
 
         self._position = position
@@ -229,7 +230,7 @@ class Colorbar(Renderer):
 
     def get_bindings(self):
         return (
-            self.colormap.get_bindings() + self.labels.get_bindings() + self.uniforms.get_bindings()
+            self.gpu_objects.colormap.get_bindings() + self.gpu_objects.labels.get_bindings() + self.uniforms.get_bindings()
         )
 
     def update(self, options: RenderOptions):
@@ -241,16 +242,16 @@ class Colorbar(Renderer):
 
         self.uniforms.update_buffer()
 
-        self.n_instances = 2 * self.colormap.n_colors
+        self.n_instances = 2 * self.gpu_objects.colormap.n_colors
 
-        self.labels.labels = [
+        self.gpu_objects.labels.labels = [
             format_number(v, self.number_format)
             for v in [
-                self.colormap.minval + i / 4 * (self.colormap.maxval - self.colormap.minval)
+                self.gpu_objects.colormap.minval + i / 4 * (self.gpu_objects.colormap.maxval - self.gpu_objects.colormap.minval)
                 for i in range(6)
             ]
         ]
-        self.labels.positions = [
+        self.gpu_objects.labels.positions = [
             (
                 self.position[0] + i * self.width / 4,
                 self.position[1] - 0.01,
@@ -258,26 +259,25 @@ class Colorbar(Renderer):
             )
             for i in range(5)
         ]
-        self.labels.set_needs_update()
-        self.labels._update_and_create_render_pipeline(options)
+        self.gpu_objects.labels.set_needs_update()
 
     def render(self, options: RenderOptions):
         super().render(options)
-        self.labels.render(options)
+        self.gpu_objects.labels.render(options)
 
     def add_options_to_gui(self, gui):
         if gui is None:
             return
         folder = gui.folder("Colormap", closed=True)
-        folder.value("min", self.colormap.minval, self.set_min)
-        folder.value("max", self.colormap.maxval, self.set_max)
+        folder.value("min", self.gpu_objects.colormap.minval, self.set_min)
+        folder.value("max", self.gpu_objects.colormap.maxval, self.set_max)
 
     def set_min(self, minval):
-        self.colormap.set_min(minval)
+        self.gpu_objects.colormap.set_min(minval)
         self.set_needs_update()
 
     def set_max(self, maxval):
-        self.colormap.set_max(maxval)
+        self.gpu_objects.colormap.set_max(maxval)
         self.set_needs_update()
 
 

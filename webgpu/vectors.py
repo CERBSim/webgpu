@@ -29,15 +29,15 @@ class BaseVectorRenderer(Renderer):
 
     def __init__(self, label="VectorField"):
         super().__init__(label=label)
-        self.colormap = Colormap()
+        self.gpu_objects.colormap = Colormap()
 
     def update(self, timestamp):
         if timestamp == self._timestamp:
             return
         self._timestamp = timestamp
 
-        self.colormap.options = self.options
-        self.colormap.update(timestamp)
+        self.gpu_objects.colormap.options = self.options
+        self.gpu_objects.colormap.update(timestamp)
 
     def get_bindings(self):
         return [
@@ -46,7 +46,7 @@ class BaseVectorRenderer(Renderer):
             BufferBinding(Binding.POINTS, self._buffers["points"]),
             BufferBinding(Binding.VECTORS, self._buffers["vectors"]),
             *self.vec_uniforms.get_bindings(),
-            *self.colormap.get_bindings(),
+            *self.gpu_objects.colormap.get_bindings(),
         ]
 
     def create_vector_data(self):
@@ -56,7 +56,7 @@ class BaseVectorRenderer(Renderer):
         shader_code = read_shader_file("vector.wgsl")
         shader_code += self.options.camera.get_shader_code()
         shader_code += self.options.light.get_shader_code()
-        shader_code += self.colormap.get_shader_code()
+        shader_code += self.gpu_objects.colormap.get_shader_code()
         return shader_code
 
     def render(self, encoder):
@@ -89,11 +89,10 @@ class VectorRenderer(BaseVectorRenderer):
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).min(),
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).max(),
         )
-        if self.colormap.autoupdate:
-            self.colormap.set_min_max(min_vec, max_vec, set_autoupdate=False)
-            self.colormap.update(timestamp + 1)
+        if self.gpu_objects.colormap.autoupdate:
+            self.gpu_objects.colormap.set_min_max(min_vec, max_vec, set_autoupdate=False)
+            self.gpu_objects.colormap.update(timestamp + 1)
         self.n_instances = len(self.points) // 3
-        self.create_render_pipeline()
 
     def get_bounding_box(self):
         return self.bounding_box

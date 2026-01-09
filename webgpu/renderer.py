@@ -144,6 +144,18 @@ def check_timestamp(callback: Callable):
 
 _id_counter = itertools.count(1)
 
+class GPUObjects:
+    def __init__(self):
+        super().__setattr__("_gpu_objects", {})
+
+    def __getattr__(self, name):
+        return self._gpu_objects.get(name, None)
+
+    def __setattr__(self, name, value):
+        self._gpu_objects[name] = value
+
+    def __iter__(self):
+        return iter(self._gpu_objects.values())
 
 class BaseRenderer:
     label: str = ""
@@ -163,6 +175,7 @@ class BaseRenderer:
             self.label = label
 
         self._have_pipeline = False
+        self.gpu_objects = GPUObjects()
 
     def get_bounding_box(self) -> tuple[list[float], list[float]] | None:
         return None
@@ -180,6 +193,8 @@ class BaseRenderer:
     @check_timestamp
     def _update_and_create_render_pipeline(self, options: RenderOptions) -> None:
         self.update(options)
+        for c in self.gpu_objects:
+            c._update_and_create_render_pipeline(options)
         self.create_render_pipeline(options)
 
     @property

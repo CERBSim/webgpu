@@ -189,7 +189,7 @@ class ShapeRenderer(Renderer):
             colors = np.array(np.round(255 * colors), dtype=np.uint8).flatten()
         self._colors = colors
 
-        self.colormap = colormap or Colormap()
+        self.gpu_objects.colormap = colormap or Colormap()
         self._scale = 1.0
         self._scale_mode = ShapeRenderer.SCALE_UNIFORM
         self._scale_range = (0.01, 2, 0.01)
@@ -203,7 +203,7 @@ class ShapeRenderer(Renderer):
         self.total_height_buffer = None
 
     def get_bindings(self):
-        return self.colormap.get_bindings() + self._uniforms.get_bindings()
+        return self.gpu_objects.colormap.get_bindings() + self._uniforms.get_bindings()
 
     @property
     def positions(self):
@@ -302,7 +302,6 @@ class ShapeRenderer(Renderer):
 
         self.n_vertices = self.shape_data.triangles.size
         self.n_instances = self.positions_buffer._used_size // 12
-        self.colormap.update(options)
         self._uniforms = ShapeUniforms()
         self._uniforms.scale = self.scale
         self._uniforms.scale_mode = self.scale_mode
