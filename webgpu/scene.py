@@ -277,6 +277,9 @@ class Scene:
         if is_pyodide_main_thread:
             self._render()
             return
+            
+        if self._render_mutex is None:
+            return
 
         with self._render_mutex:
             if self.canvas is None or self.canvas.height == 0:
