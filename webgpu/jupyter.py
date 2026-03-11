@@ -138,7 +138,7 @@ def Draw(
 
     scene, id_ = _init_html(scene, width, height, flex)
 
-    draw_scene(scene, width, height, id_)
+    _draw_scene(scene, width, height, id_)
     return scene
 
 
