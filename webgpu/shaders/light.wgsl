@@ -18,7 +18,7 @@ struct LightUniforms {
 
 @group(0) @binding(8) var<uniform> u_light : LightUniforms;
 
-// Wrapped diffuse: keeps “dark side” from going black
+// Wrapped diffuse: keeps "dark side" from going black
 fn wrappedDiffuse(n: vec3f, L: vec3f, wrap: f32) -> f32 {
   let d = dot(n, L); // [-1..1]
   return clamp((d + wrap) / (1.0 + wrap), 0.0, 1.0);
