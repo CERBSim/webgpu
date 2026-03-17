@@ -44,7 +44,7 @@ fn lightCalcBrightnessScientific(p: vec3f, normal: vec3f) -> vec2f {
   // Very gentle spec (Blinn-Phong), only when facing light
   var spec = 0.0;
   if (u_light.shininess > 0.0 && u_light.specular > 0.0) {
-    // Gate spec by a non-wrapped facing term to avoid highlights on “back side”
+    // Gate spec by a non-wrapped facing term to avoid highlights on "back side"
     let facingK = max(dot(n, Lk), 0.0);
     let facingF = max(dot(n, Lf), 0.0);
 
