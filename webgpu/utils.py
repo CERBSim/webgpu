@@ -10,7 +10,7 @@ try:
     import pyodide.ffi
     import asyncio
     class Lock():
-        def __init__(self, do: bool = True):
+        def __init__(self, do: bool = False):
             self._lock = asyncio.Lock()
             self.do = do
 
