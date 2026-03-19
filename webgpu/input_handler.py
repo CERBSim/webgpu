@@ -45,7 +45,6 @@ class InputHandler:
     def __on_mousedown(self, ev):
         self._is_mousedown = True
         self._is_moving = False
-        self._mouse_button_down = ev.get("button", 0)
 
     def __on_mouseup(self, ev):
         self._is_mousedown = False
@@ -55,8 +54,7 @@ class InputHandler:
 
     def __on_mousemove(self, ev):
         self._is_moving = True
-        if self._is_mousedown:
-            ev["button"] = self._mouse_button_down
+        if ev["buttons"] != 0:
             self.emit("drag", ev)
 
     def on(
