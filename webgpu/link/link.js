@@ -8,6 +8,7 @@ function serializeEvent(event) {
   }
   const keys = [
     'button',
+    'buttons',
     'code',
     'key',
     'altKey',
@@ -164,6 +165,7 @@ class CrossLink {
         resolve();
       });
     });
+    this.onmessage = () => {};
   }
 
   async _sendRequestAwaitResponse(data) {
@@ -383,6 +385,17 @@ class CrossLink {
 
   async onMessage(event) {
     let data = event.data;
+    this.onmessage(data);
+
+    if (
+      typeof data === 'object' &&
+      Object.keys(data).length == 1 &&
+      data.status !== undefined
+    ) {
+      // ignore status messages
+      return;
+    }
+
     let request_id = undefined;
     let result_action = undefined;
     let buffer = undefined;
