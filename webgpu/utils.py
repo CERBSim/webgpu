@@ -10,7 +10,7 @@ try:
     import pyodide.ffi
     import asyncio
     class Lock():
-        def __init__(self, do: bool = False):
+        def __init__(self, do: bool = True):
             self._lock = asyncio.Lock()
             self.do = do
 
@@ -35,7 +35,7 @@ except ImportError:
         def __exit__(self, exc_type, exc, tb):
             self._lock.release()
 
-_lock_init_device = Lock()
+_lock_init_device = Lock(True)
 _device: Device = None
 
 def init_device_sync():
