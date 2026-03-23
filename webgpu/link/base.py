@@ -236,11 +236,9 @@ class LinkBase:
         self._objects[id_] = data
         return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
 
-    def _load_data(self, data):
+    def _load_data(self, data, buffers = None):
         """Parse the result of a message from the remote environment"""
         from .proxy import Proxy
-
-        # print("load data", data, type(data))
 
         if isinstance(data, list):
             return [self._load_data(v) for v in data]
@@ -260,6 +258,9 @@ class LinkBase:
 
         if data["type"] == "bytes":
             return base64.b64decode(data["value"])
+
+        if data["type"] == "buffer":
+            return buffers[data["index"]]
 
         raise Exception(f"Unknown result type: {data}")
 
@@ -301,8 +302,20 @@ class LinkBase:
             obj = obj[data["key"]]
         return obj
 
-    async def _on_message_async(self, message: str):
-        data = json.loads(message)
+    async def _on_message_async(self, message: str | memoryview):
+        if isinstance(message, memoryview):
+            prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
+            data = json.loads(bytes(message[4:prefix_size]).decode("utf-8"))
+            buffer_offsets = data['buffer_offsets']
+            buffers = []
+
+            for i in range(len(buffer_offsets)-1):
+                offset = buffer_offsets[i]
+                size = buffer_offsets[i+1] - offset
+                buffers.append(bytes(message[prefix_size+offset:prefix_size+offset+size]))
+        else:
+            data = json.loads(message)
+            buffers = []
         obj = None
         try:
             msg_type = data.get("type", None)
@@ -313,7 +326,7 @@ class LinkBase:
             match msg_type:
                 case "response":
                     event, key = self._requests[request_id]
-                    self._requests[request_id] = self._load_data(data.get("value", None))
+                    self._requests[request_id] = self._load_data(data.get("value", None), buffers)
                     if key and data.get("cache", False):
                         self._cache[key] = self._requests[request_id]
                     
@@ -325,7 +338,7 @@ class LinkBase:
 
                 case "call":
                     func = obj = self._get_obj(data)
-                    args = self._load_data(data["args"])
+                    args = self._load_data(data["args"], buffers)
                     response = func(*args)
                     try:
                         response = await response
@@ -347,7 +360,7 @@ class LinkBase:
                     if prop is not None:
                         obj.__setattr__(prop, data["value"])
                     elif key is not None:
-                        obj[key] = self._load_data(data["value"])
+                        obj[key] = self._load_data(data["value"], buffers)
 
                 case _:
                     print("unknown message type", msg_type)
