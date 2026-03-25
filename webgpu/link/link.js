@@ -257,7 +257,15 @@ class CrossLink {
     this.objects[name] = obj;
   }
 
-  async _dumpData(data) {
+  _dumpBuffer(data, buffers) {
+    return {
+      __is_crosslink_type__: true,
+      type: 'buffer',
+      index: buffers.push(new Uint8Array(data)) - 1,
+    };
+  }
+
+  async _dumpData(data, buffers) {
     if (data === null) return undefined;
     if (data === undefined) return undefined;
 
@@ -265,12 +273,7 @@ class CrossLink {
     if (data instanceof Event) return serializeEvent(data);
     if (data instanceof InputEvent) return serializeEvent(data);
 
-    if (data instanceof ArrayBuffer)
-      return {
-        __is_crosslink_type__: true,
-        type: 'bytes',
-        value: encodeB64(data),
-      };
+    if (data instanceof ArrayBuffer) return this._dumpBuffer(data, buffers);
 
     if (isPrimitive(data)) return data;
 
@@ -355,16 +358,45 @@ class CrossLink {
       return;
     }
 
-    const value = await this._dumpData(await Promise.resolve(data));
-    // console.log('encoded response data', request_id, value);
+    const rawData = await Promise.resolve(data);
 
-    this.connection.send({
+    const t0 = performance.now();
+    const buffers = [];
+    const value = await this._dumpData(rawData, buffers);
+    const t1 = performance.now();
+    if (t1 - t0 > 100) {
+      console.log(`encoding response took ${t1 - t0}ms`, request_id, rawData);
+    }
+
+    const response = {
       type: 'response',
       request_id,
       value,
       cache:
         value && value.__is_crosslink_type__ && value.js_type === 'function',
-    });
+    };
+
+    if (buffers.length == 0) {
+      this.connection.send(response);
+    } else {
+      const buffer_offsets = [0];
+      var offset = 0;
+      for (const b of buffers) {
+        offset += b.byteLength;
+        buffer_offsets.push(offset);
+      }
+      response.buffer_offsets = buffer_offsets;
+      const jsonMsg = new TextEncoder().encode(JSON.stringify(response));
+      const prefixLen = 4 + jsonMsg.byteLength;
+      const size = 4 + jsonMsg.byteLength + offset;
+      var msg = new Uint8Array(size);
+      msg.set(new Uint32Array([jsonMsg.byteLength]), 0);
+      msg.set(jsonMsg, 4);
+
+      for (var bufferIndex = 0; bufferIndex < buffers.length; bufferIndex++)
+        msg.set(buffers[bufferIndex], prefixLen + buffer_offsets[bufferIndex]);
+      this.connection.send(msg.buffer);
+    }
   }
 
   _decodeBinaryMessage(bdata) {
@@ -506,7 +538,10 @@ export function WebsocketLink(url) {
   const socket = new WebSocket(url);
   socket.binaryType = 'arraybuffer';
   return new CrossLink({
-    send: (data) => socket.send(JSON.stringify(data)),
+    send: (data) => {
+      if (typeof data === 'Uint8Array') socket.send(data);
+      else socket.send(JSON.stringify(data));
+    },
     onMessage: (callback) => (socket.onmessage = callback),
     onOpen: (callback) => (socket.onopen = callback),
   });
@@ -531,7 +566,8 @@ export function WebworkerLink(worker) {
   });
   return new CrossLink({
     send: (data) => {
-      worker.postMessage(JSON.stringify(data));
+      if (data instanceof ArrayBuffer) worker.postMessage(data, [data]);
+      else worker.postMessage(JSON.stringify(data));
     },
     onMessage: async (callback) => {
       await workerReady;
@@ -564,7 +600,8 @@ export function SharedWebworkerLink(worker) {
   });
   return new CrossLink({
     send: (data) => {
-      worker.port.postMessage(JSON.stringify(data));
+      if (data instanceof ArrayBuffer) worker.postMessage(data, [data]);
+      else worker.postMessage(JSON.stringify(data));
     },
     onMessage: async (callback) => {
       await workerReady;
