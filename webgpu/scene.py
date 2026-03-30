@@ -44,6 +44,7 @@ class Scene:
 
         self._id = id
         self.render_objects = render_objects
+        self._on_click_background = []
 
         self.t_last = 0
 
@@ -57,6 +58,9 @@ class Scene:
             "render_options": self.options,
         }
         return state
+
+    def on_click_background(self, callback):
+        self._on_click_background.append(callback)
 
     def __setstate__(self, state):
         """Restore a pickled scene and reinitialize input handling (canvas is set later)."""
@@ -163,7 +167,7 @@ class Scene:
         """Perform an object selection at (x, y) and dispatch callbacks on matching renderers."""
         objects = self.render_objects
 
-        have_select_callback = False
+        have_select_callback = len(self._on_click_background) != 0
         for obj in objects:
             if obj.active and obj.on_select_set:
                 have_select_callback = True
@@ -208,7 +212,9 @@ class Scene:
                         if obj._id == ev.obj_id:
                             obj._handle_on_select(ev)
                             break
-
+            else:
+                for cb in self._on_click_background:
+                    cb(ev)
             return ev
 
     # @print_communications
