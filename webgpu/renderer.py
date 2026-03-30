@@ -195,7 +195,8 @@ class BaseRenderer:
         self.update(options)
         for c in self.gpu_objects:
             c._update_and_create_render_pipeline(options)
-        self.create_render_pipeline(options)
+        if self.active:  # could be that I'm not active any more bc there was no data for me
+            self.create_render_pipeline(options)
 
     @property
     def device(self) -> Device:
