@@ -32,6 +32,21 @@ def _pack_message(data: dict) -> tuple[dict, bytes | str]:
     return data, bdata
 
 
+def _unpack_message(msg: str | memoryview | bytes) -> tuple[dict, list]:
+    if isinstance(msg, (memoryview, bytes)):
+        prefix_size = 4 + int.from_bytes(msg[:4], byteorder="little")
+        data = json.loads(bytes(msg[4:prefix_size]).decode("utf-8"))
+        buffer_offsets = data["buffer_offsets"]
+        buffers = []
+
+        for i in range(len(buffer_offsets) - 1):
+            offset = buffer_offsets[i]
+            size = buffer_offsets[i + 1] - offset
+            buffers.append(bytes(msg[prefix_size + offset : prefix_size + offset + size]))
+        return data, buffers
+    return json.loads(msg), []
+
+
 class LinkBase:
     _request_id: itertools.count
     _requests: dict
@@ -97,7 +112,7 @@ class LinkBase:
         self._objects = {}
         self._cache = {}
 
-        next(self._request_id) # make sure first id is 1, in case 0 is interpreted as None
+        next(self._request_id)  # make sure first id is 1, in case 0 is interpreted as None
 
     def _call_data(self, id, prop, args, ignore_result=False):
         buffer = []
@@ -236,7 +251,7 @@ class LinkBase:
         self._objects[id_] = data
         return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
 
-    def _load_data(self, data, buffers = None):
+    def _load_data(self, data, buffers=None):
         """Parse the result of a message from the remote environment"""
         from .proxy import Proxy
 
@@ -302,20 +317,8 @@ class LinkBase:
             obj = obj[data["key"]]
         return obj
 
-    async def _on_message_async(self, message: str | memoryview):
-        if isinstance(message, memoryview):
-            prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
-            data = json.loads(bytes(message[4:prefix_size]).decode("utf-8"))
-            buffer_offsets = data['buffer_offsets']
-            buffers = []
-
-            for i in range(len(buffer_offsets)-1):
-                offset = buffer_offsets[i]
-                size = buffer_offsets[i+1] - offset
-                buffers.append(bytes(message[prefix_size+offset:prefix_size+offset+size]))
-        else:
-            data = json.loads(message)
-            buffers = []
+    async def _on_message_async(self, message: str | memoryview | bytes):
+        data, buffers = _unpack_message(message)
         obj = None
         try:
             msg_type = data.get("type", None)
@@ -329,7 +332,7 @@ class LinkBase:
                     self._requests[request_id] = self._load_data(data.get("value", None), buffers)
                     if key and data.get("cache", False):
                         self._cache[key] = self._requests[request_id]
-                    
+
                     if isinstance(event, asyncio.Future):
                         event.set_result(self._requests[request_id])
                     else:
@@ -376,7 +379,7 @@ class LinkBase:
                 traceback.print_exception(*sys.exc_info(), file=sys.stderr)
 
     def _on_message(self, message: str):
-        data = json.loads(message)
+        data, buffers = _unpack_message(message)
         try:
             msg_type = data.get("type", None)
             request_id = data.get("request_id", None)
@@ -386,7 +389,7 @@ class LinkBase:
             match msg_type:
                 case "response":
                     event, key = self._requests[request_id]
-                    response = self._load_data(data.get("value", None))
+                    response = self._load_data(data.get("value", None), buffers)
                     self._requests[request_id] = response
                     if data.get("cache", False):
                         self._cache[key] = response
@@ -395,7 +398,7 @@ class LinkBase:
 
                 case "call":
                     func = self._get_obj(data)
-                    args = self._load_data(data["args"])
+                    args = self._load_data(data["args"], buffers)
                     # print("call", func, args)
                     response = func(*args)
 
@@ -412,10 +415,10 @@ class LinkBase:
                     if prop is not None:
                         obj.__setattr__(prop, data["value"])
                     elif key is not None:
-                        obj[key] = self._load_data(data["value"])
+                        obj[key] = self._load_data(data["value"], buffers)
 
                 case _:
-                    print("unknown message type", msg_type)
+                    print("unknown message type", msg_type, data, type(message))
 
             if request_id is not None:
                 self._send_response(request_id, response)
@@ -452,6 +455,7 @@ class PyodideLink(LinkBase):
         if type != "response" and request_id is not None:
             # from pyodide.ffi import run_sync
             import asyncio
+
             event = asyncio.Future()
             self._requests[request_id] = event, key
             # todo: this shouldn't be necessary
