@@ -539,7 +539,7 @@ export function WebsocketLink(url) {
   socket.binaryType = 'arraybuffer';
   return new CrossLink({
     send: (data) => {
-      if (typeof data === 'Uint8Array') socket.send(data);
+      if (data instanceof ArrayBuffer) socket.send(data);
       else socket.send(JSON.stringify(data));
     },
     onMessage: (callback) => (socket.onmessage = callback),
