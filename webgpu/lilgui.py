@@ -9,10 +9,15 @@ class Folder:
         self.container = container
         self.scene = scene
         self.gui = None
+        self.folders = {}
 
     def folder(self, label: str, closed=False):
-        folder = Folder(label, self.container, self.scene)
-        folder.gui = self.gui.addFolder(label)
+        if label not in self.folders:
+            folder = Folder(label, self.container, self.scene)
+            folder.gui = self.gui.addFolder(label)
+            self.folders[label] = folder
+        else:
+            folder = self.folders[label]
         if closed:
             folder.gui.close()
         return folder
