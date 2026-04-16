@@ -160,7 +160,6 @@ class GPUObjects:
 class BaseRenderer:
     label: str = ""
     _timestamp: float = -1
-    active: bool = True
     shader_defines: dict[str, str] = None
     _id = None
     _on_select: list[Callable[[SelectEvent], None]]
@@ -174,6 +173,7 @@ class BaseRenderer:
         else:
             self.label = label
 
+        self._active = True
         self._have_pipeline = False
         self.gpu_objects = GPUObjects()
 
@@ -223,6 +223,17 @@ class BaseRenderer:
 
     def add_options_to_gui(self, gui):
         pass
+
+
+    @property
+    def active(self):
+        return self._active
+
+    @active.setter
+    def active(self, value):
+        if value and not self._active:
+            self.set_needs_update()
+        self._active = value
 
     def set_needs_update(self) -> None:
         self._timestamp = -1
