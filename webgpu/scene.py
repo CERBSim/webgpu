@@ -165,6 +165,8 @@ class Scene:
     @debounce
     def select(self, x: int, y: int):
         """Perform an object selection at (x, y) and dispatch callbacks on matching renderers."""
+        if self._render_mutex is None:
+            return
         objects = self.render_objects
 
         have_select_callback = len(self._on_click_background) != 0
