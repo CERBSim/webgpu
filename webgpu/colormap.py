@@ -136,34 +136,38 @@ class Colormap(BaseRenderer):
 
     def get_bindings(self):
         return [
-            TextureBinding(Binding.COLORMAP_TEXTURE, self.texture),
+            TextureBinding(Binding.COLORMAP_TEXTURE, self.texture, dim=2),
             SamplerBinding(Binding.COLORMAP_SAMPLER, self.sampler),
             *self.uniforms.get_bindings(),
         ]
 
     def _create_texture(self):
         data = self.colors
-        n = len(data)
         if len(data[0]) == 4:
             v4 = data
         else:
             v4 = [v + [255] for v in data]
         data = sum(v4, [])
+        n = len(data) // 4
+        w = min(n, 1024)
+        h = (n + w - 1) // w
+        data = data + [255] * ((w * h - n) * 4)
 
         device = get_device()
-        if self.texture is None or self.texture.width != n:
+        if self.texture is None or self.texture.width != w or self.texture.height != h:
             self.texture = device.createTexture(
-                size=[n, 1, 1],
+                size=[w, h, 1],
                 usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
                 format=TextureFormat.rgba8unorm,
-                dimension="1d",
+                dimension="2d",
+                label="colormap_texture",
             )
 
         device.queue.writeTexture(
             TexelCopyTextureInfo(self.texture),
             np.array(data, dtype=np.uint8).tobytes(),
-            TexelCopyBufferLayout(bytesPerRow=n * 4),
-            [n, 1, 1],
+            TexelCopyBufferLayout(bytesPerRow=w * 4),
+            [w, h, 1],
         )
 
 

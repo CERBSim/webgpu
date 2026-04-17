@@ -1,4 +1,4 @@
-@group(0) @binding(6) var u_colormap_texture : texture_1d<f32>;
+@group(0) @binding(6) var u_colormap_texture : texture_2d<f32>;
 @group(0) @binding(7) var u_colormap_sampler : sampler;
 @group(0) @binding(5) var<uniform> u_cmap_uniforms : ColormapUniforms;
 @group(0) @binding(9) var<uniform> u_cbar_uniforms : ColorbarUniforms;
@@ -20,13 +20,30 @@ struct ColorbarUniforms {
 
 fn getColor(value: f32) -> vec4<f32> {
   var v = (value - u_cmap_uniforms.min) / (u_cmap_uniforms.max - u_cmap_uniforms.min);
-  if(u_cmap_uniforms.discrete == 1u) {
-      v = f32(u32(f32(u_cmap_uniforms.n_colors) * v));
-      v = v / f32(u_cmap_uniforms.n_colors);
-    }
-  return textureSample(u_colormap_texture, u_colormap_sampler, v);
-}
+  let N = u_cmap_uniforms.n_colors;
+  let Nf = f32(N);
 
+  v = clamp(v, 0.0, 1.0);
+
+  var colorIndex = v * (Nf - 1.0);
+  if (u_cmap_uniforms.discrete == 1u) {
+    colorIndex = floor(colorIndex);
+  }
+
+  var uv = vec2f(0.5, 0.5);
+  if (N < 1024u) {
+    uv.x = (colorIndex + 0.5) / Nf;
+  } else {
+    let texWidth = 1024.0;
+    let x = colorIndex % texWidth;
+    let y = floor(colorIndex / texWidth);
+    let texHeight = ceil(Nf / texWidth);
+    uv.x = (x + 0.5) / texWidth;
+    uv.y = (y + 0.5) / texHeight;
+  }
+
+  return textureSample(u_colormap_texture, u_colormap_sampler, uv);
+}
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) val: f32,
