@@ -134,7 +134,7 @@ def check_timestamp(callback: Callable):
     """Decorator to handle updates for render objects. The function is only called if the timestamp has changed."""
 
     def wrapper(self, options, *args, **kwargs):
-        if options.timestamp == self._timestamp:
+        if options.timestamp == self._timestamp and not self.needs_update:
             return
         callback(self, options, *args, **kwargs)
         self._timestamp = options.timestamp
@@ -231,7 +231,7 @@ class BaseRenderer:
 
     @active.setter
     def active(self, value):
-        if value and not self._active:
+        if value != self._active:
             self.set_needs_update()
         self._active = value
 
