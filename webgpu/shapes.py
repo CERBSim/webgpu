@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .colormap import Colormap
+from .clipping import Clipping
 from .renderer import Renderer, RenderOptions
 from .uniforms import UniformBase, ct
 from .utils import (
@@ -168,6 +169,7 @@ class ShapeRenderer(Renderer):
         colors: np.ndarray | None = None,
         label=None,
         colormap=None,
+        clipping=None,
     ):
 
         super().__init__(label=label)
@@ -190,6 +192,7 @@ class ShapeRenderer(Renderer):
         self._colors = colors
 
         self.gpu_objects.colormap = colormap or Colormap()
+        self.gpu_objects.clipping = clipping or Clipping()
         self._scale = 1.0
         self._scale_mode = ShapeRenderer.SCALE_UNIFORM
         self._scale_range = (0.01, 2, 0.01)
@@ -203,7 +206,7 @@ class ShapeRenderer(Renderer):
         self.total_height_buffer = None
 
     def get_bindings(self):
-        return self.gpu_objects.colormap.get_bindings() + self._uniforms.get_bindings()
+        return self.gpu_objects.colormap.get_bindings() + self._uniforms.get_bindings() + self.gpu_objects.clipping.get_bindings()
 
     @property
     def positions(self):

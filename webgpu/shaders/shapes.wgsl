@@ -1,6 +1,7 @@
 #import light
 #import camera
 #import colormap
+#import clipping
 
 struct ShapeVertexIn {
     @location(0) position: vec3f,
@@ -59,6 +60,7 @@ struct ShapeUniform {
 @fragment fn shape_fragment_main_value(
     input: ShapeVertexOut,
 ) -> @location(0) vec4f {
+    checkClipping(input.p);
     let color = getColor(input.color.x);
     return lightCalcColor(input.p, input.normal, color);
 }
@@ -66,12 +68,14 @@ struct ShapeUniform {
 @fragment fn shape_fragment_main_color(
     input: ShapeVertexOut,
 ) -> @location(0) vec4f {
+    checkClipping(input.p);
     return lightCalcColor(input.p, input.normal, input.color);
 }
 
 @fragment fn shape_fragment_main_select(
     input: ShapeVertexOut,
 ) -> @location(0) vec4<u32> {
+    checkClipping(input.p);
     return vec4<u32>(@RENDER_OBJECT_ID@, input.instance, bitcast<u32>(input.color.x), 0);
 }
 

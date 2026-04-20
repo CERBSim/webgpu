@@ -36,6 +36,7 @@ class Clipping(BaseRenderer):
         radius=1.0,
         offset=0.0,
     ):
+        super().__init__()
         self.mode = mode
         self.center = center
         self.normal = normal
