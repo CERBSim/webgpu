@@ -54,7 +54,7 @@ class InputHandler:
 
     def __on_mousemove(self, ev):
         self._is_moving = True
-        if ev["buttons"] != 0:
+        if "buttons" in ev and ev["buttons"] != 0:
             self.emit("drag", ev)
 
     def on(
