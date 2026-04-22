@@ -236,7 +236,7 @@ now available in your tests.
 
 Derive from the ``webgpu-base`` image so you get Chrome, lavapipe and
 Python test dependencies for free.  Install ``webgpu`` (which includes
-``webgpu.testing``) from PyPI or from a local checkout:
+``webgpu.testing``) from PyPI:
 
 .. code-block:: dockerfile
 

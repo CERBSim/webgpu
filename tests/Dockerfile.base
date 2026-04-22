@@ -3,6 +3,8 @@ FROM mcr.microsoft.com/playwright/python:v1.58.0-noble
 # Install lavapipe (software Vulkan) for WebGPU support
 RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-vulkan-drivers \
+    git-lfs \
+    && git lfs install \
     && rm -rf /var/lib/apt/lists/*
 
 ENV VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json
