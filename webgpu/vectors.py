@@ -41,8 +41,6 @@ class BaseVectorRenderer(Renderer):
 
     def get_bindings(self):
         return [
-            *self.options.camera.get_bindings(),
-            *self.options.light.get_bindings(),
             BufferBinding(Binding.POINTS, self._buffers["points"]),
             BufferBinding(Binding.VECTORS, self._buffers["vectors"]),
             *self.vec_uniforms.get_bindings(),
@@ -53,11 +51,7 @@ class BaseVectorRenderer(Renderer):
         raise NotImplementedError
 
     def get_shader_code(self):
-        shader_code = read_shader_file("vector.wgsl")
-        shader_code += self.options.camera.get_shader_code()
-        shader_code += self.options.light.get_shader_code()
-        shader_code += self.gpu_objects.colormap.get_shader_code()
-        return shader_code
+        return read_shader_file("vector.wgsl")
 
     def render(self, encoder):
         super().render(encoder)
@@ -81,7 +75,7 @@ class VectorRenderer(BaseVectorRenderer):
             "points": buffer_from_array(self.points),
             "vectors": buffer_from_array(self.vectors),
         }
-        self.vec_uniforms = VectorUniform(self.device)
+        self.vec_uniforms = VectorUniform()
         self.vec_uniforms.size = self.size
         self.vec_uniforms.scale_veclen = self.scale_with_vector_length
         self.vec_uniforms.update_buffer()
@@ -89,9 +83,8 @@ class VectorRenderer(BaseVectorRenderer):
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).min(),
             np.linalg.norm(self.vectors.reshape(-1, 3), axis=1).max(),
         )
-        if self.gpu_objects.colormap.autoupdate:
-            self.gpu_objects.colormap.set_min_max(min_vec, max_vec, set_autoupdate=False)
-            self.gpu_objects.colormap.update(timestamp + 1)
+        if self.gpu_objects.colormap.autoscale:
+            self.gpu_objects.colormap.set_min_max(min_vec, max_vec, set_autoscale=False)
         self.n_instances = len(self.points) // 3
 
     def get_bounding_box(self):

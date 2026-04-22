@@ -1,3 +1,6 @@
+#import camera
+#import light
+#import colormap
 
 @group(0) @binding(81) var<storage, read> vec_points: array<f32>;
 @group(0) @binding(82) var<storage, read> vec_vectors: array<f32>;
@@ -24,7 +27,7 @@ fn Cross(a: vec3f, b: vec3f) -> vec3f {
 struct VectorFragmentInput {
   @builtin(position) fragPosition: vec4<f32>,
   @location(0) color_val: f32,
-  @location(1) p: vec3<f32>
+  @location(1) p: vec3<f32>,
   @location(2) n: vec3<f32>
 };
 
@@ -106,7 +109,7 @@ fn vertex_main(@builtin(vertex_index) index: u32,
         cone_points[2] - cone_points[3])));
 
     let normal = cone_normals[cone_strip_normals[index]];
-    return VectorFragmentInput(view_position, position, length(vector),
+    return VectorFragmentInput(view_position, length(vector), position,
         rotation_matrix * normal);
 }
 

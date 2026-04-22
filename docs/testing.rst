@@ -157,9 +157,15 @@ attributes and methods:
    Read back the rendered texture from the GPU via a JS-side buffer
    readback and save it as a PNG. Returns *path*.
 
-.. method:: assert_matches_baseline(output_path, baseline_name, *, threshold=0.01)
+.. method:: assert_matches_baseline(scene, filename, *, threshold=0.01)
 
-   Compare an output image against a baseline in ``baseline_dir``.
+   Perform a full visual regression check on a rendered scene:
+
+   1. Assert the scene is valid and has render objects
+   2. Wait 500 ms for rendering to settle
+   3. Read back the GPU texture to ``output_dir / filename``
+   4. Compare the output against ``baseline_dir / filename``
+
    Fails the test if more than *threshold* (fraction) of pixels differ.
 
    When the environment variable ``UPDATE_BASELINES=1`` is set, the
@@ -204,30 +210,16 @@ now available in your tests.
 
    """test_rendering.py"""
 
-   import numpy as np
-   from PIL import Image
-
    class TestMyRendering:
        def test_draw_something(self, webgpu_env):
            # Import your package lazily — see note below.
            from my_package.jupyter import Draw
 
-           canvas_id = webgpu_env.ensure_canvas(600, 600)
+           webgpu_env.ensure_canvas(600, 600)
            scene = Draw(my_data, width=600, height=600)
-           webgpu_env.page.wait_for_timeout(500)
 
-           # Read back pixels from the GPU
-           path = webgpu_env.output_dir / "my_test.png"
-           webgpu_env.output_dir.mkdir(parents=True, exist_ok=True)
-           webgpu_env.readback_texture(scene, path)
-
-           # Basic sanity check
-           img = np.array(Image.open(path))
-           unique = len(np.unique(img.reshape(-1, img.shape[-1]), axis=0))
-           assert unique > 2, "Screenshot looks blank"
-
-           # Compare against baseline
-           webgpu_env.assert_matches_baseline(path, "my_test.png")
+           # Readback, validate, and compare against baseline — all in one call
+           webgpu_env.assert_matches_baseline(scene, "my_test.png")
 
 .. important::
 

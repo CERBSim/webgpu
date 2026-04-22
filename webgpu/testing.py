@@ -186,30 +186,47 @@ class WebGPUTestEnv:
         el.screenshot(path=str(path))
         return path
 
-    def assert_matches_baseline(self, output_path, baseline_name, *, threshold=0.01):
-        """Compare an output image against its baseline.
+    def assert_matches_baseline(self, scene, filename, *, threshold=0.01):
+        """Readback a scene's rendered texture and compare against a baseline.
 
-        If ``UPDATE_BASELINES=1`` env-var is set, copies output -> baseline instead.
-        *threshold* is the max fraction of pixels allowed to differ.
+        Performs the full visual regression check:
+
+        1. Asserts the scene is valid and has render objects
+        2. Waits for rendering to settle
+        3. Reads back the GPU texture to a PNG in ``output_dir``
+        4. Compares the output against the baseline in ``baseline_dir``
+
+        If ``UPDATE_BASELINES=1`` env-var is set, copies output -> baseline
+        instead of comparing.  *threshold* is the max fraction of pixels
+        allowed to differ.
         """
         import numpy as np
         from PIL import Image
 
+        assert scene is not None
+        assert len(scene.render_objects) > 0
+
+        self.page.wait_for_timeout(500)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / filename
+        self.readback_texture(scene, path)
+        assert path.exists()
+
         assert self.baseline_dir, "baseline_dir not configured on WebGPUTestEnv"
-        baseline_path = self.baseline_dir / baseline_name
+        baseline_path = self.baseline_dir / filename
 
         if UPDATE_BASELINES:
             self.baseline_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(output_path, baseline_path)
-            print(f"  Updated baseline: {baseline_name}")
+            shutil.copy2(path, baseline_path)
+            print(f"  Updated baseline: {filename}")
             return
 
         if not baseline_path.exists():
             pytest.skip(
-                f"No baseline {baseline_name} — run with UPDATE_BASELINES=1 to create"
+                f"No baseline {filename} — run with UPDATE_BASELINES=1 to create"
             )
 
-        out = np.array(Image.open(output_path))
+        out = np.array(Image.open(path))
         ref = np.array(Image.open(baseline_path))
 
         if out.shape != ref.shape:
@@ -221,8 +238,7 @@ class WebGPUTestEnv:
         ratio = bad_pixels / total
 
         if ratio > threshold:
-            assert self.output_dir, "output_dir not configured on WebGPUTestEnv"
-            diff_path = self.output_dir / f"diff_{baseline_name}"
+            diff_path = self.output_dir / f"diff_{filename}"
             diff_img = np.clip(diff * 10, 0, 255).astype(np.uint8)
             Image.fromarray(diff_img).save(str(diff_path))
             pytest.fail(

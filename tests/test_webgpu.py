@@ -103,11 +103,5 @@ class TestRendering:
 
         renderer = self._make_triangle_renderer()
         scene = webgpu_env.wj.Draw([renderer], width=400, height=400)
-        webgpu_env.page.wait_for_timeout(500)
 
-        webgpu_env.output_dir.mkdir(parents=True, exist_ok=True)
-        path = webgpu_env.output_dir / "triangle.png"
-        webgpu_env.readback_texture(scene, path)
-
-        assert path.exists()
-        webgpu_env.assert_matches_baseline(path, "triangle.png")
+        webgpu_env.assert_matches_baseline(scene, "triangle.png")
