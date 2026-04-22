@@ -14,11 +14,29 @@ jobs:
         with:
           lfs: true
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build base image
-        run: docker build -f tests/Dockerfile.base -t webgpu-base .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tests/Dockerfile.base
+          tags: webgpu-base
+          load: true
+          cache-from: type=gha,scope=webgpu-base
+          cache-to: type=gha,mode=max,scope=webgpu-base
 
       - name: Build test image
-        run: docker build -f tests/Dockerfile --build-arg BASE_IMAGE=webgpu-base -t webgpu-tests .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tests/Dockerfile
+          build-args: BASE_IMAGE=webgpu-base
+          tags: webgpu-tests
+          load: true
+          cache-from: type=gha,scope=webgpu-tests
+          cache-to: type=gha,mode=max,scope=webgpu-tests
 
       - name: Run tests
         run: |

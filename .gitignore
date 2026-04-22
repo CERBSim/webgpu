@@ -10,3 +10,4 @@ docs/html
 /webgpu/_version.py
 /docs/.virtual_documents/
 /.virtual_documents/
+/tests/output/
