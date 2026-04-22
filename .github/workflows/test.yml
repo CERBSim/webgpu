@@ -49,15 +49,7 @@ jobs:
         run: docker push ${{ env.BASE_IMAGE }}:latest
 
       - name: Build test image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: tests/Dockerfile
-          build-args: BASE_IMAGE=webgpu-base
-          tags: webgpu-tests
-          load: true
-          cache-from: type=gha,scope=webgpu-tests
-          cache-to: type=gha,mode=max,scope=webgpu-tests
+        run: docker build -f tests/Dockerfile --build-arg BASE_IMAGE=webgpu-base -t webgpu-tests .
 
       - name: Run tests
         run: |
