@@ -57,13 +57,36 @@ Downstream ``Dockerfile`` (e.g. ngsolve_webgpu)
    │              │   own tests)  │
    └──────────────┴───────────────┘
 
-The ``webgpu-base`` image is built from the webgpu repository::
+
+Container registry
+^^^^^^^^^^^^^^^^^^
+
+The webgpu CI publishes the base image to the GitHub Container Registry on
+every push to ``main``:
+
+.. code-block:: text
+
+   ghcr.io/cerbsim/webgpu-base:latest
+
+Downstream packages can pull this pre-built image instead of rebuilding it
+from source, which saves several minutes of CI time.
+
+**Building locally** (from a webgpu checkout)::
 
    docker build -f tests/Dockerfile.base -t webgpu-base .
 
-Downstream packages reference it via a build argument::
+**Pulling from the registry**::
 
-   docker build -f tests/Dockerfile --build-arg BASE_IMAGE=webgpu-base -t my-tests .
+   docker pull ghcr.io/cerbsim/webgpu-base:latest
+
+**Using in a downstream Dockerfile**:
+
+.. code-block:: dockerfile
+
+   ARG BASE_IMAGE=ghcr.io/cerbsim/webgpu-base:latest
+   FROM ${BASE_IMAGE}
+
+   # install your package ...
 
 
 Provided fixtures
@@ -186,8 +209,7 @@ now available in your tests.
 
    class TestMyRendering:
        def test_draw_something(self, webgpu_env):
-           # Import your package lazily — webgpu.jupyter must not be
-           # imported at module level or it will block during collection.
+           # Import your package lazily — see note below.
            from my_package.jupyter import Draw
 
            canvas_id = webgpu_env.ensure_canvas(600, 600)
@@ -212,7 +234,7 @@ now available in your tests.
    Packages that trigger ``webgpu.jupyter`` at import time (which calls
    ``platform.init()`` and blocks on a websocket connection) **must** be
    imported inside the test function, not at module level.  Otherwise
-   pytest will hang during collection.
+   pytest will hang during test collection.
 
 3. **Create a Dockerfile**
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -222,7 +244,7 @@ Derive from the ``webgpu-base`` image so you get Chrome, lavapipe, and the
 
 .. code-block:: dockerfile
 
-   ARG BASE_IMAGE=webgpu-base
+   ARG BASE_IMAGE=ghcr.io/cerbsim/webgpu-base:latest
    FROM ${BASE_IMAGE}
 
    RUN pip install --no-cache-dir --break-system-packages my-dependency
@@ -280,13 +302,23 @@ Or pass the variable through Docker::
        my-package-tests
 
 The generated PNGs in ``tests/baselines/`` should be committed to version
-control.
+control.  If your repository uses **Git LFS** for binary files (recommended
+for PNGs), make sure LFS is set up before committing::
+
+   git lfs track "*.png"
+   git add .gitattributes tests/baselines/
+   git commit -m "Add baseline images"
 
 
 GitHub Actions
 --------------
 
-A minimal workflow that runs the tests on every push and PR:
+The webgpu CI publishes ``ghcr.io/cerbsim/webgpu-base:latest`` on every
+push to ``main``.  Downstream packages can pull this image directly,
+avoiding the need to check out the webgpu repository or rebuild the base
+image.
+
+A minimal workflow for a downstream package:
 
 .. code-block:: yaml
 
@@ -297,26 +329,25 @@ A minimal workflow that runs the tests on every push and PR:
      pull_request:
        branches: [main]
 
+   env:
+     BASE_IMAGE: ghcr.io/cerbsim/webgpu-base
+
    jobs:
      test:
        runs-on: ubuntu-latest
        steps:
          - uses: actions/checkout@v4
-
-         - name: Checkout webgpu (base image)
-           uses: actions/checkout@v4
            with:
-             repository: CERBSim/webgpu
-             path: _webgpu
+             lfs: true  # needed if baselines are stored in Git LFS
 
-         - name: Build base image
-           run: docker build -f _webgpu/tests/Dockerfile.base
-                -t webgpu-base _webgpu
+         - name: Pull base image
+           run: docker pull ${{ env.BASE_IMAGE }}:latest
 
          - name: Build test image
-           run: docker build -f tests/Dockerfile
-                --build-arg BASE_IMAGE=webgpu-base
-                -t my-tests .
+           run: |
+             docker build -f tests/Dockerfile \
+               --build-arg BASE_IMAGE=${{ env.BASE_IMAGE }}:latest \
+               -t my-tests .
 
          - name: Run tests
            run: |
@@ -330,3 +361,8 @@ A minimal workflow that runs the tests on every push and PR:
            with:
              name: test-output
              path: tests/output/
+
+The test image build uses plain ``docker build`` (not buildx) so it can
+see the pulled base image in the local Docker daemon.  The test image
+layer is small (just installing your package + copying tests), so caching
+it is not necessary.
