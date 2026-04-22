@@ -32,28 +32,30 @@ Docker images
 A three-layer Docker image scheme keeps things DRY:
 
 ``Dockerfile.base`` (provided by webgpu)
-   Playwright + Chrome + lavapipe + the ``webgpu`` package installed.
-   Clean ``/app`` work directory, no tests.  Downstream packages derive
-   from this image.
+   Playwright + Chrome + lavapipe + Python test dependencies.
+   Clean ``/app`` work directory, no source code or tests.  Downstream
+   packages (including webgpu's own test image) derive from this image.
 
 ``Dockerfile`` (webgpu tests)
-   Extends the base image, copies the webgpu test suite into ``/app/tests``.
+   Extends the base image, installs the ``webgpu`` package from source
+   and copies the test suite into ``/app/tests``.
 
 Downstream ``Dockerfile`` (e.g. ngsolve_webgpu)
-   Extends the base image, installs additional dependencies and the
-   downstream package, copies its own tests.
+   Extends the base image, installs ``webgpu`` (from PyPI or source),
+   additional dependencies and the downstream package, copies its own tests.
 
 .. code-block:: text
 
    ┌──────────────────────────────┐
    │  Dockerfile.base             │
    │  (playwright, chrome,        │
-   │   lavapipe, webgpu)          │
+   │   lavapipe)                  │
    ├──────────────┬───────────────┤
    │              │               │
    │  Dockerfile  │  downstream   │
-   │  (webgpu     │  Dockerfile   │
-   │   tests)     │  (+ ngsolve,  │
+   │  (+ webgpu,  │  Dockerfile   │
+   │   tests)     │  (+ webgpu,   │
+   │              │   ngsolve,    │
    │              │   own tests)  │
    └──────────────┴───────────────┘
 
@@ -61,15 +63,16 @@ Downstream ``Dockerfile`` (e.g. ngsolve_webgpu)
 Container registry
 ^^^^^^^^^^^^^^^^^^
 
-The webgpu CI publishes the base image to the GitHub Container Registry on
-every push to ``main``:
+The webgpu CI publishes the base image to the GitHub Container Registry
+when its contents change (only on pushes to ``main``):
 
 .. code-block:: text
 
    ghcr.io/cerbsim/webgpu-base:latest
 
-Downstream packages can pull this pre-built image instead of rebuilding it
-from source, which saves several minutes of CI time.
+Because the base image contains only stable system-level dependencies, its
+layers rarely change and CI builds get fast cache hits.  Downstream
+packages can pull this pre-built image instead of rebuilding from source.
 
 **Building locally** (from a webgpu checkout)::
 
@@ -231,15 +234,16 @@ now available in your tests.
 3. **Create a Dockerfile**
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Derive from the ``webgpu-base`` image so you get Chrome, lavapipe, and the
-``webgpu`` package (including ``webgpu.testing``) for free:
+Derive from the ``webgpu-base`` image so you get Chrome, lavapipe and
+Python test dependencies for free.  Install ``webgpu`` (which includes
+``webgpu.testing``) from PyPI or from a local checkout:
 
 .. code-block:: dockerfile
 
    ARG BASE_IMAGE=ghcr.io/cerbsim/webgpu-base:latest
    FROM ${BASE_IMAGE}
 
-   RUN pip install --no-cache-dir --break-system-packages my-dependency
+   RUN pip install --no-cache-dir --break-system-packages webgpu my-dependency
 
    WORKDIR /app
    COPY pyproject.toml .
@@ -305,10 +309,10 @@ for PNGs), make sure LFS is set up before committing::
 GitHub Actions
 --------------
 
-The webgpu CI publishes ``ghcr.io/cerbsim/webgpu-base:latest`` on every
-push to ``main``.  Downstream packages can pull this image directly,
-avoiding the need to check out the webgpu repository or rebuild the base
-image.
+The webgpu CI publishes ``ghcr.io/cerbsim/webgpu-base:latest`` when its
+layers change (on pushes to ``main``).  Downstream packages can pull this
+image directly, avoiding the need to check out the webgpu repository or
+rebuild the base image.
 
 A minimal workflow for a downstream package:
 

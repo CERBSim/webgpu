@@ -23,11 +23,4 @@ RUN curl -sSL -o /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrom
     && apt-get install -y --no-install-recommends /tmp/chrome.deb \
     && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*
 
-# Install webgpu from a staging dir so /app stays clean for downstream images
-COPY pyproject.toml /tmp/webgpu_build/
-COPY webgpu/ /tmp/webgpu_build/webgpu/
-ENV SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
-RUN pip install --no-cache-dir --break-system-packages /tmp/webgpu_build \
-    && rm -rf /tmp/webgpu_build
-
 WORKDIR /app
