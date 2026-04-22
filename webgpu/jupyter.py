@@ -167,8 +167,12 @@ window.draw_scene = async (data) => {
 """
 
 if not platform.is_pyodide:
-    from IPython.display import Javascript, display
+    try:
+        from IPython.display import Javascript, display
+    except ImportError:
+        pass  # Not in a notebook (e.g. test framework) — skip auto-init.
 
+if not platform.is_pyodide and "Javascript" in dir():
     is_exporting = "WEBGPU_EXPORTING" in os.environ
 
     if is_exporting:
