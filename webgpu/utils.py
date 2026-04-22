@@ -50,7 +50,7 @@ def init_device_sync():
 
         reqAdapter = platform.js.navigator.gpu.requestAdapter
         options = RequestAdapterOptions(
-            powerPreference=PowerPreference.low_power,
+            powerPreference=PowerPreference.high_performance,
         ).toJS()
         adapter = Adapter(reqAdapter(options))
         maxBufferSize = adapter.limits.maxBufferSize

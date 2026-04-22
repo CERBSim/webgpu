@@ -1,0 +1,33 @@
+FROM mcr.microsoft.com/playwright/python:v1.58.0-noble
+
+# Install lavapipe (software Vulkan) for WebGPU support
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mesa-vulkan-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json
+ENV MESA_VK_DEVICE_SELECT=lvp
+ENV PYTHONPATH=/usr/local/lib/python3.12/site-packages
+
+# Install deps first for better layer caching
+RUN pip install --no-cache-dir --break-system-packages \
+    websockets \
+    pytest \
+    playwright==1.58.0 \
+    Pillow \
+    numpy
+
+# Install Google Chrome stable (Playwright Chromium lacks WebGPU)
+RUN curl -sSL -o /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/chrome.deb \
+    && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*
+
+# Install webgpu from a staging dir so /app stays clean for downstream images
+COPY pyproject.toml /tmp/webgpu_build/
+COPY webgpu/ /tmp/webgpu_build/webgpu/
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
+RUN pip install --no-cache-dir --break-system-packages /tmp/webgpu_build \
+    && rm -rf /tmp/webgpu_build
+
+WORKDIR /app

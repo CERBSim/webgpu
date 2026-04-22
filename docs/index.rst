@@ -27,6 +27,7 @@ Contents
 
    getting_started
    user_guide
+   testing
    tutorials
    api
 

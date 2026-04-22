@@ -24,11 +24,11 @@ dependencies = ["numpy", "requests", "packaging"]
 version_file = "webgpu/_version.py"
 local_scheme = "no-local-version"
 
-[tool.setuptools]
-packages = ["webgpu"]
+[tool.setuptools.packages.find]
+include = ["webgpu*"]
 
 [tool.setuptools.package-data]
-"webgpu" = ["shaders/*.wgsl", "fonts.json"]
+"webgpu" = ["shaders/*.wgsl", "font.bin", "link/*.js"]
 
 [tool.isort]
 profile = "black"
@@ -41,4 +41,4 @@ target-version = ['py310']
 include = '\.pyi?$'
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-pyodide"]
+test = ["pytest", "pytest-pyodide", "playwright", "Pillow"]

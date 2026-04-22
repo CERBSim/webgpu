@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import base64
 import itertools
 import json
@@ -205,6 +206,9 @@ class LinkBase:
         return {"__is_crosslink_type__": True, "type": "proxy", "id": id_}
 
     def _dump_data(self, data, buffer=None):
+        # sys.meta_path None can happen if called while Python shutdown. In that case, we don't care.
+        if sys is None or sys.meta_path is None:
+            return data
         from .proxy import Proxy
 
         type_ = type(data)
