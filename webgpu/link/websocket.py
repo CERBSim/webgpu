@@ -118,7 +118,6 @@ class WebsocketLinkServer(WebsocketLinkBase):
             self._send_loop.run_until_complete(start_websocket())
         except Exception as e:
             print("exception in _start_websocket_server", e)
-        print("stopped websocket")
 
     def stop(self):
         self._send_loop.call_soon_threadsafe(self._stop.set_result, None)
