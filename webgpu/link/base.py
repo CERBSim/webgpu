@@ -480,8 +480,6 @@ class LinkBaseAsync(LinkBase):
         super().__init__()
         self._send_loop = asyncio.new_event_loop()
         self._callback_loop = asyncio.new_event_loop()
-        self._callback_queue = asyncio.Queue()
-
         self._callback_thread = threading.Thread(target=self._start_callback_thread, daemon=True)
         self._callback_thread.start()
 
@@ -516,7 +514,13 @@ class LinkBaseAsync(LinkBase):
             event = threading.Event()
             self._requests[request_id] = event, key
 
-        asyncio.run_coroutine_threadsafe(self._send_async(data), self._send_loop)
+        try:
+            asyncio.run_coroutine_threadsafe(self._send_async(data), self._send_loop)
+        except RuntimeError:
+            # Event loop is closed — connection is dead, clean up and bail.
+            if event:
+                self._requests.pop(request_id, None)
+            return None
         if event:
             event.wait()
             return self._requests.pop(request_id)
@@ -530,15 +534,19 @@ class LinkBaseAsync(LinkBase):
                 try:
                     func, args = await self._callback_queue.get()
                     func(*args)
+                except asyncio.CancelledError:
+                    break
+                except RuntimeError:
+                    break
                 except asyncio.QueueEmpty:
                     pass
                 except Exception as e:
                     print("error in callback", type(e), str(e))
-                # await asyncio.sleep(0.01)
 
         try:
             self._callback_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._callback_loop)
+            self._callback_queue = asyncio.Queue()
             self._callback_loop.create_task(handle_callbacks())
             self._callback_loop.run_forever()
         except Exception as e:
