@@ -206,3 +206,32 @@ def init_pyodide(link_):
 
     LinkBase.register_serializer(BaseWebGPUHandle, lambda _, v: v.handle)
     LinkBase.register_serializer(BaseWebGPUObject, lambda _, v: v.__dict__ or None)
+
+
+def reset():
+    """Reset the platform globals so that init can be called again.
+
+    Used by test runners that start and stop multiple app instances
+    in the same process.
+    """
+    global js, websocket_server, link, create_proxy, destroy_proxy
+    if websocket_server is not None:
+        try:
+            websocket_server.stop()
+        except RuntimeError:
+            pass  # Event loop already closed
+    js = None
+    websocket_server = None
+    link = None
+    if not is_pyodide:
+        create_proxy = None
+        destroy_proxy = None
+
+    # Reset cached WebGPU device so it is re-requested on the new connection.
+    from . import utils as _utils
+    _utils._device = None
+
+    # Reset the cached font atlas — its GPU texture is tied to the old
+    # connection and would deadlock when accessed on a new one.
+    from . import font as _font
+    _font._default_font_atlas = None

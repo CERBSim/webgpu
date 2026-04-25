@@ -97,7 +97,11 @@ class Scene:
             self.options.timestamp = time.time()
             self.options.update_buffers()
             for obj in self.render_objects:
-                obj._update_and_create_render_pipeline(self.options)
+                try:
+                    obj._update_and_create_render_pipeline(self.options)
+                except Exception as e:
+                    print(f'Warning: failed to init renderer {type(obj).__name__}: {e}')
+                    obj.active = False
 
             camera = self.options.camera
             self._js_render = platform.create_proxy(self._render_direct)
@@ -308,8 +312,11 @@ class Scene:
                 self.options.camera._render_function = None
                 self.options.camera._get_position_function = None
                 self.input_handler.unregister_callbacks()
-                platform.destroy_proxy(self._js_render)
-                del self._js_render
-                self.canvas._on_resize_callbacks.remove(self.render)
-                self.canvas._on_update_html_canvas.remove(self.__on_update_html_canvas)
+                if hasattr(self, '_js_render'):
+                    platform.destroy_proxy(self._js_render)
+                    del self._js_render
+                if self.render in self.canvas._on_resize_callbacks:
+                    self.canvas._on_resize_callbacks.remove(self.render)
+                if self.__on_update_html_canvas in self.canvas._on_update_html_canvas:
+                    self.canvas._on_update_html_canvas.remove(self.__on_update_html_canvas)
                 self.canvas = None

@@ -122,3 +122,16 @@ class WebsocketLinkServer(WebsocketLinkBase):
 
     def stop(self):
         self._send_loop.call_soon_threadsafe(self._stop.set_result, None)
+
+        # Stop the callback event loop so the _callback_thread exits.
+        try:
+            self._callback_loop.call_soon_threadsafe(self._callback_loop.stop)
+        except RuntimeError:
+            pass  # Event loop already closed
+
+        # Unblock any threads stuck waiting for websocket RPC responses.
+        for rid, val in list(self._requests.items()):
+            if isinstance(val, tuple):
+                event, key = val
+                if isinstance(event, threading.Event):
+                    event.set()
