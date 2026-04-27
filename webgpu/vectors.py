@@ -31,13 +31,8 @@ class BaseVectorRenderer(Renderer):
         super().__init__(label=label)
         self.gpu_objects.colormap = Colormap()
 
-    def update(self, timestamp):
-        if timestamp == self._timestamp:
-            return
-        self._timestamp = timestamp
-
-        self.gpu_objects.colormap.options = self.options
-        self.gpu_objects.colormap.update(timestamp)
+    def update(self, options):
+        pass
 
     def get_bindings(self):
         return [
@@ -68,9 +63,7 @@ class VectorRenderer(BaseVectorRenderer):
         )
         self.size = size or 1 / 10 * np.linalg.norm(self.bounding_box[1] - self.bounding_box[0])
 
-    def update(self, timestamp):
-        super().update(timestamp)
-
+    def update(self, options):
         self._buffers = {
             "points": buffer_from_array(self.points),
             "vectors": buffer_from_array(self.vectors),
