@@ -22,7 +22,7 @@ class WebsocketLinkBase(LinkBaseAsync):
         self._start_handling_messages = threading.Event()
         self._send_loop = asyncio.new_event_loop()
 
-        self._websocket_thread = threading.Thread(target=self._connect)
+        self._websocket_thread = threading.Thread(target=self._connect, daemon=True)
         self._websocket_thread.start()
 
     def wait_for_server_running(self):
@@ -89,7 +89,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
             self._connection = websocket
             self._event_is_connected.set()
             async for message in websocket:
-                thread = threading.Thread(target=self._on_message, args=(message,))
+                thread = threading.Thread(target=self._on_message, args=(message,), daemon=True)
                 thread.start()
         finally:
             self._connection = None
@@ -118,15 +118,37 @@ class WebsocketLinkServer(WebsocketLinkBase):
             self._send_loop.run_until_complete(start_websocket())
         except Exception as e:
             print("exception in _start_websocket_server", e)
+        finally:
+            pending = [
+                task for task in asyncio.all_tasks(self._send_loop)
+                if not task.done()
+            ]
+            for task in pending:
+                task.cancel()
+            if pending:
+                self._send_loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
+            self._send_loop.run_until_complete(self._send_loop.shutdown_asyncgens())
+            self._send_loop.run_until_complete(self._send_loop.shutdown_default_executor())
+            self._send_loop.close()
 
     def stop(self):
-        self._send_loop.call_soon_threadsafe(self._stop.set_result, None)
+        try:
+            if not self._stop.done():
+                self._send_loop.call_soon_threadsafe(self._stop.set_result, None)
+        except RuntimeError:
+            pass  # Event loop already closed
+        if threading.current_thread() is not self._websocket_thread:
+            self._websocket_thread.join(timeout=2)
 
         # Stop the callback event loop so the _callback_thread exits.
         try:
             self._callback_loop.call_soon_threadsafe(self._callback_loop.stop)
         except RuntimeError:
             pass  # Event loop already closed
+        if threading.current_thread() is not self._callback_thread:
+            self._callback_thread.join(timeout=1)
 
         # Unblock any threads stuck waiting for websocket RPC responses.
         for rid, val in list(self._requests.items()):

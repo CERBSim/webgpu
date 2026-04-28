@@ -97,6 +97,8 @@ class Scene:
             self.options.timestamp = time.time()
             self.options.update_buffers()
             for obj in self.render_objects:
+                if not obj.active:
+                    continue
                 try:
                     obj._update_and_create_render_pipeline(self.options)
                 except Exception as e:

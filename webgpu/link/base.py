@@ -475,11 +475,13 @@ class LinkBaseAsync(LinkBase):
     _callback_loop: asyncio.AbstractEventLoop
     _callback_queue: asyncio.Queue
     _callback_thread: threading.Thread
+    _callback_task: asyncio.Task | None
 
     def __init__(self):
         super().__init__()
         self._send_loop = asyncio.new_event_loop()
         self._callback_loop = asyncio.new_event_loop()
+        self._callback_task = None
         self._callback_thread = threading.Thread(target=self._start_callback_thread, daemon=True)
         self._callback_thread.start()
 
@@ -514,9 +516,11 @@ class LinkBaseAsync(LinkBase):
             event = threading.Event()
             self._requests[request_id] = event, key
 
+        coro = self._send_async(data)
         try:
-            asyncio.run_coroutine_threadsafe(self._send_async(data), self._send_loop)
+            asyncio.run_coroutine_threadsafe(coro, self._send_loop)
         except RuntimeError:
+            coro.close()
             # Event loop is closed — connection is dead, clean up and bail.
             if event:
                 self._requests.pop(request_id, None)
@@ -547,7 +551,15 @@ class LinkBaseAsync(LinkBase):
             self._callback_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._callback_loop)
             self._callback_queue = asyncio.Queue()
-            self._callback_loop.create_task(handle_callbacks())
-            self._callback_loop.run_forever()
+            self._callback_task = self._callback_loop.create_task(handle_callbacks())
+            try:
+                self._callback_loop.run_forever()
+            finally:
+                if self._callback_task is not None and not self._callback_task.done():
+                    self._callback_task.cancel()
+                    self._callback_loop.run_until_complete(
+                        asyncio.gather(self._callback_task, return_exceptions=True)
+                    )
+                self._callback_loop.close()
         except Exception as e:
             print("exception in _start_callback_thread", e)

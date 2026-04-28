@@ -147,10 +147,12 @@ class Canvas:
         self.update_html_canvas(canvas)
 
     def __del__(self):
-        if self._resize_observer is not None:
-            self._resize_observer.disconnect()
-        if self._intersection_observer is not None:
-            self._intersection_observer.disconnect()
+        disconnect = getattr(self._resize_observer, "disconnect", None)
+        if callable(disconnect):
+            disconnect()
+        disconnect = getattr(self._intersection_observer, "disconnect", None)
+        if callable(disconnect):
+            disconnect()
 
     def update_html_canvas(self, html_canvas):
         """Reconfigure the canvas with the current HTML canvas element. This is necessary when the HTML canvas element changes, disappears (e.g. when switching a tab) and appears again."""
