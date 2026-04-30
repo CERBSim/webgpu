@@ -123,11 +123,18 @@ class Scene:
 
     def __on_update_html_canvas(self, html_canvas):
         """Update event wiring when the underlying HTML canvas element changes."""
-        self.input_handler.set_canvas(html_canvas)
+        camera = self.options.camera
         if html_canvas is not None:
-            camera = self.options.camera
+            self.input_handler.set_canvas(html_canvas)
             camera.set_render_functions(self.render, self.get_position)
+            camera.register_callbacks(self.input_handler)
             camera.set_canvas(self.canvas)
+        else:
+            camera.unregister_callbacks(self.input_handler)
+            if camera._render_function == self.render:
+                camera._render_function = None
+                camera._get_position_function = None
+            self.input_handler.set_canvas(None)
 
     def get_position(self, x: int, y: int):
         """Return the 3D position under canvas pixel (x, y) using the selection buffer."""
@@ -241,7 +248,10 @@ class Scene:
         options.command_encoder = self.device.createCommandEncoder()
         for obj in self.render_objects:
             if obj.active:
-                obj.render(options)
+                obj.render_opaque(options)
+        for obj in self.render_objects:
+            if obj.active:
+                obj.render_transparent(options)
 
         if to_canvas:
                 target_texture = self.canvas.target_texture

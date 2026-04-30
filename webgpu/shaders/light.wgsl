@@ -76,5 +76,6 @@ fn lightCalcColor(p: vec3f, n: vec3f, color: vec4f) -> vec4f {
   // Add spec as white (or you can tint it slightly if you prefer)
   let lit = color.rgb * b.x + b.y * vec3f(1.0);
 
-  return vec4f(lit, color.a);
+  let result = vec4f(lit, color.a);
+  return vec4f(result.rgb * result.a, result.a);
 }

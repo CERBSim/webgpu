@@ -163,6 +163,7 @@ class BaseRenderer:
     shader_defines: dict[str, str] = None
     _id = None
     _on_select: list[Callable[[SelectEvent], None]]
+    transparent: bool = False
 
     def __init__(self, label=None):
         self._id = next(_id_counter)
@@ -280,9 +281,18 @@ class MultipleRenderer(BaseRenderer):
             r.create_render_pipeline(options)
 
     def render(self, options: RenderOptions) -> None:
+        self.render_opaque(options)
+        self.render_transparent(options)
+
+    def render_opaque(self, options: RenderOptions) -> None:
         for r in self.render_objects:
             if r.active:
-                r.render(options)
+                r.render_opaque(options)
+
+    def render_transparent(self, options: RenderOptions) -> None:
+        for r in self.render_objects:
+            if r.active:
+                r.render_transparent(options)
 
     def select(self, options: RenderOptions, x: int, y: int) -> None:
         for r in self.render_objects:
@@ -306,6 +316,10 @@ class MultipleRenderer(BaseRenderer):
     def on_select_set(self):
         return any(r.on_select_set for r in self.render_objects)
 
+    @property
+    def transparent(self):
+        return any(r.transparent for r in self.render_objects if r.active)
+
 
 class Renderer(BaseRenderer):
     """Base class for renderer classes"""
@@ -320,61 +334,123 @@ class Renderer(BaseRenderer):
     select_entry_point: str = "fragment_select_default"
     vertex_buffer_layouts: list[VertexBufferLayout] = []
     vertex_buffers: list[Buffer] = []
+    transparent: bool = False
 
     _last_bindings: list[BaseBinding] = []
+    _last_transparent: bool = False
+    _transparent_pipeline = None
 
     def create_render_pipeline(self, options: RenderOptions) -> None:
         bindings = options.get_bindings() + self.get_bindings()
 
-        if bindings == self._last_bindings:
+        if bindings == self._last_bindings and self.transparent == self._last_transparent:
             return
 
-        shader_module = self.device.createShaderModule(self._get_preprocessed_shader_code())
         layout, self.group = create_bind_group(
             self.device, options.get_bindings() + self.get_bindings()
         )
         pipeline_layout = self.device.createPipelineLayout([layout])
-        vertex_state = VertexState(
-            module=shader_module,
-            entryPoint=self.vertex_entry_point,
-            buffers=self.vertex_buffer_layouts,
-        )
-        depth_stencil = DepthStencilState(
+
+        depth_stencil_opaque = DepthStencilState(
             format=options.canvas.depth_format,
             depthWriteEnabled=True,
             depthCompare=CompareFunction.less,
             depthBias=self.depthBias,
             depthBiasSlopeScale=self.depthBiasSlopeScale,
         )
-        self.pipeline = self.device.createRenderPipeline(
-            pipeline_layout,
-            vertex=vertex_state,
-            fragment=FragmentState(
+
+        if self.transparent:
+            opaque_shader = self.device.createShaderModule(
+                self._get_preprocessed_shader_code({"OPAQUE_PASS": "1"})
+            )
+            vertex_state = VertexState(
+                module=opaque_shader,
+                entryPoint=self.vertex_entry_point,
+                buffers=self.vertex_buffer_layouts,
+            )
+            self.pipeline = self.device.createRenderPipeline(
+                pipeline_layout,
+                vertex=vertex_state,
+                fragment=FragmentState(
+                    module=opaque_shader,
+                    entryPoint=self.fragment_entry_point,
+                    targets=[options.canvas.color_target],
+                ),
+                primitive=PrimitiveState(topology=self.topology),
+                depthStencil=depth_stencil_opaque,
+                multisample=options.canvas.multisample,
+                label=self.label + " (opaque)",
+            )
+
+            depth_stencil_transparent = DepthStencilState(
+                format=options.canvas.depth_format,
+                depthWriteEnabled=False,
+                depthCompare=CompareFunction.less,
+                depthBias=self.depthBias,
+                depthBiasSlopeScale=self.depthBiasSlopeScale,
+            )
+            transparent_shader = self.device.createShaderModule(
+                self._get_preprocessed_shader_code({"TRANSPARENT_PASS": "1"})
+            )
+            vertex_state_t = VertexState(
+                module=transparent_shader,
+                entryPoint=self.vertex_entry_point,
+                buffers=self.vertex_buffer_layouts,
+            )
+            self._transparent_pipeline = self.device.createRenderPipeline(
+                pipeline_layout,
+                vertex=vertex_state_t,
+                fragment=FragmentState(
+                    module=transparent_shader,
+                    entryPoint=self.fragment_entry_point,
+                    targets=[options.canvas.color_target],
+                ),
+                primitive=PrimitiveState(topology=self.topology),
+                depthStencil=depth_stencil_transparent,
+                multisample=options.canvas.multisample,
+                label=self.label + " (transparent)",
+            )
+        else:
+            shader_module = self.device.createShaderModule(self._get_preprocessed_shader_code())
+            vertex_state = VertexState(
                 module=shader_module,
-                entryPoint=self.fragment_entry_point,
-                targets=[options.canvas.color_target],
-            ),
-            primitive=PrimitiveState(topology=self.topology),
-            depthStencil=depth_stencil,
-            multisample=options.canvas.multisample,
-            label=self.label,
-        )
+                entryPoint=self.vertex_entry_point,
+                buffers=self.vertex_buffer_layouts,
+            )
+            self.pipeline = self.device.createRenderPipeline(
+                pipeline_layout,
+                vertex=vertex_state,
+                fragment=FragmentState(
+                    module=shader_module,
+                    entryPoint=self.fragment_entry_point,
+                    targets=[options.canvas.color_target],
+                ),
+                primitive=PrimitiveState(topology=self.topology),
+                depthStencil=depth_stencil_opaque,
+                multisample=options.canvas.multisample,
+                label=self.label,
+            )
+            self._transparent_pipeline = None
 
         if self.select_entry_point:
             select_shader_module = self.device.createShaderModule(
                 self._get_preprocessed_shader_code({"SELECT_PIPELINE": "1"})
             )
-            vertex_state.module = select_shader_module
+            vertex_state_s = VertexState(
+                module=select_shader_module,
+                entryPoint=self.vertex_entry_point,
+                buffers=self.vertex_buffer_layouts,
+            )
             self._select_pipeline = self.device.createRenderPipeline(
                 pipeline_layout,
-                vertex=vertex_state,
+                vertex=vertex_state_s,
                 fragment=FragmentState(
                     module=select_shader_module,
                     entryPoint=self.select_entry_point,
                     targets=[options.canvas.select_target],
                 ),
                 primitive=PrimitiveState(topology=self.topology),
-                depthStencil=depth_stencil,
+                depthStencil=depth_stencil_opaque,
                 multisample=MultisampleState(),
                 label=self.label + " (select)",
             )
@@ -382,6 +458,7 @@ class Renderer(BaseRenderer):
             self._select_pipeline = None
 
         self._last_bindings = bindings
+        self._last_transparent = self.transparent
 
     def render(self, options: RenderOptions) -> None:
         render_pass = options.begin_render_pass()
@@ -391,6 +468,17 @@ class Renderer(BaseRenderer):
             render_pass.setVertexBuffer(i, vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
+
+    def render_opaque(self, options: RenderOptions) -> None:
+        self.render(options)
+
+    def render_transparent(self, options: RenderOptions) -> None:
+        if not self._transparent_pipeline:
+            return
+        saved = self.pipeline
+        self.pipeline = self._transparent_pipeline
+        self.render(options)
+        self.pipeline = saved
 
     def select(self, options: RenderOptions, x: int, y: int) -> None:
         if not self._select_pipeline:
