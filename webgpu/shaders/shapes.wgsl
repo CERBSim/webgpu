@@ -11,6 +11,7 @@ struct ShapeVertexIn {
     @location(4) instance_color_bot: vec4f,
     @location(5) instance_color_top: vec4f,
     @location(6) z_range: vec2f,
+    @location(7) instance_direction_imag: vec3f,
 };
 
 struct ShapeVertexOut {
@@ -30,6 +31,14 @@ struct ShapeUniform {
     padding2: f32,
 };
 
+struct ShapeComplexUniform {
+    phase: f32,
+    is_complex: u32,
+    color_override: u32,
+    padding: f32,
+};
+@group(0) @binding(11) var<uniform> u_shape_complex: ShapeComplexUniform;
+
 @vertex fn shape_vertex_main(
     vert: ShapeVertexIn,
     @builtin(instance_index) instance_index: u32,
@@ -37,8 +46,17 @@ struct ShapeUniform {
     var out: ShapeVertexOut;
     let i0 = 2 * instance_index * 3;
     let pstart = vert.instance_position;
-    let pend = vert.instance_position + vert.instance_direction;
-    let v = pend - pstart;
+
+    // Combine real and imag directions based on complex phase
+    var v: vec3f;
+    if u_shape_complex.is_complex == 1u {
+        let c = cos(u_shape_complex.phase);
+        let s = sin(u_shape_complex.phase);
+        v = vert.instance_direction * c - vert.instance_direction_imag * s;
+    } else {
+        v = vert.instance_direction;
+    }
+
     let q = quaternion(v, vec3f(0., 0., 1.));
     var pref = vert.position;
     if(u_shape.scale_mode == 0u) {
@@ -47,12 +65,23 @@ struct ShapeUniform {
     else if(u_shape.scale_mode == 1u) {
         pref.z *= length(v);
     }
+    else if(u_shape.scale_mode == 2u) {
+        // fixed size, fade out near zero
+        pref *= clamp(length(v) * 1e4, 0.0, 1.0);
+    }
     let p = pstart + u_shape.scale * rotate(pref, q);
     out.p = p;
     out.position = cameraMapPoint(p);
     out.normal = normalize(rotate(vert.normal, q));
     let lam = (vert.position.z-vert.z_range.x) / (vert.z_range.y-vert.z_range.x);
-    out.color = mix(vert.instance_color_bot, vert.instance_color_top, lam);
+
+    // For complex mode with color_override, use current magnitude for color
+    if u_shape_complex.is_complex == 1u && u_shape_complex.color_override == 1u {
+        let val = length(v);
+        out.color = mix(vec4f(val, val, val, val), vec4f(val, val, val, val), lam);
+    } else {
+        out.color = mix(vert.instance_color_bot, vert.instance_color_top, lam);
+    }
     out.instance = instance_index;
     return out;
 }

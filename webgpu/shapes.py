@@ -154,6 +154,11 @@ class ShapeUniforms(UniformBase):
     _fields_ = [("scale", ct.c_float), ("scale_mode", ct.c_uint32), ("padding", ct.c_float * 2)]
 
 
+class ShapeComplexUniform(UniformBase):
+    _binding = 11
+    _fields_ = [("phase", ct.c_float), ("is_complex", ct.c_uint32), ("color_override", ct.c_uint32), ("padding", ct.c_float)]
+
+
 class ShapeRenderer(Renderer):
     SCALE_UNIFORM = ct.c_uint32(0)
     SCALE_Z = ct.c_uint32(1)
@@ -204,9 +209,14 @@ class ShapeRenderer(Renderer):
         self.values_buffer = None
         self.directions_buffer = None
         self.total_height_buffer = None
+        self.directions_imag_buffer = None
+        self._complex_uniforms = None
 
     def get_bindings(self):
-        return self.gpu_objects.colormap.get_bindings() + self._uniforms.get_bindings() + self.gpu_objects.clipping.get_bindings()
+        bindings = self.gpu_objects.colormap.get_bindings() + self._uniforms.get_bindings() + self.gpu_objects.clipping.get_bindings()
+        if self._complex_uniforms is not None:
+            bindings += self._complex_uniforms.get_bindings()
+        return bindings
 
     @property
     def positions(self):
@@ -309,6 +319,21 @@ class ShapeRenderer(Renderer):
         self._uniforms.scale = self.scale
         self._uniforms.scale_mode = self.scale_mode
         self._uniforms.update_buffer()
+
+        # Complex direction support
+        if self.directions_imag_buffer is not None:
+            self._complex_uniforms = ShapeComplexUniform(phase=0.0, is_complex=1)
+        else:
+            self._complex_uniforms = ShapeComplexUniform(phase=0.0, is_complex=0)
+            # Create a dummy zero imag buffer
+            self.directions_imag_buffer = buffer_from_array(
+                np.zeros(3, dtype=np.float32),
+                label="directions_imag_dummy",
+                usage=BufferUsage.VERTEX | BufferUsage.COPY_DST,
+                reuse=self.directions_imag_buffer,
+            )
+        self._complex_uniforms.update_buffer()
+
         buffers = self.shape_data.create_buffers()
         self.triangle_buffer = buffers["triangles"]
 
@@ -355,11 +380,13 @@ class ShapeRenderer(Renderer):
             buffers["vertex_data"],
             self.positions_buffer,
             self.directions_buffer,
+            self.directions_imag_buffer,
             colors_buffer,
             self.total_height_buffer,
         ]
 
         direction_stride = 0 if self.directions_buffer._used_size // 4 == 3 else 12
+        direction_imag_stride = 0 if self.directions_imag_buffer._used_size // 4 <= 3 else 12
 
         self.vertex_buffer_layouts = [
             VertexBufferLayout(
@@ -401,6 +428,17 @@ class ShapeRenderer(Renderer):
                         format=VertexFormat.float32x3,
                         offset=0,
                         shaderLocation=3,
+                    ),
+                ],
+            ),
+            VertexBufferLayout(
+                arrayStride=direction_imag_stride,
+                stepMode=VertexStepMode.instance,
+                attributes=[
+                    VertexAttribute(
+                        format=VertexFormat.float32x3,
+                        offset=0,
+                        shaderLocation=7,
                     ),
                 ],
             ),
