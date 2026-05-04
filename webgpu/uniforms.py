@@ -55,14 +55,7 @@ class UniformBase(ct.Structure):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        device = get_device()
-        self._buffer = device.createBuffer(
-            size=len(bytes(self)),
-            usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST,
-            label=type(self).__name__,
-        )
-
+        self._buffer = None
         self._last_update_values = None
 
         size = len(bytes(self))
@@ -71,7 +64,17 @@ class UniformBase(ct.Structure):
                 f"Size of type {type(self)} must be multiple of 16, current size: {size}"
             )
 
+    def _ensure_buffer(self):
+        if self._buffer is None:
+            device = get_device()
+            self._buffer = device.createBuffer(
+                size=len(bytes(self)),
+                usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST,
+                label=type(self).__name__,
+            )
+
     def update_buffer(self):
+        self._ensure_buffer()
         data = bytes(self)
         if self._last_update_values == data:
             return
@@ -79,10 +82,12 @@ class UniformBase(ct.Structure):
         self._last_update_values = data
 
     def get_bindings(self) -> list[BaseBinding]:
+        self._ensure_buffer()
         return [UniformBinding(self._binding, self._buffer)]
 
     def __del__(self):
-        self._buffer.destroy()
+        if self._buffer is not None:
+            self._buffer.destroy()
 
 
 class MeshUniforms(UniformBase):
