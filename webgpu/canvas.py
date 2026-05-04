@@ -14,8 +14,10 @@ _TARGET_FPS = 60
 
 @dataclass
 class _DebounceData:
-    t_last: float | None = None
+    t_last_frame: float = 0
+    t_last_call: float = 0
     timer: threading.Timer | None = None
+    lock: Lock = None
 
 
 def debounce(arg=None):
@@ -28,50 +30,37 @@ def debounce(arg=None):
 
             fname = func.__name__
             if obj._debounce_data.get(fname, None) is None:
-                obj._debounce_data[fname] = _DebounceData(None, None)
+                obj._debounce_data[fname] = _DebounceData(0, 0, None, Lock())
 
             data = obj._debounce_data[fname]
+            t_call = time.time()
+            data.t_last_call = t_call
 
-            # check if we already have a render scheduled
-            if platform.is_pyodide:
-                if data.timer is not None and not data.timer.done():
-                    return
-            else:
-                if data.timer is not None:
-                    return
+            frame_time = 1.0 / target_fps
 
             def f():
-                # clear the timer, so we can schedule a new one with the next function call
-                t = time.time()
-                data.timer = None
-                if platform.is_pyodide:
-                    # due to async nature, we need to update t_last before calling func
-                    data.t_last = t
-                    func(obj, *args, **kwargs)
-                else:
-                    data.t_last = t
+                with data.lock:
+                    if t_call != data.t_last_call and t_call - data.t_last_frame < frame_time:
+                        return
+
+                    data.t_last_frame = time.time()
                     func(obj, *args, **kwargs)
 
-            if data.timer is not None:
-                return
+            t_wait = frame_time - (t_call - data.t_last_frame)
 
-            if data.t_last is None:
-                # first call -> just call the function immediately
-                data.t_last = time.time()
+            if t_wait <= 0:
                 f()
                 return
 
-            t_wait = max(1 / target_fps - (time.time() - data.t_last), 0)
             if platform.is_pyodide:
                 import asyncio
                 async def _runner():
                     if t_wait > 0:
                         await asyncio.sleep(t_wait)
                     f()
-                data.timer = asyncio.create_task(_runner())
+                asyncio.create_task(_runner())
             else:
-                data.timer = threading.Timer(t_wait, f)
-                data.timer.start()
+                threading.Timer(t_wait, f).start()
 
         debounced._original = func
         return debounced
