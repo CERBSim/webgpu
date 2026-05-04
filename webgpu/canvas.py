@@ -16,6 +16,7 @@ _TARGET_FPS = 60
 class _DebounceData:
     t_last: float | None = None
     timer: threading.Timer | None = None
+    running: bool = False
 
 
 def debounce(arg=None):
@@ -37,7 +38,7 @@ def debounce(arg=None):
                 if data.timer is not None and not data.timer.done():
                     return
             else:
-                if data.timer is not None:
+                if data.timer is not None or data.running:
                     return
 
             def f():
@@ -50,7 +51,11 @@ def debounce(arg=None):
                     func(obj, *args, **kwargs)
                 else:
                     data.t_last = t
-                    func(obj, *args, **kwargs)
+                    data.running = True
+                    try:
+                        func(obj, *args, **kwargs)
+                    finally:
+                        data.running = False
 
             if data.timer is not None:
                 return

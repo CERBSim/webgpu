@@ -233,17 +233,19 @@ class Scene:
             return ev
 
     # @print_communications
-    def _render_objects(self, to_canvas=True):
+    def _render_objects(self, to_canvas=True, update_pipelines=True):
         """Update pipelines and render all active objects, optionally copying to the canvas."""
         if self.canvas is None:
             return
-        self._select_buffer_valid = False
         options = self.options
-        for obj in self.render_objects:
-            if obj.active:
-                obj._update_and_create_render_pipeline(options)
-                if obj.needs_update:
-                    print("warning: object still needs update after update was done:", obj)
+
+        if update_pipelines:
+            self._select_buffer_valid = False
+            for obj in self.render_objects:
+                if obj.active:
+                    obj._update_and_create_render_pipeline(options)
+                    if obj.needs_update:
+                        print("warning: object still needs update after update was done:", obj)
 
         options.command_encoder = self.device.createCommandEncoder()
         for obj in self.render_objects:
@@ -275,6 +277,21 @@ class Scene:
                             )
         self.device.queue.submit([options.command_encoder.finish()])
         options.command_encoder = None
+
+    def _render_highlight(self):
+        """Fast re-render for highlight-only uniform changes.
+
+        Skips pipeline rebuild and select buffer invalidation.
+        Caller must already hold _render_mutex.
+        """
+        if self.canvas is None or self.canvas.height == 0:
+            return
+        self._render_objects(to_canvas=False, update_pipelines=False)
+        platform.js.patchedRequestAnimationFrame(
+            self.canvas.device.handle,
+            self.canvas.context,
+            self.canvas.target_texture,
+        )
 
     def redraw(self, blocking=False, fps=10):
         """Request a redraw, either blocking immediately or debounced on the event loop."""
