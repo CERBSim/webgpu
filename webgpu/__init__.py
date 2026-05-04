@@ -1,6 +1,7 @@
 from .clipping import Clipping
 from .colormap import Colormap, Colorbar
 from .font import Font
+from .gizmo import CoordinateAxes, NavigationCube
 from .renderer import Renderer
 from .scene import Scene
 from .labels import Labels
