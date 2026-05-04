@@ -7,7 +7,7 @@ class InputHandler:
 
     class Modifiers:
         def __init__(
-            self, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+            self, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
         ):
             self.alt = alt
             self.shift = shift
@@ -61,9 +61,9 @@ class InputHandler:
         self,
         event: str,
         func: Callable,
-        alt: bool | None = False,
-        shift: bool | None = False,
-        ctrl: bool | None = False,
+        alt: bool | None = None,
+        shift: bool | None = None,
+        ctrl: bool | None = None,
     ):
         if event not in self._callbacks:
             self._callbacks[event] = []
@@ -87,42 +87,42 @@ class InputHandler:
                     func(ev, *args)
 
     def on_dblclick(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("dblclick", func, alt, shift, ctrl)
 
     def on_click(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("click", func, alt, shift, ctrl)
 
     def on_mousedown(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("mousedown", func, alt, shift, ctrl)
 
     def on_mouseup(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("mouseup", func, alt, shift, ctrl)
 
     def on_mouseout(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("mouseout", func, alt, shift, ctrl)
 
     def on_wheel(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("wheel", func, alt, shift, ctrl)
 
     def on_mousemove(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("mousemove", func, alt, shift, ctrl)
 
     def on_drag(
-        self, func, alt: bool | None = False, shift: bool | None = False, ctrl: bool | None = False
+        self, func, alt: bool | None = None, shift: bool | None = None, ctrl: bool | None = None
     ):
         self.on("drag", func, alt, shift, ctrl)
 
