@@ -76,6 +76,11 @@ class RenderOptions:
     def __init__(self, camera: Camera, light: Light):
         self.light = light
         self.camera = camera
+        self._extra_binding_providers = []
+
+    def add_bindings(self, provider):
+        """Register an object with a get_bindings() method (e.g. a UniformBase)."""
+        self._extra_binding_providers.append(provider)
 
     def set_canvas(self, canvas: Canvas):
         self.canvas = canvas
@@ -90,9 +95,13 @@ class RenderOptions:
         self.light.update(self)
 
     def get_bindings(self):
+        extra = []
+        for p in self._extra_binding_providers:
+            extra.extend(p.get_bindings())
         return [
             *self.light.get_bindings(),
             *self.camera.get_bindings(),
+            *extra,
         ]
 
     def begin_render_pass(self, **kwargs):
