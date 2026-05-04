@@ -97,10 +97,10 @@ class Transform:
 
     def reset_xy(self, flip: bool = False):
         """Reset to a view looking along +Z onto the XY plane, optionally flipped."""
-        pos = self.map_point(self._center)
+        s = np.linalg.norm(self._mat[:3, :3], axis=0)[0]  # current uniform scale
         self._mat = np.identity(4)
         self.translate(-self._center[0], -self._center[1], -self._center[2])
-        self.translate(pos[0], pos[1], pos[2])
+        self.scale(s)
         if flip:
             self.rotate(0, 180)
 
@@ -326,7 +326,14 @@ class Camera:
         self.uniforms.model_view[:] = model_view.transpose().flatten()
         self.uniforms.model_view_projection[:] = model_view_proj.transpose().flatten()
         self.uniforms.normal_mat[:] = normal_mat.flatten()
-        # self.uniforms.rot_mat[:] = self.transform._rot_mat.flatten()
+        # Extract pure rotation from model_view (upper-left 3x3, normalize columns to remove scale)
+        mv33 = model_view[:3, :3]
+        col_norms = np.linalg.norm(mv33, axis=0)
+        col_norms[col_norms == 0] = 1.0
+        rot33 = mv33 / col_norms
+        rot_mat4 = np.identity(4)
+        rot_mat4[:3, :3] = rot33
+        self.uniforms.rot_mat[:] = rot_mat4.transpose().flatten()
         self.uniforms.width = self.canvas.width
         self.uniforms.height = self.canvas.height
         self.uniforms.update_buffer()
