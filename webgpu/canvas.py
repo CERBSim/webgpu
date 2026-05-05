@@ -8,69 +8,183 @@ import pathlib
 from . import platform
 from .utils import get_device, read_texture, Lock
 from .webgpu_api import *
+from functools import wraps
 
 _TARGET_FPS = 60
 
 
-@dataclass
-class _DebounceData:
-    t_last_frame: float = 0
-    t_last_call: float = 0
-    timer: threading.Timer | None = None
-    lock: Lock = None
+# @dataclass
+# class _DebounceData:
+#     t_last_frame: float = 0
+#     t_last_call: float = 0
+#     timer: threading.Timer | None = None
+#     lock: Lock = None
+#     running: bool = False
+#     pending: bool = False
 
+def debounce(arg=None, *, rate_hz=60):
 
-def debounce(arg=None):
-    def decorator(func):
-        # Render only once every 1/_TARGET_FPS seconds
-        @functools.wraps(func)
-        def debounced(obj, *args, **kwargs):
-            if not hasattr(obj, "_debounce_data"):
-                obj._debounce_data = {}
+    def _rate_limited(fn, rate_hz):
+        interval = 1.0 / rate_hz
+        lock = threading.RLock()
+        last_call = 0.0
+        timer = None
+        pending = None
 
-            fname = func.__name__
-            if obj._debounce_data.get(fname, None) is None:
-                obj._debounce_data[fname] = _DebounceData(0, 0, None, Lock())
+        def schedule(delay):
+            nonlocal timer
+            timer = threading.Timer(delay, run_pending)
+            timer.daemon = True
+            timer.start()
 
-            data = obj._debounce_data[fname]
-            t_call = time.time()
-            data.t_last_call = t_call
+        def run_pending():
+            nonlocal last_call, timer, pending
 
-            frame_time = 1.0 / target_fps
+            with lock:
+                if pending is None:
+                    timer = None
+                    return
 
-            def f():
-                with data.lock:
-                    if t_call != data.t_last_call and t_call - data.t_last_frame < frame_time:
-                        return
+                args, kwargs = pending
+                pending = None
+                # print("call frequency = ", 1.0 / (time.monotonic() - last_call))
+                last_call = time.monotonic()
 
-                    data.t_last_frame = time.time()
-                    func(obj, *args, **kwargs)
+            fn(*args, **kwargs)
 
-            t_wait = frame_time - (t_call - data.t_last_frame)
+            with lock:
+                timer = None
+                if pending is not None:
+                    delay = max(0.0, interval - (time.monotonic() - last_call))
+                    schedule(delay)
 
-            if t_wait <= 0:
-                f()
-                return
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            nonlocal last_call, pending
 
-            if platform.is_pyodide:
-                import asyncio
-                async def _runner():
-                    if t_wait > 0:
-                        await asyncio.sleep(t_wait)
-                    f()
-                asyncio.create_task(_runner())
-            else:
-                threading.Timer(t_wait, f).start()
+            with lock:
+                now = time.monotonic()
+                elapsed = now - last_call
+                if elapsed >= interval and timer is None:
+                    # print("call frequency = ", 1.0 / elapsed if elapsed > 0 else float('inf'))
+                    last_call = now
+                    run_now = True
+                else:
+                    pending = (args, kwargs)
+                    run_now = False
 
-        debounced._original = func
-        return debounced
+                    if timer is None:
+                        schedule(max(0.0, interval - elapsed))
+
+            if run_now:
+                fn(*args, **kwargs)
+
+        return wrapper
 
     if callable(arg):
-        target_fps = _TARGET_FPS
-        return decorator(arg)
-    else:
-        target_fps = arg
-        return decorator
+        return _rate_limited(arg, rate_hz)
+
+    if arg is not None:
+        rate_hz = arg
+
+    def decorate(fn):
+        return _rate_limited(fn, rate_hz)
+    return decorate
+
+
+
+# def debounce(arg=None):
+#     def decorator(func):
+#         # Render only once every 1/_TARGET_FPS seconds
+#         @functools.wraps(func)
+#         def debounced(obj, *args, **kwargs):
+#             if not hasattr(obj, "_debounce_data"):
+#                 obj._debounce_data = {}
+
+#             fname = func.__name__
+#             if obj._debounce_data.get(fname, None) is None:
+#                 obj._debounce_data[fname] = _DebounceData(0, 0, None, Lock())
+
+#             data = obj._debounce_data[fname]
+#             frame_time = 1.0 / target_fps
+
+#             def run():
+#                 while True:
+#                     # Call func OUTSIDE the lock to avoid deadlocks
+#                     func(obj, *args, **kwargs)
+
+#                     with data.lock:
+#                         if not data.pending:
+#                             data.running = False
+#                             return
+#                         data.pending = False
+#                         elapsed = time.time() - data.t_last_frame
+#                         t_wait = frame_time - elapsed
+#                         if t_wait > 0:
+#                             # Schedule deferred re-run to respect frame rate
+#                             if platform.is_pyodide:
+#                                 import asyncio
+#                                 async def _rerun():
+#                                     await asyncio.sleep(t_wait)
+#                                     with data.lock:
+#                                         data.t_last_frame = time.time()
+#                                     run()
+#                                 asyncio.create_task(_rerun())
+#                             else:
+#                                 def _deferred():
+#                                     with data.lock:
+#                                         data.t_last_frame = time.time()
+#                                     run()
+#                                 data.timer = threading.Timer(t_wait, _deferred)
+#                                 data.timer.start()
+#                             return
+#                         data.t_last_frame = time.time()
+
+#             def f():
+#                 with data.lock:
+#                     if t_call != data.t_last_call and t_call - data.t_last_frame < frame_time:
+#                         return
+#                     if data.running:
+#                         data.pending = True
+#                         return
+#                     data.running = True
+#                     data.t_last_frame = time.time()
+
+#                 run()
+
+#             with data.lock:
+#                 t_call = time.time()
+#                 data.t_last_call = t_call
+#                 t_wait = frame_time - (t_call - data.t_last_frame)
+
+#                 if t_wait <= 0:
+#                     if data.running:
+#                         data.pending = True
+#                         return
+#                     data.running = True
+#                     data.t_last_frame = time.time()
+#                     if data.timer is not None:
+#                         data.timer.cancel()
+#                         data.timer = None
+#                 else:
+#                     if data.timer is not None:
+#                         data.timer.cancel()
+#                     if platform.is_pyodide:
+#                         import asyncio
+#                         async def _runner():
+#                             await asyncio.sleep(t_wait)
+#                             f()
+#                         asyncio.create_task(_runner())
+#                     else:
+#                         data.timer = threading.Timer(t_wait, f)
+#                         data.timer.start()
+#                     return
+
+#             run()
+
+#         debounced._original = func
+#         return debounced
+
 
 
 def init_webgpu(html_canvas):
