@@ -212,12 +212,12 @@ class Camera:
         self._get_position_function = get_position_function
 
     def register_callbacks(self, input_handler):
-        input_handler.on_mousedown(self._on_mousedown, ctrl=False)
-        input_handler.on_mouseup(self._on_mouseup, ctrl=False)
-        input_handler.on_mouseout(self._on_mouseup, ctrl=False)
-        input_handler.on_mousemove(self._on_mousemove, ctrl=False)
-        input_handler.on_dblclick(self._on_dblclick, ctrl=False)
-        input_handler.on_wheel(self._on_wheel)
+        input_handler.on_mousedown(self._on_mousedown, ctrl=False, shift=False, alt=False)
+        input_handler.on_mouseup(self._on_mouseup, ctrl=False, shift=False, alt=False)
+        input_handler.on_mouseout(self._on_mouseup, ctrl=False, shift=False, alt=False)
+        input_handler.on_mousemove(self._on_mousemove, ctrl=False, shift=False, alt=False)
+        input_handler.on_dblclick(self._on_dblclick, ctrl=False, shift=False, alt=False)
+        input_handler.on_wheel(self._on_wheel, ctrl=False, shift=False, alt=False)
 
     def unregister_callbacks(self, input_handler):
         input_handler.unregister("mousedown", self._on_mousedown)
