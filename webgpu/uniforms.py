@@ -72,6 +72,7 @@ class UniformBase(ct.Structure):
                 usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST,
                 label=type(self).__name__,
             )
+            self.update_buffer()
 
     def update_buffer(self):
         self._ensure_buffer()
