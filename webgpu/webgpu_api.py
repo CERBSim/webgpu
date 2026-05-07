@@ -1573,7 +1573,11 @@ class Device(BaseWebGPUHandle):
 
     @property
     def queue(self) -> "Queue":
-        return Queue(self.handle.queue)
+        q = self.__dict__.get('_queue')
+        if q is None:
+            q = Queue(self.handle.queue)
+            self.__dict__['_queue'] = q
+        return q
 
     def pushErrorScope(self, filter: ErrorFilter) -> None:
         return self.handle.pushErrorScope(filter)

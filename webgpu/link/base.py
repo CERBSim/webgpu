@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import sys
 import base64
 import itertools
@@ -60,7 +61,58 @@ class LinkBase:
     def _send_data(self, metadata, data, key=None):
         raise NotImplementedError
 
+    def _cache_add(self, key, raw_value):
+        """Add a raw value to the cache."""
+        self._cache[key] = raw_value
+
+    def _cache_evict(self, key):
+        """Remove a cache entry, queueing release of IDs whose refcount is now 0."""
+        raw_value = self._cache.pop(key, None)
+        if raw_value is None:
+            return
+        if isinstance(raw_value, dict) and raw_value.get("__is_crosslink_type__"):
+            vid = raw_value.get("id")
+            vpid = raw_value.get("parent_id")
+            if vid is not None and self._js_id_refcount.get(vid, 0) <= 0:
+                self._js_id_refcount.pop(vid, None)
+                self._release_queue.append(vid)
+            if vpid is not None and self._js_id_refcount.get(vpid, 0) <= 0:
+                self._js_id_refcount.pop(vpid, None)
+                self._release_queue.append(vpid)
+
+    def _flush_release_queue(self):
+        if not self._release_queue:
+            return []
+        ids = []
+        while self._release_queue:
+            ids.append(self._release_queue.popleft())
+        # Filter out IDs that were re-created by another thread since being queued
+        with self._refcount_lock:
+            ids = [i for i in ids if self._js_id_refcount.get(i, 0) <= 0]
+        if not ids:
+            return []
+        # evict cache entries keyed by released ids OR whose value references a released id
+        ids_set = set(ids)
+        to_remove = []
+        for k, v in self._cache.items():
+            if k[0] in ids_set:
+                to_remove.append(k)
+            elif isinstance(v, dict) and v.get("id") in ids_set:
+                to_remove.append(k)
+        for k in to_remove:
+            self._cache_evict(k)
+        # _cache_evict may have added more ids to the queue — drain those too
+        while self._release_queue:
+            extra = self._release_queue.popleft()
+            if self._js_id_refcount.get(extra, 0) <= 0:
+                ids.append(extra)
+        return list(set(ids))
+
     def _split_and_send(self, data, key=None):
+        if data.get("type") != "delete_batch":
+            deletes = self._flush_release_queue()
+            if deletes:
+                data["_deletes"] = deletes
         request_id = data.get("request_id", None)
         metadata, data = _pack_message(data)
 
@@ -112,6 +164,9 @@ class LinkBase:
         self._requests = {}
         self._objects = {}
         self._cache = {}
+        self._release_queue = collections.deque()
+        self._js_id_refcount = {}  # js_id → number of live Proxies referencing it
+        self._refcount_lock = threading.Lock()
 
         next(self._request_id)  # make sure first id is 1, in case 0 is interpreted as None
 
@@ -188,7 +243,7 @@ class LinkBase:
 
     def get(self, id, prop: str | None = None):
         if (id, prop) in self._cache:
-            return self._cache[(id, prop)]
+            return self._load_data(self._cache[(id, prop)])
 
         return self._split_and_send(
             {
@@ -272,8 +327,14 @@ class LinkBase:
             return self._objects[data["id"]]
 
         if data["type"] == "proxy":
-
-            return Proxy(self, data.get("parent_id", None), data.get("id", None))
+            id_ = data.get("id", None)
+            parent_id = data.get("parent_id", None)
+            with self._refcount_lock:
+                if id_ is not None:
+                    self._js_id_refcount[id_] = self._js_id_refcount.get(id_, 0) + 1
+                if parent_id is not None:
+                    self._js_id_refcount[parent_id] = self._js_id_refcount.get(parent_id, 0) + 1
+            return Proxy(self, parent_id, id_)
 
         if data["type"] == "bytes":
             return base64.b64decode(data["value"])
@@ -314,7 +375,9 @@ class LinkBase:
         key = data.get("key", None)
 
         if id_ is not None:
-            obj = obj[data["id"]]
+            obj = self._objects.get(id_)
+            if obj is None:
+                raise KeyError(f"Object with id {id_} not found (already released?)")
         if prop is not None:
             obj = obj.__getattribute__(prop)
         if key is not None:
@@ -335,7 +398,7 @@ class LinkBase:
                     event, key = self._requests[request_id]
                     self._requests[request_id] = self._load_data(data.get("value", None), buffers)
                     if key and data.get("cache", False):
-                        self._cache[key] = self._requests[request_id]
+                        self._cache_add(key, data.get("value", None))
 
                     if isinstance(event, asyncio.Future):
                         event.set_result(self._requests[request_id])
@@ -369,6 +432,10 @@ class LinkBase:
                     elif key is not None:
                         obj[key] = self._load_data(data["value"], buffers)
 
+                case "release_batch":
+                    for id_ in data["ids"]:
+                        self._objects.pop(id_, None)
+
                 case _:
                     print("unknown message type", msg_type)
 
@@ -395,8 +462,8 @@ class LinkBase:
                     event, key = self._requests[request_id]
                     response = self._load_data(data.get("value", None), buffers)
                     self._requests[request_id] = response
-                    if data.get("cache", False):
-                        self._cache[key] = response
+                    if key and data.get("cache", False):
+                        self._cache_add(key, data.get("value", None))
                     event.set()
                     return
 
@@ -420,6 +487,10 @@ class LinkBase:
                         obj.__setattr__(prop, data["value"])
                     elif key is not None:
                         obj[key] = self._load_data(data["value"], buffers)
+
+                case "release_batch":
+                    for id_ in data["ids"]:
+                        self._objects.pop(id_, None)
 
                 case _:
                     print("unknown message type", msg_type, data, type(message))
@@ -526,11 +597,56 @@ class LinkBaseAsync(LinkBase):
                 self._requests.pop(request_id, None)
             return None
         if event:
-            event.wait()
+            if not event.wait(timeout=120):
+                self._requests.pop(request_id, None)
+                raise TimeoutError(f"Request {request_id} timed out after 120s")
             return self._requests.pop(request_id)
 
     async def _send_async(self, message):
         raise NotImplementedError
+
+    def _schedule_flush(self):
+        """Schedule a fire-and-forget flush of the release queue via the send loop.
+        Uses a 50ms debounce to let concurrent threads finish their operations."""
+        coro = self._debounced_flush()
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self._send_loop)
+        except RuntimeError:
+            coro.close()
+
+    async def _debounced_flush(self):
+        await asyncio.sleep(0.05)  # 50ms coalescing window
+        await self._async_flush()
+
+    async def _async_flush(self):
+        if not self._release_queue:
+            return
+        ids = []
+        while self._release_queue:
+            ids.append(self._release_queue.popleft())
+        if not ids:
+            return
+        # Only flush IDs that are safe: not in cache (as key or value) and refcount=0
+        with self._refcount_lock:
+            cache_key_ids = set(k[0] for k in self._cache)
+            cached_value_ids = set()
+            for v in self._cache.values():
+                if isinstance(v, dict):
+                    vid = v.get("id")
+                    if vid is not None:
+                        cached_value_ids.add(vid)
+            safe_ids = [i for i in ids if i not in cache_key_ids
+                        and i not in cached_value_ids
+                        and self._js_id_refcount.get(i, 0) <= 0]
+            # Put back unsafe IDs for later sync flush
+            for i in ids:
+                if i not in safe_ids:
+                    self._release_queue.append(i)
+        if not safe_ids:
+            return
+        data = {"type": "delete_batch", "ids": safe_ids}
+        _, msg = _pack_message(data)
+        await self._send_async(msg)
 
     def _start_callback_thread(self):
         async def handle_callbacks():
