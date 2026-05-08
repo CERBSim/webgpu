@@ -124,7 +124,6 @@ class Scene:
 
     def __on_update_html_canvas(self, html_canvas):
         """Update event wiring when the underlying HTML canvas element changes."""
-        print(f"[Scene {self._id[:8]}] __on_update_html_canvas: html_canvas={'not None' if html_canvas else 'None'}")
         camera = self.options.camera
         # Always unregister first to avoid duplicates
         camera.unregister_callbacks(self.input_handler)
@@ -374,7 +373,6 @@ class Scene:
 
     def _on_visibility_changed(self, visible):
         """Called by canvas IntersectionObserver when visibility changes."""
-        print(f"[Scene {self._id[:8]}] _on_visibility_changed: visible={visible}")
         camera = self.options.camera
         if visible:
             camera.register_callbacks(self.input_handler, self.get_position)

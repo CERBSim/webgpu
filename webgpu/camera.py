@@ -240,7 +240,6 @@ class Camera:
         with self._observers_lock:
             if callback not in self._observers:
                 self._observers.append(callback)
-                print(f"[Camera] register_observer: now {len(self._observers)} observers")
 
     def unregister_observer(self, callback):
         """Remove a previously registered observer callback."""
@@ -248,7 +247,6 @@ class Camera:
             old_len = len(self._observers)
             self._observers = [cb for cb in self._observers if cb is not callback]
             if len(self._observers) != old_len:
-                print(f"[Camera] unregister_observer: now {len(self._observers)} observers")
 
     def _notify_observers(self):
         """Notify all registered observers that the transform has changed."""
