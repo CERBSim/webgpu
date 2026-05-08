@@ -63,6 +63,9 @@ class TestJSObjectRelease:
         assert during >= before + 200
 
         # Drop all Python references and force GC
+        # In Python <3.13, f_locals keeps a stale ref to the list object even
+        # after `del`, preventing GC of its contents.  .clear() fixes that.
+        proxies.clear()
         del proxies
         gc.collect()
         gc.collect()
