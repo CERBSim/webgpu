@@ -3,7 +3,7 @@ from typing import Callable
 
 import numpy as np
 
-from .camera import Camera
+from .camera import Camera, CameraUniforms
 from .canvas import Canvas
 from .light import Light
 from .utils import (
@@ -55,12 +55,12 @@ class SelectEvent:
     def obj_id(self):
         return np.frombuffer(self.data[:4], dtype=np.uint32)[0]
 
-    def calculate_position(self, camera: Camera):
-        x = self.x / camera.canvas.width * 2 - 1
-        y = 1 - self.y / camera.canvas.height * 2
+    def calculate_position(self, options):
+        x = self.x / options.canvas.width * 2 - 1
+        y = 1 - self.y / options.canvas.height * 2
         z = self.z
 
-        mat = camera.model_view_proj
+        mat = options.model_view_proj
         inv_mat = np.linalg.inv(mat)
         ndc = np.array([x, y, z, 1.0], dtype=np.float32)
         pos = inv_mat @ ndc
@@ -72,10 +72,23 @@ class RenderOptions:
     canvas: Canvas
     command_encoder: CommandEncoder
     timestamp: float
+    model_view_proj: object  # numpy array, updated by update_buffers
 
     def __init__(self, camera: Camera, light: Light):
         self.light = light
         self.camera = camera
+        self._camera_uniforms = None
+        self.model_view_proj = None
+        self._extra_binding_providers = []
+
+    def __getstate__(self):
+        return {"camera": self.camera, "light": self.light}
+
+    def __setstate__(self, state):
+        self.camera = state["camera"]
+        self.light = state["light"]
+        self._camera_uniforms = None
+        self.model_view_proj = None
         self._extra_binding_providers = []
 
     def add_bindings(self, provider):
@@ -84,14 +97,20 @@ class RenderOptions:
 
     def set_canvas(self, canvas: Canvas):
         self.canvas = canvas
-        self.camera.set_canvas(canvas)
+        if self._camera_uniforms is None:
+            self._camera_uniforms = CameraUniforms()
+        self.update_buffers()
 
     @property
     def device(self) -> Device:
         return get_device()
 
     def update_buffers(self):
-        self.camera._update_uniforms()
+        if self._camera_uniforms is None:
+            return
+        mvp, _ = self._camera_uniforms.update(self.camera.transform, self.canvas)
+        if mvp is not None:
+            self.model_view_proj = mvp
         self.light.update(self)
 
     def get_bindings(self):
@@ -100,7 +119,7 @@ class RenderOptions:
             extra.extend(p.get_bindings())
         return [
             *self.light.get_bindings(),
-            *self.camera.get_bindings(),
+            *self._camera_uniforms.get_bindings(),
             *extra,
         ]
 

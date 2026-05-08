@@ -217,6 +217,7 @@ class Canvas:
 
         self._on_resize_callbacks = []
         self._on_update_html_canvas = []
+        self._on_visibility_callbacks = []
 
         self._resize_observer = None
         self._intersection_observer = None
@@ -293,6 +294,8 @@ class Canvas:
                 if observer_entry[0].isIntersecting:
                     for func in self._on_resize_callbacks:
                         func()
+                for func in self._on_visibility_callbacks:
+                    func(observer_entry[0].isIntersecting)
 
             if self._resize_observer is not None:
                 self._resize_observer.disconnect()
@@ -321,6 +324,10 @@ class Canvas:
 
     def on_resize(self, func: Callable):
         self._on_resize_callbacks.append(func)
+
+    def on_visibility(self, func: Callable):
+        """Register callback for visibility changes. Called with True/False."""
+        self._on_visibility_callbacks.append(func)
 
     def on_update_html_canvas(self, func: Callable):
         self._on_update_html_canvas.append(func)
