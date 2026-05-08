@@ -498,10 +498,9 @@ class LinkBase:
             if request_id is not None:
                 self._send_response(request_id, response)
         except Exception as e:
-            from ngapp.utils import print_exception
-
             print("error in on_message", data, type(e), str(e))
-            print_exception(e)
+            import traceback
+            traceback.print_exception(*sys.exc_info())
 
 
 class PyodideLink(LinkBase):
