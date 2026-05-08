@@ -246,7 +246,6 @@ class Camera:
         with self._observers_lock:
             old_len = len(self._observers)
             self._observers = [cb for cb in self._observers if cb is not callback]
-            if len(self._observers) != old_len:
 
     def _notify_observers(self):
         """Notify all registered observers that the transform has changed."""
