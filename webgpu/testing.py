@@ -110,7 +110,7 @@ def _make_test_html(ws_port, link_js_content):
 <div id="__webgpu_container"></div>
 <script>
 {inline_js}
-WebsocketLink('ws://127.0.0.1:{ws_port}');
+window.__crosslink = WebsocketLink('ws://127.0.0.1:{ws_port}');
 {_READBACK_JS}
 // Disable patchedRequestAnimationFrame: its rAF+queue.submit breaks
 // subsequent bridge mapAsync calls in headless Chrome. Tests read
@@ -384,6 +384,14 @@ def webgpu_env(browser):
     from webgpu.utils import init_device_sync
 
     init_device_sync()
+
+    # Flush any init intermediates so tests start with a clean release queue
+    import gc
+    gc.collect()
+    gc.collect()
+    platform.link._flush_release_queue()
+    import time
+    time.sleep(0.1)
 
     yield WebGPUTestEnv(page=test_page, wj=wj, platform=platform)
 

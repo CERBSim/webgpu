@@ -452,6 +452,14 @@ class CrossLink {
 
     let response = null;
 
+    // Handle piggybacked deletes on any message
+    if (data._deletes) {
+      for (const id of data._deletes) {
+        delete this.objects[id];
+      }
+    }
+
+    try {
     switch (data.type) {
       case 'call':
       case 'new':
@@ -489,7 +497,14 @@ class CrossLink {
         if (data.key) obj[data.key] = value;
         break;
       case 'delete':
-        this.objects[data.id] = undefined;
+        delete this.objects[data.id];
+        break;
+      case 'delete_batch':
+        if (data.ids) {
+          for (const id of data.ids) {
+            delete this.objects[id];
+          }
+        }
         break;
       case 'response':
         this.requests[request_id](this._loadData(data.value, buffer));
@@ -510,6 +525,14 @@ class CrossLink {
         break;
       default:
         console.error('Unknown message type:', data, data.type);
+    }
+    } catch (e) {
+      if (request_id !== undefined && data.type !== 'response') {
+        console.error('Error processing message:', e, data);
+        this.sendResponse(null, request_id);
+        return;
+      }
+      throw e;
     }
 
     if (request_id !== undefined && data.type !== 'response') {

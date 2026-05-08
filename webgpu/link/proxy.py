@@ -1,3 +1,5 @@
+import sys
+
 from .base import LinkBase
 
 
@@ -30,6 +32,7 @@ class Proxy:
         self._id = id
         self._parent_id = parent_id
         self._noreturn_names = set()
+        self._pcache = {}
 
     def __getitem__(self, key):
         return self.__getattr__(key)
@@ -45,23 +48,30 @@ class Proxy:
                 "_call_method_ignore_return",
                 "_call_method",
                 "_noreturn_names",
+                "_pcache",
             ]
             or isinstance(key, str)
             and key.startswith("__")
         ):
             return super().__getattr__(key)
+        cached = self._pcache.get(key)
+        if cached is not None:
+            return cached
         if key in self._noreturn_names:
 
             def wrapper(*args):
                 return self._call_method_ignore_return(key, list(args))
 
             return wrapper
-        return self._link.get(self._id, key)
+        result = self._link.get(self._id, key)
+        if isinstance(result, Proxy) and (self._id, key) in self._link._cache:
+            self._pcache[key] = result
+        return result
 
     def __setattr__(self, key, value):
-        if key in ["_id", "_parent_id", "_link", "_noreturn_names"]:
+        if key in ["_id", "_parent_id", "_link", "_noreturn_names", "_pcache"]:
             return super().__setattr__(key, value)
-
+        self._pcache.pop(key, None)
         return self._link.set(self._id, key, value)
 
     def __setitem__(self, key, value):
@@ -88,6 +98,33 @@ class Proxy:
 
     def _get_keys(self):
         return self._link.get_keys(self._id)
+
+    def __del__(self):
+        if sys is None or sys.meta_path is None:
+            return
+        link = self.__dict__.get('_link')
+        id_ = self.__dict__.get('_id')
+        parent_id = self.__dict__.get('_parent_id')
+        if link is None:
+            return
+        with link._refcount_lock:
+            refcount = link._js_id_refcount
+            if id_ is not None:
+                rc = refcount.get(id_, 0) - 1
+                if rc <= 0:
+                    refcount.pop(id_, None)
+                    link._release_queue.append(id_)
+                else:
+                    refcount[id_] = rc
+            if parent_id is not None:
+                rc = refcount.get(parent_id, 0) - 1
+                if rc <= 0:
+                    refcount.pop(parent_id, None)
+                    link._release_queue.append(parent_id)
+                else:
+                    refcount[parent_id] = rc
+        if hasattr(link, '_schedule_flush'):
+            link._schedule_flush()
 
     def __iter__(self):
         return _ProxyIterator(self)
