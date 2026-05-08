@@ -1,7 +1,7 @@
 import numpy as np
 
 from .uniforms import BaseBinding, Binding, UniformBase, ct
-from .utils import read_shader_file
+from .utils import read_shader_file, Lock
 
 
 class CameraUniforms(UniformBase):
@@ -20,6 +20,70 @@ class CameraUniforms(UniformBase):
         ("height", ct.c_uint32),
         ("padding", ct.c_uint32),
     ]
+
+    def update(self, transform, canvas):
+        """Recompute projection/model-view matrices from transform and canvas dimensions.
+
+        Returns (model_view_proj, model_view) matrices, or (None, None) if canvas is unavailable.
+        """
+        if canvas is None or canvas.height == 0:
+            return None, None
+
+        near = 0.1
+        far = 10
+        fov = 45
+        aspect = canvas.width / canvas.height
+
+        zoom = 1.0
+        top = near * (np.tan(np.radians(fov) / 2)) * zoom
+        height = 2 * top
+        width = aspect * height
+        left = -0.5 * width
+        right = left + width
+        bottom = top - height
+
+        x = 2 * near / (right - left)
+        y = 2 * near / (top - bottom)
+
+        a = (right + left) / (right - left)
+        b = (top + bottom) / (top - bottom)
+
+        c = -far / (far - near)
+        d = (-far * near) / (far - near)
+
+        proj_mat = np.array(
+            [
+                [x, 0, a, 0],
+                [0, y, b, 0],
+                [0, 0, c, d],
+                [0, 0, -1, 0],
+            ]
+        )
+
+        view_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, -3], [0, 0, 0, 1]])
+        model_view = view_mat @ transform.mat
+        model_view_proj = proj_mat @ model_view
+        normal_mat = np.linalg.inv(model_view)
+
+        self.aspect = aspect
+        self.view[:] = view_mat.transpose().flatten()
+        self.model_view[:] = model_view.transpose().flatten()
+        self.model_view_projection[:] = model_view_proj.transpose().flatten()
+        self.normal_mat[:] = normal_mat.flatten()
+
+        # Extract pure rotation from model_view (upper-left 3x3, normalize columns to remove scale)
+        mv33 = model_view[:3, :3]
+        col_norms = np.linalg.norm(mv33, axis=0)
+        col_norms[col_norms == 0] = 1.0
+        rot33 = mv33 / col_norms
+        rot_mat4 = np.identity(4)
+        rot_mat4[:3, :3] = rot33
+        self.rot_mat[:] = rot_mat4.transpose().flatten()
+        self.width = canvas.width
+        self.height = canvas.height
+        self.update_buffer()
+
+        return model_view_proj, model_view
 
 
 class Transform:
@@ -143,95 +207,124 @@ class Transform:
     def _centering(self, center):
         return self._CenteringContext(self, center)
 
+
 class Camera:
-    """Interactive camera that maps a 3D scene to clip space and updates GPU uniforms."""
+    """Interactive camera that holds a transform and notifies registered observers on change."""
 
     def __init__(self):
-        self.uniforms = None
-        self.canvas = None
         self.transform = Transform()
-        self._render_function = None
-        self._get_position_function = None
+        self._observers = []
+        self._observers_lock = Lock()
         self._is_moving = False
         self._is_rotating = False
+        self._registered_handlers = {}
 
     def __setstate__(self, state):
         """Restore pickled camera state (only the transform)."""
         self.transform = state["transform"]
-        self.canvas = None
-        self.uniforms = None
-        self._render_function = None
-        self._get_position_function = None
+        self._observers = []
+        self._observers_lock = Lock()
         self._is_moving = False
         self._is_rotating = False
+        self._registered_handlers = {}
 
     def __getstate__(self):
         """Return a minimal picklable representation of the camera."""
         return {"transform": self.transform}
 
+    def register_observer(self, callback):
+        """Register a callback to be called when the camera transform changes.
+        
+        Idempotent: registering the same callback twice has no additional effect.
+        """
+        with self._observers_lock:
+            if callback not in self._observers:
+                self._observers.append(callback)
+                print(f"[Camera] register_observer: now {len(self._observers)} observers")
+
+    def unregister_observer(self, callback):
+        """Remove a previously registered observer callback."""
+        with self._observers_lock:
+            old_len = len(self._observers)
+            self._observers = [cb for cb in self._observers if cb is not callback]
+            if len(self._observers) != old_len:
+                print(f"[Camera] unregister_observer: now {len(self._observers)} observers")
+
+    def _notify_observers(self):
+        """Notify all registered observers that the transform has changed."""
+        with self._observers_lock:
+            observers = list(self._observers)
+        for cb in observers:
+            cb()
+
     def reset(self, pmin, pmax):
-        """Fit the camera to the axis-aligned box [pmin, pmax] and update uniforms."""
+        """Fit the camera to the axis-aligned box [pmin, pmax] and notify observers."""
         self.transform.init(pmin, pmax)
-        self._update_uniforms()
+        self._notify_observers()
 
     def reset_xy(self, flip: bool = False):
-        """Reset to a top-down XY view of the current center and update uniforms."""
+        """Reset to a top-down XY view and notify observers."""
         self.transform.reset_xy(flip)
-        self._update_uniforms()
+        self._notify_observers()
 
     def reset_xz(self, flip: bool = False):
-        """Reset to an XZ view of the current center and update uniforms."""
+        """Reset to an XZ view and notify observers."""
         self.transform.reset_xz(flip)
-        self._update_uniforms()
+        self._notify_observers()
 
     def reset_yz(self, flip: bool = False):
-        """Reset to a YZ view of the current center and update uniforms."""
+        """Reset to a YZ view and notify observers."""
         self.transform.reset_yz(flip)
-        self._update_uniforms()
-
-    def set_canvas(self, canvas):
-        """Attach the camera to a canvas, register resize handling, and allocate uniforms."""
-        self.canvas = canvas
-        canvas.on_resize(self._update_uniforms)
-        if self.uniforms is None:
-            self.uniforms = CameraUniforms()
-        self._update_uniforms()
-
-    def get_bindings(self) -> list[BaseBinding]:
-        return self.uniforms.get_bindings()
+        self._notify_observers()
 
     def get_shader_code(self):
         return read_shader_file("camera.wgsl")
 
-    def __del__(self):
-        del self.uniforms
+    def register_callbacks(self, input_handler, get_position_fn=None):
+        """Register mouse/wheel handlers on the given input_handler.
+        
+        Idempotent: unregisters existing handlers for this input_handler first.
+        get_position_fn is used for dblclick center-on-point (per-canvas).
+        """
+        # Unregister first to avoid duplicates
+        self.unregister_callbacks(input_handler)
 
-    def set_render_functions(self, redraw_function, get_position_function=None):
-        """Install callbacks for triggering redraws and mapping screen to world positions."""
-        self._render_function = redraw_function
-        self._get_position_function = get_position_function
+        def on_dblclick(ev):
+            if get_position_fn:
+                p = get_position_fn(ev["canvasX"], ev["canvasY"])
+                if p is not None:
+                    self.transform.set_center(p)
+                    self._notify_observers()
 
-    def register_callbacks(self, input_handler):
-        input_handler.on_mousedown(self._on_mousedown, ctrl=False, shift=False, alt=False)
-        input_handler.on_mouseup(self._on_mouseup, ctrl=False, shift=False, alt=False)
-        input_handler.on_mouseout(self._on_mouseup, ctrl=False, shift=False, alt=False)
-        input_handler.on_mousemove(self._on_mousemove, ctrl=False, shift=False, alt=False)
-        input_handler.on_dblclick(self._on_dblclick, ctrl=False, shift=False, alt=False)
-        input_handler.on_wheel(self._on_wheel, ctrl=False, shift=False, alt=False)
+        handlers = {
+            'mousedown': self._on_mousedown,
+            'mouseup': self._on_mouseup,
+            'mouseout': self._on_mouseup,
+            'mousemove': self._on_mousemove,
+            'wheel': self._on_wheel,
+            'dblclick': on_dblclick,
+        }
+        self._registered_handlers[id(input_handler)] = handlers
+
+        input_handler.on_mousedown(handlers['mousedown'], ctrl=False, shift=False, alt=False)
+        input_handler.on_mouseup(handlers['mouseup'], ctrl=False, shift=False, alt=False)
+        input_handler.on_mouseout(handlers['mouseout'], ctrl=False, shift=False, alt=False)
+        input_handler.on_mousemove(handlers['mousemove'], ctrl=False, shift=False, alt=False)
+        input_handler.on_dblclick(handlers['dblclick'], ctrl=False, shift=False, alt=False)
+        input_handler.on_wheel(handlers['wheel'], ctrl=False, shift=False, alt=False)
 
     def unregister_callbacks(self, input_handler):
-        input_handler.unregister("mousedown", self._on_mousedown)
-        input_handler.unregister("mouseup", self._on_mouseup)
-        input_handler.unregister("mouseout", self._on_mouseup)
-        input_handler.unregister("mousemove", self._on_mousemove)
-        input_handler.unregister("dblclick", self._on_dblclick)
-        input_handler.unregister("wheel", self._on_wheel)
-
-    def _on_dblclick(self, ev):
-        p = self._get_event_position(ev["canvasX"], ev["canvasY"])
-        if p is not None:
-            self.transform.set_center(p)
-            self._render()
+        """Remove previously registered handlers from the given input_handler."""
+        key = id(input_handler)
+        handlers = self._registered_handlers.pop(key, None)
+        if handlers is None:
+            return
+        input_handler.unregister("mousedown", handlers['mousedown'])
+        input_handler.unregister("mouseup", handlers['mouseup'])
+        input_handler.unregister("mouseout", handlers['mouseout'])
+        input_handler.unregister("mousemove", handlers['mousemove'])
+        input_handler.unregister("dblclick", handlers['dblclick'])
+        input_handler.unregister("wheel", handlers['wheel'])
 
     def _on_mousedown(self, ev):
         if ev["button"] == 0:
@@ -242,15 +335,10 @@ class Camera:
     def _on_mouseup(self, _):
         self._is_moving = False
         self._is_rotating = False
-        self._is_zooming = False
 
     def _on_wheel(self, ev):
-        if ev["shiftKey"]:
-            p = self._get_event_position(ev["canvasX"], ev["canvasY"])
-        else:
-            p = self.transform._center
-        self.transform.scale(1 - ev["deltaY"] / 1000, p)
-        self._render()
+        self.transform.scale(1 - ev["deltaY"] / 1000, self.transform._center)
+        self._notify_observers()
         if hasattr(ev, "preventDefault"):
             ev.preventDefault()
 
@@ -258,82 +346,8 @@ class Camera:
         if self._is_rotating:
             s = 0.3
             self.transform.rotate(s * ev["movementY"], s * ev["movementX"])
-            self._render()
-        if self._is_moving:
+            self._notify_observers()
+        elif self._is_moving:
             s = 0.01
             self.transform.translate(s * ev["movementX"], -s * ev["movementY"])
-            self._render()
-
-    def _render(self):
-        self._update_uniforms()
-        if self._render_function:
-            self._render_function()
-
-    def _get_event_position(self, x, y):
-        if self._get_position_function:
-            return self._get_position_function(x, y)
-        return None
-
-    def _update_uniforms(self):
-        """Recompute projection/model-view matrices and write them into the GPU uniforms."""
-        if self.canvas is None:
-            return
-        if self.uniforms is None:
-            self.uniforms = CameraUniforms()
-        near = 0.1
-        far = 10
-        fov = 45
-        if self.canvas.height == 0:
-            aspect = 800 / 600
-        else:
-            aspect = self.canvas.width / self.canvas.height
-
-        zoom = 1.0
-        top = near * (np.tan(np.radians(fov) / 2)) * zoom
-        height = 2 * top
-        width = aspect * height
-        left = -0.5 * width
-        right = left + width
-        bottom = top - height
-
-        x = 2 * near / (right - left)
-        y = 2 * near / (top - bottom)
-
-        a = (right + left) / (right - left)
-        b = (top + bottom) / (top - bottom)
-
-        c = -far / (far - near)
-        d = (-far * near) / (far - near)
-
-        proj_mat = np.array(
-            [
-                [x, 0, a, 0],
-                [0, y, b, 0],
-                [0, 0, c, d],
-                [0, 0, -1, 0],
-            ]
-        )
-
-        view_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, -3], [0, 0, 0, 1]])
-        model_view = view_mat @ self.transform.mat
-        model_view_proj = proj_mat @ model_view
-        self.model_view = model_view
-        normal_mat = np.linalg.inv(model_view)
-        self.model_view_proj = model_view_proj
-
-        self.uniforms.aspect = aspect
-        self.uniforms.view[:] = view_mat.transpose().flatten()
-        self.uniforms.model_view[:] = model_view.transpose().flatten()
-        self.uniforms.model_view_projection[:] = model_view_proj.transpose().flatten()
-        self.uniforms.normal_mat[:] = normal_mat.flatten()
-        # Extract pure rotation from model_view (upper-left 3x3, normalize columns to remove scale)
-        mv33 = model_view[:3, :3]
-        col_norms = np.linalg.norm(mv33, axis=0)
-        col_norms[col_norms == 0] = 1.0
-        rot33 = mv33 / col_norms
-        rot_mat4 = np.identity(4)
-        rot_mat4[:3, :3] = rot33
-        self.uniforms.rot_mat[:] = rot_mat4.transpose().flatten()
-        self.uniforms.width = self.canvas.width
-        self.uniforms.height = self.canvas.height
-        self.uniforms.update_buffer()
+            self._notify_observers()

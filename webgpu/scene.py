@@ -107,8 +107,8 @@ class Scene:
 
             camera = self.options.camera
             self._js_render = platform.create_proxy(self._render_direct)
-            camera.set_render_functions(self.render, self.get_position)
-            camera.register_callbacks(self.input_handler)
+            camera.register_callbacks(self.input_handler, self.get_position)
+            camera.register_observer(self._on_camera_changed)
 
             self._select_buffer = self.device.createBuffer(
                 size=4 * 4,
@@ -117,23 +117,24 @@ class Scene:
             )
             self._select_buffer_valid = False
 
-            canvas.on_resize(self.render)
+            canvas.on_resize(self._on_resize)
+            canvas.on_visibility(self._on_visibility_changed)
 
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
 
     def __on_update_html_canvas(self, html_canvas):
         """Update event wiring when the underlying HTML canvas element changes."""
+        print(f"[Scene {self._id[:8]}] __on_update_html_canvas: html_canvas={'not None' if html_canvas else 'None'}")
         camera = self.options.camera
+        # Always unregister first to avoid duplicates
+        camera.unregister_callbacks(self.input_handler)
+        camera.unregister_observer(self._on_camera_changed)
+
         if html_canvas is not None:
             self.input_handler.set_canvas(html_canvas)
-            camera.set_render_functions(self.render, self.get_position)
-            camera.register_callbacks(self.input_handler)
-            camera.set_canvas(self.canvas)
+            camera.register_callbacks(self.input_handler, self.get_position)
+            camera.register_observer(self._on_camera_changed)
         else:
-            camera.unregister_callbacks(self.input_handler)
-            if camera._render_function == self.render:
-                camera._render_function = None
-                camera._get_position_function = None
             self.input_handler.set_canvas(None)
 
     def get_position(self, x: int, y: int):
@@ -171,7 +172,7 @@ class Scene:
 
             ev = SelectEvent(x, y, read_buffer(buffer))
             if ev.obj_id > 0:
-                p = ev.calculate_position(self.options.camera)
+                p = ev.calculate_position(self.options)
                 return p
             return None
 
@@ -338,14 +339,48 @@ class Scene:
         with self._render_mutex:
             if self.canvas is not None:
                 self.options.camera.unregister_callbacks(self.input_handler)
-                self.options.camera._render_function = None
-                self.options.camera._get_position_function = None
+                self.options.camera.unregister_observer(self._on_camera_changed)
                 self.input_handler.unregister_callbacks()
                 if hasattr(self, '_js_render'):
                     platform.destroy_proxy(self._js_render)
                     del self._js_render
-                if self.render in self.canvas._on_resize_callbacks:
-                    self.canvas._on_resize_callbacks.remove(self.render)
+                if self._on_resize in self.canvas._on_resize_callbacks:
+                    self.canvas._on_resize_callbacks.remove(self._on_resize)
+                if self._on_visibility_changed in self.canvas._on_visibility_callbacks:
+                    self.canvas._on_visibility_callbacks.remove(self._on_visibility_changed)
                 if self.__on_update_html_canvas in self.canvas._on_update_html_canvas:
                     self.canvas._on_update_html_canvas.remove(self.__on_update_html_canvas)
                 self.canvas = None
+
+    def _on_camera_changed(self):
+        """Called by the camera when its transform changes. Update uniforms and re-render."""
+        if self.canvas is None:
+            return
+        html_canvas = self.canvas.canvas
+        if html_canvas is None:
+            return
+        # Check if canvas has layout (display:none → offsetWidth/Height = 0)
+        if not html_canvas.offsetWidth or not html_canvas.offsetHeight:
+            self.options.camera.unregister_callbacks(self.input_handler)
+            self.options.camera.unregister_observer(self._on_camera_changed)
+            return
+        self.options.update_buffers()
+        self.render()
+
+    def _on_resize(self):
+        """Called on canvas resize. Update camera uniforms (aspect ratio) and re-render."""
+        self.options.update_buffers()
+        self.render()
+
+    def _on_visibility_changed(self, visible):
+        """Called by canvas IntersectionObserver when visibility changes."""
+        print(f"[Scene {self._id[:8]}] _on_visibility_changed: visible={visible}")
+        camera = self.options.camera
+        if visible:
+            camera.register_callbacks(self.input_handler, self.get_position)
+            camera.register_observer(self._on_camera_changed)
+            self.options.update_buffers()
+            self.render()
+        else:
+            camera.unregister_callbacks(self.input_handler)
+            camera.unregister_observer(self._on_camera_changed)
