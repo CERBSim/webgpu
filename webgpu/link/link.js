@@ -27,8 +27,9 @@ function serializeEvent(event) {
   let obj = Object.fromEntries(keys.map((k) => [k, event[k]]));
   if (event.x !== undefined) {
     let rect = event.target.getBoundingClientRect();
-    obj.canvasX = event.x - Math.floor(rect.x);
-    obj.canvasY = event.y - Math.floor(rect.y);
+    let dpr = window.devicePixelRatio || 1;
+    obj.canvasX = Math.round((event.x - rect.x) * dpr);
+    obj.canvasY = Math.round((event.y - rect.y) * dpr);
   }
   return obj;
 }

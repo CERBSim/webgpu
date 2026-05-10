@@ -282,7 +282,6 @@ class Canvas:
                     "device": self.device.handle,
                     "format": self.format,
                     "alphaMode": "premultiplied",
-                    "sampleCount": self.multisample.count,
                     "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
                 }
             )
@@ -366,8 +365,9 @@ class Canvas:
             if canvas is None:
                 return
             rect = canvas.getBoundingClientRect()
-            width = int(rect.width)
-            height = int(rect.height)
+            dpr = getattr(platform.js.window, 'devicePixelRatio', 1) or 1
+            width = round(rect.width * dpr)
+            height = round(rect.height * dpr)
 
             if width == self.width and height == self.height:
                 for func in self._on_resize_callbacks:

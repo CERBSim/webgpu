@@ -87,8 +87,6 @@ def _draw_scene(scene: Scene, width, height, id_):
 
     while html_canvas is None:
         html_canvas = platform.js.document.getElementById(f"{id_}canvas")
-    html_canvas.width = width
-    html_canvas.height = height
     gui_element = platform.js.document.getElementById(f"{id_}lilgui")
 
     # Lazily initialize the WebGPU device the first time we draw.
