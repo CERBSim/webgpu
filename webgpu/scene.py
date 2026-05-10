@@ -241,6 +241,7 @@ class Scene:
 
         if update_pipelines:
             self._select_buffer_valid = False
+            options.timestamp = time.time()
             for obj in self.render_objects:
                 if obj.active:
                     obj._update_and_create_render_pipeline(options)

@@ -96,6 +96,21 @@ class Colormap(BaseRenderer):
         for callback in self._callbacks:
             callback()
 
+    def widen_range(self, minval, maxval, timestamp=None):
+        """Extend the autoscale range and apply it.
+
+        On the first call with a new timestamp, resets to inverted range so
+        each frame starts fresh. Subsequent calls in the same frame widen.
+        """
+        ts = getattr(self, '_autoscale_ts', None)
+        if timestamp is not None and timestamp != ts:
+            self._autoscale_ts = timestamp
+            self._autoscale_min = 1e99
+            self._autoscale_max = -1e99
+        self._autoscale_min = min(getattr(self, '_autoscale_min', minval), minval)
+        self._autoscale_max = max(getattr(self, '_autoscale_max', maxval), maxval)
+        self.set_min_max(self._autoscale_min, self._autoscale_max, set_autoscale=False)
+
     def set_min_max(self, minval, maxval, set_autoscale=True):
         self.minval = minval
         self.maxval = maxval
