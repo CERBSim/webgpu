@@ -336,6 +336,8 @@ class Scene:
 
     def cleanup(self):
         """Detach the scene from its canvas, unregister callbacks, and release JS proxies."""
+        if self._render_mutex is None:
+            return
         with self._render_mutex:
             if self.canvas is not None:
                 self.options.camera.unregister_callbacks(self.input_handler)

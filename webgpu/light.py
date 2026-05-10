@@ -45,6 +45,7 @@ class Light:
             "key": self.key,
             "fill": self.fill,
             "ambient": self.ambient,
+            "diffuse": self.diffuse,
             "specular": self.specular,
             "shininess": self.shininess,
             "wrap": self.wrap,
@@ -55,8 +56,9 @@ class Light:
         return state
 
     def __setstate__(self, state):
-        self.keys = state["key"]
+        self.key = state["key"]
         self.fill = state["fill"]
+        self.diffuse = state.get("diffuse", 0.75)
         self.ambient = state["ambient"]
         self.specular = state["specular"]
         self.shininess = state["shininess"]
