@@ -24,6 +24,14 @@ _TARGET_FPS = 60
 
 def debounce(arg=None, *, rate_hz=60):
 
+    if platform.is_pyodide:
+      if callable(arg):
+        return arg
+      def _rate_limited(fn, *args, **kwargs):
+        return fn
+
+      return _rate_limited
+
     def _rate_limited(fn, rate_hz):
         interval = 1.0 / rate_hz
         lock = threading.RLock()
