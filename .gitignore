@@ -6,6 +6,7 @@ __pycache__
 *.egg-info
 docs/html
 *.html
+!docs/_static/showcase.html
 
 /webgpu/_version.py
 /docs/.virtual_documents/
