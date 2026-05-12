@@ -149,6 +149,116 @@ interactionHandlers.time_animation = function (engine, interaction, gui) {
   applyFrame();
 };
 
+// --- Generic GUI ---
+// config: {
+//   label: string,
+//   vars: { name: defaultValue, ... },
+//   controls: [{kind: 'checkbox'|'slider'|'dropdown', var, name, ...kindOpts}],
+//   writes: [{
+//     targets: [{buffer_id, offset, dtype: 'f32'|'u32'|'i32'}],
+//     expr?: string,        // JS expr over vars + t (seconds since loop start)
+//     value?: any,          // constant (used if expr absent)
+//     when?: string,        // JS expr; if falsy, skip
+//     trigger?: string,     // var name; one-shot on change instead of per-frame
+//   }, ...]
+// }
+//
+// Per-frame writes (no `trigger`) run inside a requestAnimationFrame loop
+// while at least one of them has a truthy `when`. Trigger writes fire once
+// whenever the named var changes via the GUI.
+
+interactionHandlers.gui = function (engine, interaction, gui) {
+  const cfg = interaction.config;
+  const vars = { ...(cfg.vars || {}) };
+  const controls = cfg.controls || [];
+  const writes = cfg.writes || [];
+
+  function compile(expr) {
+    if (expr == null) return null;
+    const keys = Object.keys(vars);
+    const decl = keys.length
+      ? `const {${keys.join(',')}} = __v;`
+      : '';
+    return new Function('__v', 't', `${decl} return (${expr});`);
+  }
+
+  const compiled = writes.map(w => ({
+    targets: w.targets || [],
+    exprFn: compile(w.expr),
+    whenFn: compile(w.when),
+    value: w.value,
+    trigger: w.trigger,
+  }));
+
+  function dtypeArray(dtype, v) {
+    if (dtype === 'u32') return new Uint32Array([v]);
+    if (dtype === 'i32') return new Int32Array([v]);
+    return new Float32Array([v]);
+  }
+
+  function executeWrite(w, t) {
+    if (w.whenFn && !w.whenFn(vars, t)) return;
+    const v = w.exprFn ? w.exprFn(vars, t) : w.value;
+    if (v == null) return;
+    for (const tgt of w.targets) {
+      const buf = engine.buffers.get(tgt.buffer_id);
+      if (!buf) continue;
+      engine.device.queue.writeBuffer(
+        buf, tgt.offset || 0, dtypeArray(tgt.dtype || 'f32', v),
+      );
+    }
+  }
+
+  const perFrame = compiled.filter(w => !w.trigger);
+  const triggers = compiled.filter(w => w.trigger);
+
+  let raf = null;
+  let t0 = 0;
+
+  function needsLoop() {
+    for (const w of perFrame) {
+      if (!w.whenFn || w.whenFn(vars, 0)) return true;
+    }
+    return false;
+  }
+
+  function loop(now) {
+    const t = (now - t0) / 1000;
+    for (const w of perFrame) executeWrite(w, t);
+    engine.render();
+    raf = needsLoop() ? requestAnimationFrame(loop) : null;
+  }
+
+  function ensureLoop() {
+    if (raf == null && needsLoop()) {
+      t0 = performance.now();
+      raf = requestAnimationFrame(loop);
+    }
+  }
+
+  function onVarChange(varName) {
+    for (const w of triggers) {
+      if (w.trigger === varName) executeWrite(w, 0);
+    }
+    if (triggers.length) engine.render();
+    ensureLoop();
+  }
+
+  const folder = gui.addFolder(cfg.label || 'Controls');
+  for (const c of controls) {
+    const name = c.name || c.var;
+    if (c.kind === 'checkbox') {
+      folder.add(vars, c.var).name(name).onChange(() => onVarChange(c.var));
+    } else if (c.kind === 'slider') {
+      folder.add(vars, c.var, c.min, c.max, c.step || 0.01)
+            .name(name).onChange(() => onVarChange(c.var));
+    } else if (c.kind === 'dropdown') {
+      folder.add(vars, c.var, c.options).name(name)
+            .onChange(() => onVarChange(c.var));
+    }
+  }
+};
+
 // ---------------------------------------------------------------------------
 
 class Interactions {
