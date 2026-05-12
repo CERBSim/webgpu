@@ -4,8 +4,7 @@ API reference
 This section contains an automatically generated reference for the main
 modules of the ``webgpu`` package. The reference is organized into
 separate pages by conceptual area. For usage patterns and higher-level
-explanations, see the :doc:`getting_started` guide and the
-:doc:`tutorials`.
+explanations, see the :doc:`guide`.
 
 
 Contents

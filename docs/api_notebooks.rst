@@ -10,12 +10,3 @@ Jupyter helpers
    :members:
    :undoc-members:
    :show-inheritance:
-
-
-Pyodide integration
--------------------
-
-.. automodule:: webgpu.jupyter_pyodide
-   :members:
-   :undoc-members:
-   :show-inheritance:

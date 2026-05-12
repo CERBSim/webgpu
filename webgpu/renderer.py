@@ -253,6 +253,14 @@ class BaseRenderer:
     def add_options_to_gui(self, gui):
         pass
 
+    def get_export_interactions(self, options, buffer_registry):
+        """Return ExportInteraction entries this renderer wants to emit.
+
+        Override in renderers that need custom JS-side interactions
+        (e.g. time-animation sliders). Default: none.
+        """
+        return []
+
 
     @property
     def active(self):
@@ -518,3 +526,62 @@ class Renderer(BaseRenderer):
             render_pass.setVertexBuffer(i, vertex_buffer)
         render_pass.draw(self.n_vertices, self.n_instances)
         render_pass.end()
+
+    def get_export_descriptor(self, options, buffer_registry):
+        """Generic export: works for any Renderer subclass after update()."""
+        from .export.format import ExportRenderPass
+        bindings = options.get_bindings() + self.get_bindings()
+        binding_map = buffer_registry.register_bindings(bindings)
+        vb_descriptors = []
+        for buf, layout in zip(self.vertex_buffers, self.vertex_buffer_layouts):
+            key = id(buf)
+            if key not in buffer_registry._buffers:
+                buf_id = buffer_registry._next_id("vertex")
+                buffer_registry._buffers[key] = (buf_id, buf, "vertex")
+            else:
+                buf_id = buffer_registry._buffers[key][0]
+            vb_descriptors.append({
+                "buffer_id": buf_id,
+                "arrayStride": layout.arrayStride,
+                "stepMode": layout.stepMode.value if layout.stepMode else "vertex",
+                "attributes": [
+                    {
+                        "format": attr.format.value if hasattr(attr.format, 'value') else str(attr.format),
+                        "offset": attr.offset,
+                        "shaderLocation": attr.shaderLocation,
+                    }
+                    for attr in layout.attributes
+                ],
+            })
+        # Index buffer (e.g. ShapeRenderer's triangle_buffer)
+        index_buffer_id = None
+        index_format = "uint32"
+        ib = getattr(self, 'triangle_buffer', None) or getattr(self, 'index_buffer', None)
+        if ib is not None:
+            key = id(ib)
+            if key not in buffer_registry._buffers:
+                buf_id = buffer_registry._next_id("index")
+                buffer_registry._buffers[key] = (buf_id, ib, "index")
+            else:
+                buf_id = buffer_registry._buffers[key][0]
+            index_buffer_id = buf_id
+        return ExportRenderPass(
+            id=f"render_{self._id}",
+            shader=self._get_preprocessed_shader_code(),
+            bindings=binding_map,
+            vertex_count=self.n_vertices,
+            instance_count=self.n_instances,
+            topology=self.topology,
+            depth_write=not self.transparent,
+            depth_bias=self.depthBias,
+            pass_type="transparent" if self.transparent else "opaque",
+            vertex_entry_point=self.vertex_entry_point,
+            fragment_entry_point=self.fragment_entry_point,
+            vertex_buffers=vb_descriptors,
+            index_buffer_id=index_buffer_id,
+            index_format=index_format,
+        )
+
+    def get_export_compute_passes(self, options, buffer_registry):
+        """Override in renderers that use compute shaders."""
+        return []

@@ -1,4 +1,4 @@
-Performance and best practices
+Performance and Best Practices
 ==============================
 
 This page summarizes patterns that keep visualizations responsive and
@@ -51,7 +51,3 @@ Interaction and responsiveness
   jobs where practical.
 - Keep shader code simple and data-parallel; avoid unnecessary branching
   in inner loops.
-
-These guidelines, together with the architectural overview and examples
-in the other user-guide pages, should give you a solid baseline for
-building efficient visualizations with ``webgpu``.
