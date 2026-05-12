@@ -170,9 +170,11 @@ class Colormap(BaseRenderer):
 
         device = get_device()
         if self.texture is None or self.texture.width != w or self.texture.height != h:
+            import os
+            extra = TextureUsage.COPY_SRC if os.environ.get("WEBGPU_EXPORTING") else 0
             self.texture = device.createTexture(
                 size=[w, h, 1],
-                usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
+                usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST | extra,
                 format=TextureFormat.rgba8unorm,
                 dimension="2d",
                 label="colormap_texture",

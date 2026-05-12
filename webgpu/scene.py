@@ -77,6 +77,16 @@ class Scene:
     def __repr__(self):
         return ""
 
+    def export(self, path=None):
+        """Export scene to binary blob for JS engine."""
+        from .export.capture import capture_scene
+        from .export.serialize import serialize_scene
+        blob = serialize_scene(capture_scene(self))
+        if path:
+            from pathlib import Path
+            Path(path).write_bytes(blob)
+        return blob
+
     @property
     def id(self) -> str:
         return self._id

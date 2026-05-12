@@ -55,19 +55,16 @@ python_maximum_signature_line_length = 80
 def setup(app):
     app.add_css_file("custom.css")
 
-    # After the HTML build finishes, create a ZIP archive of the
-    # top-level ``tutorials`` folder (if it exists) and place it in
-    # the HTML static output directory so it can be downloaded from
-    # the documentation.
+    # After the HTML build finishes, create a ZIP archive of the guide
+    # notebooks and place it in the HTML static output directory so it
+    # can be downloaded from the documentation.
 
-    def build_tutorials_zip(app, exception):
+    def build_notebooks_zip(app, exception):
         if exception is not None:
             return
 
-        # Tutorials are expected in ``../tutorials`` relative to the
-        # documentation source directory.
-        tutorials_src = os.path.abspath(os.path.join(app.srcdir, "..", "tutorials"))
-        if not os.path.isdir(tutorials_src):
+        notebooks_src = os.path.join(app.srcdir, "notebooks")
+        if not os.path.isdir(notebooks_src):
             return
 
         static_dir = os.path.join(app.outdir, "_static")
@@ -75,12 +72,12 @@ def setup(app):
         zip_path = os.path.join(static_dir, "tutorials.zip")
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for root, _, files in os.walk(tutorials_src):
+            for root, _, files in os.walk(notebooks_src):
                 for name in files:
                     if not name.endswith(".ipynb"):
                         continue
                     full_path = os.path.join(root, name)
-                    rel_path = os.path.relpath(full_path, tutorials_src)
+                    rel_path = os.path.relpath(full_path, notebooks_src)
                     zf.write(full_path, rel_path)
 
-    app.connect("build-finished", build_tutorials_zip)
+    app.connect("build-finished", build_notebooks_zip)

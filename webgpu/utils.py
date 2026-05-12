@@ -112,7 +112,7 @@ async def init_device() -> Device:
 
 def get_device() -> Device:
     if _device is None:
-        raise RuntimeError("Device not initialized")
+        init_device_sync()
     return _device
 
 
@@ -476,9 +476,11 @@ def run_compute_shader(
 def texture_from_data(width, height, data, format, label=""):
     """Create texture from data (bytes or numpy array)"""
     device = get_device()
+    import os
+    extra = TextureUsage.COPY_SRC if os.environ.get("WEBGPU_EXPORTING") else 0
     texture = device.createTexture(
         size=[width, height, 1],
-        usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
+        usage=TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST | extra,
         format=format,
         label=label,
     )
@@ -537,8 +539,10 @@ def buffer_from_array(
         data = data + b"\x00" * (4 - n % 4)  # pad to 4 bytes
         n = n + (4 - n % 4)
 
+    import os
+    extra = BufferUsage.COPY_SRC if os.environ.get("WEBGPU_EXPORTING") else 0
     buffer = create_buffer(
-        size=n, usage=usage | BufferUsage.COPY_DST, label=label, reuse=reuse
+        size=n, usage=usage | BufferUsage.COPY_DST | extra, label=label, reuse=reuse
     )
 
     chunk_size = 99 * 1024**2

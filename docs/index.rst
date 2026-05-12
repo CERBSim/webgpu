@@ -1,33 +1,42 @@
 WebGPU from Python
 ==================
 
-This project provides a Python-first interface to the browser's WebGPU API
-for **interactive visualization and compute** in Jupyter notebooks and
-exported HTML pages, while hiding most of the low-level WebGPU boilerplate
-behind a small rendering framework.
+**Interactive 3D visualization and GPU compute in Jupyter notebooks.**
 
-This documentation is split into several parts:
+.. raw:: html
+   :file: _static/showcase.html
 
-* **Getting started** - installation, a minimal "first scene" example and
-  a quick overview of the main concepts.
-* **User guide** - core concepts, renderers, scenes, selection and
-  compute use cases.
-* **Interactive tutorials (notebooks)** - downloadable notebooks that you
-  can run locally in Jupyter.
-* **API reference** - automatically generated reference for the main
-  ``webgpu`` modules.
+The ``webgpu`` package gives Python direct access to the browser's
+`WebGPU API <https://www.w3.org/TR/webgpu/>`_ — a modern, cross-platform
+GPU interface.  It is designed for **scientific applications** (finite
+elements, vector fields, point clouds) but exposes the full WebGPU
+pipeline so you can build any GPU-accelerated visualization or
+computation.
 
 
-Contents
---------
+Key features
+------------
+
+- **Full WebGPU access** — write WGSL shaders directly, create custom
+  render and compute pipelines from Python.
+- **Scientific renderers** — built-in support for instanced shapes,
+  triangle meshes, vector fields, colormaps, clipping planes, and labels.
+- **Jupyter integration** — ``Draw(renderer)`` produces an interactive 3D
+  canvas in any notebook cell with rotate/pan/zoom.
+- **Export to HTML** — scenes serialize to standalone HTML files with a
+  built-in JavaScript WebGPU engine.  No Python runtime needed in the browser.
+- **Compute shaders** — run WGSL compute kernels on GPU buffers from Python.
+- **Selection & picking** — click objects in the canvas and react in Python.
+
 
 .. toctree::
    :titlesonly:
    :maxdepth: 1
+   :caption: Contents
 
-   getting_started
-   user_guide
+   installation
+   guide
+   deployment
+   performance
    testing
-   tutorials
    api
-
