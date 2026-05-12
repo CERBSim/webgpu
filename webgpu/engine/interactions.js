@@ -201,6 +201,11 @@ interactionHandlers.gui = function (engine, interaction, gui) {
     const v = w.exprFn ? w.exprFn(vars, t) : w.value;
     if (v == null) return;
     for (const tgt of w.targets) {
+      if (tgt.dtype === 'pass_enable') {
+        const pass = engine.renderPassObjects.find(p => p.id === tgt.buffer_id);
+        if (pass) pass.enabled = !!v;
+        continue;
+      }
       const buf = engine.buffers.get(tgt.buffer_id);
       if (!buf) continue;
       engine.device.queue.writeBuffer(

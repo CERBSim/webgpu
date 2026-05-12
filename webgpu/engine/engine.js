@@ -370,6 +370,8 @@ class RenderEngine {
     }
 
     return {
+      id: rp.id,
+      enabled: true,
       pipeline,
       bindGroup,
       vertexCount: rp.vertex_count,
@@ -512,6 +514,7 @@ class RenderEngine {
     });
 
     for (const pass of this.renderPassObjects) {
+      if (pass.enabled === false) continue;
       renderPass.setPipeline(pass.pipeline);
       renderPass.setBindGroup(0, pass.bindGroup);
       if (pass.vertexBufferRefs) {

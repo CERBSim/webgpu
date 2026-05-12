@@ -198,4 +198,16 @@ def _detect_interactions(scene, registry) -> list:
     for obj in scene.render_objects:
         _collect_from_renderers(obj)
 
-    return interactions
+    # Deduplicate by (type, content). Renderers that share the same uniform
+    # buffers (clipping plane, colormap, complex settings, ...) emit identical
+    # configs and should appear only once in the GUI.
+    import json
+    seen = set()
+    deduped = []
+    for inter in interactions:
+        key = (inter.type, json.dumps(inter.config, sort_keys=True, default=str))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(inter)
+    return deduped
