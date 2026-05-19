@@ -79,8 +79,8 @@ class Clipping(BaseRenderer):
         return None
 
     def __del__(self):
-        if hasattr(self, "uniforms"):
-            self.uniforms._buffer.destroy()
+        # Do NOT auto-destroy: the JS engine may still reference this buffer.
+        pass
 
     def add_options_to_gui(self, gui):
         if gui is None:

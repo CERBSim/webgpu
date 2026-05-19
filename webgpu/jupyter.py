@@ -27,7 +27,7 @@ def _init_html(scene, width, height, flex=None):
 
     id_ = f"__webgpu_{next(_id_counter)}_"
 
-    style = f"background-color: white; width: {width}px; height: {height}px;"
+    style = f"background-color: white; width: {width}px; height: {height}px; touch-action: none;"
     if flex is not None:
         style += f" flex: {flex};"
 
@@ -54,16 +54,33 @@ def _init_html(scene, width, height, flex=None):
 
 
 def _draw_scene(scene: Scene, width, height, id_):
+    global _engine_emitted
     html_canvas = platform.js.document.getElementById(f"{id_}canvas")
 
     while html_canvas is None:
         html_canvas = platform.js.document.getElementById(f"{id_}canvas")
     gui_element = platform.js.document.getElementById(f"{id_}lilgui")
 
+    # Lazily inject the JS render engine into the browser scope so that
+    # Scene.init() can call RenderEngine.createLive(...).
+    if not _engine_emitted:
+        try:
+            from IPython.display import Javascript, display
+            from .engine import engine_js
+            display(Javascript(engine_js))
+            _engine_emitted = True
+        except Exception as e:
+            print(f'warning: could not inject engine_js: {e}')
+
     # Lazily initialize the WebGPU device the first time we draw.
     canvas = Canvas(init_device_sync(), html_canvas)
     scene.gui = LilGUI(gui_element, scene)
     scene.init(canvas)
+    # If the JS engine is active, its Interactions class owns the GUI.
+    # Suppress the Python LilGUI so add_options_to_gui() calls become no-ops.
+    if scene._js_engine is not None:
+        scene.gui.gui.destroy()
+        scene.gui = None
     scene.render()
 
 
@@ -86,7 +103,7 @@ class _NullGUI:
 
     User notebooks routinely call ``add_options_to_gui(scene.gui)`` to wire
     sliders/checkboxes. In export mode the GUI is rebuilt client-side from
-    ExportInteraction entries, so any Python-side calls during export are
+    Interaction entries, so any Python-side calls during export are
     irrelevant — they just need to not crash.
     """
 
@@ -127,7 +144,7 @@ def _DrawHTML(scene, width=640, height=600):
 
     # Provide a no-op GUI stub so user code that calls add_options_to_gui()
     # doesn't crash during export. The real GUI is rebuilt client-side by
-    # the JS Interactions class from ExportInteraction entries.
+    # the JS Interactions class from Interaction entries.
     scene.gui = _NullGUI()
 
     # Export scene to blob (scene.init already filled all GPU buffers)

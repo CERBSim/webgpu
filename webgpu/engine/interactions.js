@@ -1,5 +1,34 @@
 // Interactions — GUI controls that update uniform buffers and trigger compute/render
 
+/**
+ * Get an existing child folder by title, or create a new one.
+ * Prevents duplicate folders when multiple renderers export the same interaction type.
+ */
+function getOrCreateFolder(gui, title) {
+  for (const f of gui.folders) {
+    if (f._title === title) return f;
+  }
+  const folder = gui.addFolder(title);
+
+  // Remove any 'Empty' placeholder leaf nodes that lil-gui inserts for empty folders.
+  try {
+    const el = folder.domElement;
+    if (el) {
+      // Remove any leaf element whose trimmed text content is exactly 'Empty'
+      const leaves = el.querySelectorAll('*');
+      for (const node of leaves) {
+        if (node.childElementCount === 0 && node.textContent && node.textContent.trim() === 'Empty') {
+          node.remove();
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return folder;
+}
+
 async function loadLilGui() {
   if (window.lil && window.lil.GUI) return window.lil.GUI;
   if (window.createLilGUI) {
@@ -28,93 +57,6 @@ async function loadLilGui() {
 
 const interactionHandlers = {};
 
-// --- Clipping Plane ---
-// ClippingUniforms (48 bytes):
-//   plane:   vec4<f32> [0..15]  — (nx, ny, nz, d)
-//   sphere:  vec4<f32> [16..31] — (cx, cy, cz, radius)
-//   mode:    u32       [32..35]
-//   padding: u32*3     [36..47]
-
-interactionHandlers.clipping_plane = function (engine, interaction, gui) {
-  const cfg = interaction.config;
-  const bufferId = interaction.buffer_id;
-  const buffer = engine.buffers.get(bufferId);
-
-  const state = {
-    nx: cfg.normal[0],
-    ny: cfg.normal[1],
-    nz: cfg.normal[2],
-    offset: cfg.offset || 0,
-    mode: cfg.mode || 1,  // Default to PLANE mode
-    enabled: cfg.mode !== 0 && cfg.mode !== undefined,
-  };
-  const center = [...cfg.center];
-  const radius = cfg.radius || 1.0;
-
-  function writeBuffer() {
-    let nx = state.nx, ny = state.ny, nz = state.nz;
-    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-    if (len > 1e-12) { nx /= len; ny /= len; nz /= len; }
-    else { nx = 0; ny = 0; nz = -1; }
-
-    const cx = center[0] + nx * state.offset;
-    const cy = center[1] + ny * state.offset;
-    const cz = center[2] + nz * state.offset;
-    const d = -(cx * nx + cy * ny + cz * nz);
-
-    const data = new ArrayBuffer(48);
-    const f32 = new Float32Array(data);
-    const u32 = new Uint32Array(data);
-
-    f32[0] = nx; f32[1] = ny; f32[2] = nz; f32[3] = d;
-    f32[4] = cx; f32[5] = cy; f32[6] = cz; f32[7] = radius;
-    u32[8] = state.enabled ? state.mode : 0;
-    u32[9] = 0; u32[10] = 0; u32[11] = 0;
-
-    engine.device.queue.writeBuffer(buffer, 0, data);
-    if (engine.computeDAG) engine.computeDAG.markDirty(bufferId);
-    engine.render();
-  }
-
-  const folder = gui.addFolder('Clipping');
-  folder.add(state, 'enabled').name('Enabled').onChange(writeBuffer);
-  folder.add(state, 'nx', -1, 1, 0.01).name('Normal X').onChange(writeBuffer);
-  folder.add(state, 'ny', -1, 1, 0.01).name('Normal Y').onChange(writeBuffer);
-  folder.add(state, 'nz', -1, 1, 0.01).name('Normal Z').onChange(writeBuffer);
-  folder.add(state, 'offset', -2, 2, 0.01).name('Offset').onChange(writeBuffer);
-};
-
-// --- Colormap Range ---
-// ColormapUniforms: min (f32), max (f32), discrete (u32), n_colors (u32)
-// config provides offset_min / offset_max (byte offsets into the buffer)
-
-interactionHandlers.colormap_range = function (engine, interaction, gui) {
-  const cfg = interaction.config;
-  const bufferId = interaction.buffer_id;
-  const buffer = engine.buffers.get(bufferId);
-
-  const offsetMin = cfg.offset_min !== undefined ? cfg.offset_min : 0;
-  const offsetMax = cfg.offset_max !== undefined ? cfg.offset_max : 4;
-
-  const state = {
-    min: cfg.min !== undefined ? cfg.min : 0,
-    max: cfg.max !== undefined ? cfg.max : 1,
-  };
-
-  function writeBuffer() {
-    const tmp = new Float32Array(1);
-    tmp[0] = state.min;
-    engine.device.queue.writeBuffer(buffer, offsetMin, tmp);
-    tmp[0] = state.max;
-    engine.device.queue.writeBuffer(buffer, offsetMax, tmp);
-    engine.render();
-  }
-
-  const folder = gui.addFolder('Colormap');
-  folder.add(state, 'min', -10, 10, 0.01).name('Min').onChange(writeBuffer);
-  folder.add(state, 'max', -10, 10, 0.01).name('Max').onChange(writeBuffer);
-};
-
 // --- Time Animation ---
 // config: { frames: [frame_buf_id_for_target_0, frame_buf_id_for_target_1, ...] }
 // buffer_id: the live GPU buffer to overwrite when the slider moves.
@@ -142,7 +84,7 @@ interactionHandlers.time_animation = function (engine, interaction, gui) {
     engine.render();
   }
 
-  const folder = gui.addFolder(cfg.label || 'Animation');
+  const folder = getOrCreateFolder(gui, cfg.label || 'Animation');
   folder.add(state, 'time', 0, nFrames - 1, 1).name('Frame').onChange(applyFrame);
 
   // Apply initial frame so the canvas matches frame 0 on load.
@@ -157,9 +99,10 @@ interactionHandlers.time_animation = function (engine, interaction, gui) {
 //   writes: [{
 //     targets: [{buffer_id, offset, dtype: 'f32'|'u32'|'i32'}],
 //     expr?: string,        // JS expr over vars + t (seconds since loop start)
+//                           // May return a TypedArray/ArrayBuffer for bulk writes.
 //     value?: any,          // constant (used if expr absent)
 //     when?: string,        // JS expr; if falsy, skip
-//     trigger?: string,     // var name; one-shot on change instead of per-frame
+//     trigger?: string,     // var name or '*' (any); one-shot on change
 //   }, ...]
 // }
 //
@@ -208,9 +151,12 @@ interactionHandlers.gui = function (engine, interaction, gui) {
       }
       const buf = engine.buffers.get(tgt.buffer_id);
       if (!buf) continue;
-      engine.device.queue.writeBuffer(
-        buf, tgt.offset || 0, dtypeArray(tgt.dtype || 'f32', v),
-      );
+      // If the expr returned a typed array or ArrayBuffer, write it directly.
+      const data = (v.buffer instanceof ArrayBuffer || v instanceof ArrayBuffer)
+        ? v : dtypeArray(tgt.dtype || 'f32', v);
+      engine.device.queue.writeBuffer(buf, tgt.offset || 0, data);
+      // Mark the buffer dirty so compute passes that depend on it re-run.
+      if (engine.computeDAG) engine.computeDAG.markDirty(tgt.buffer_id);
     }
   }
 
@@ -243,22 +189,22 @@ interactionHandlers.gui = function (engine, interaction, gui) {
 
   function onVarChange(varName) {
     for (const w of triggers) {
-      if (w.trigger === varName) executeWrite(w, 0);
+      if (w.trigger === '*' || w.trigger === varName) executeWrite(w, 0);
     }
     if (triggers.length) engine.render();
     ensureLoop();
   }
 
-  const folder = gui.addFolder(cfg.label || 'Controls');
+  const container = getOrCreateFolder(gui, cfg.label || 'Controls');
   for (const c of controls) {
     const name = c.name || c.var;
     if (c.kind === 'checkbox') {
-      folder.add(vars, c.var).name(name).onChange(() => onVarChange(c.var));
+      container.add(vars, c.var).name(name).onChange(() => onVarChange(c.var));
     } else if (c.kind === 'slider') {
-      folder.add(vars, c.var, c.min, c.max, c.step || 0.01)
+      container.add(vars, c.var, c.min, c.max, c.step || 0.01)
             .name(name).onChange(() => onVarChange(c.var));
     } else if (c.kind === 'dropdown') {
-      folder.add(vars, c.var, c.options).name(name)
+      container.add(vars, c.var, c.options).name(name)
             .onChange(() => onVarChange(c.var));
     }
   }
@@ -277,8 +223,7 @@ class Interactions {
     if (!interactions || interactions.length === 0) return;
 
     const GUI = await loadLilGui();
-    this.gui = new GUI({ container: this.guiContainer, autoPlace: !this.guiContainer });
-    this.gui.close();
+    this.gui = new GUI({ container: this.guiContainer, autoPlace: !this.guiContainer, title: 'Controls' });
 
     for (const interaction of interactions) {
       const handler = interactionHandlers[interaction.type];

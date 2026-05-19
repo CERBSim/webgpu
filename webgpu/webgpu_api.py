@@ -1197,7 +1197,11 @@ class Buffer(BaseWebGPUHandle):
         self.handle.destroy()
 
     def __del__(self):
-        self.destroy()
+        # Do NOT auto-destroy: in live JS engine mode, the engine may still
+        # reference this buffer after the Python wrapper is GC'd.
+        # Buffers are destroyed explicitly via create_buffer(reuse=old) when
+        # a larger allocation is needed.
+        pass
 
 
 class CommandEncoder(BaseWebGPUHandle):
@@ -1858,4 +1862,5 @@ class Texture(BaseWebGPUHandle):
         return handle.destroy()
 
     def __del__(self):
-        self.destroy()
+        # Do NOT auto-destroy: the JS engine may still reference this texture.
+        pass

@@ -1,4 +1,4 @@
-"""Helpers to build generic 'gui' ExportInteraction entries from Python.
+"""Helpers to build generic 'gui' Interaction entries from Python.
 
 The exported HTML's `gui` JS handler interprets the schema produced here:
 controls bind to a small `vars` dict; `writes` describe how those vars (and a
@@ -9,7 +9,7 @@ controls bind to a small `vars` dict; `writes` describe how those vars (and a
 from dataclasses import dataclass, field
 from typing import Any
 
-from .format import ExportInteraction
+from .format import Interaction
 
 
 @dataclass
@@ -79,8 +79,8 @@ class Write:
         return d
 
 
-def gui_interaction(label, controls, writes, vars=None) -> ExportInteraction:
-    """Build a generic ``gui`` ``ExportInteraction``.
+def gui_interaction(label, controls, writes, vars=None) -> Interaction:
+    """Build a generic ``gui`` ``Interaction``.
 
     ``vars`` defaults to ``{c.var: c.default}`` over all controls.
     """
@@ -90,7 +90,7 @@ def gui_interaction(label, controls, writes, vars=None) -> ExportInteraction:
         for c in controls:
             if isinstance(c, Checkbox) and c.var not in vars:
                 vars[c.var] = c.default
-    return ExportInteraction(
+    return Interaction(
         type="gui",
         buffer_id="",  # unused by gui handler
         config={

@@ -62,10 +62,14 @@ class ExportRenderPass:
 
 
 @dataclass
-class ExportInteraction:
-    type: str  # "clipping_plane" | "colormap_range" | ...
+class Interaction:
+    type: str  # "gui" | "time_animation" | ...
     buffer_id: str
     config: dict = field(default_factory=dict)
+
+
+# Deprecated alias for backward compatibility.
+ExportInteraction = Interaction
 
 
 @dataclass
@@ -80,12 +84,16 @@ class ExportScene:
 
 
 class BufferRegistry:
-    def __init__(self):
+    def __init__(self, live: bool = False):
         self._buffers = {}  # id(proxy) → (buf_id, proxy, usage)
         self._textures = {}  # id(proxy) → (tex_id, proxy)
         self._samplers = {}  # id(proxy) → (sampler_id, proxy)
         self._counter = 0
         self._data = {}  # buf_id → bytes
+        # When True, callers (renderers) should skip destroy/recreate tricks
+        # that only make sense for the export blob (e.g. shrinking buffers so
+        # the blob is small). The JS engine resizes them at runtime instead.
+        self.live = live
 
         self.buffers = {}  # buf_id → ExportBuffer
         self.textures = {}  # tex_id → ExportTexture

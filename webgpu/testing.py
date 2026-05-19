@@ -103,6 +103,7 @@ def _find_link_js():
 def _make_test_html(ws_port, link_js_content):
     """Generate HTML with canvas and websocket connection to Python."""
     inline_js = link_js_content.replace("export ", "")
+    from webgpu.engine import engine_js
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>webgpu test</title></head>
@@ -111,10 +112,9 @@ def _make_test_html(ws_port, link_js_content):
 <script>
 {inline_js}
 window.__crosslink = WebsocketLink('ws://127.0.0.1:{ws_port}');
+{engine_js}
 {_READBACK_JS}
-// Disable patchedRequestAnimationFrame: its rAF+queue.submit breaks
-// subsequent bridge mapAsync calls in headless Chrome. Tests read
-// target_texture directly via _doReadback, so canvas display is unnecessary.
+// Disable patchedRequestAnimationFrame: legacy stub.
 window.patchedRequestAnimationFrame = (device, context, target) => {{}};
 </script>
 </body>
@@ -247,25 +247,24 @@ class WebGPUTestEnv:
             )
 
     def readback_texture(self, scene, path):
-        """Read back the scene's rendered texture via JS-side buffer readback.
-
-        Uses ``window._doReadback()`` which performs the entire readback in a
-        single bridge call, avoiding multi-message interleaving issues.
-        """
+        """Read back the rendered frame via JS-side readback."""
         import numpy as np
         from PIL import Image
         from webgpu import platform
 
-        texture = scene.canvas.target_texture
-        w, h = texture.width, texture.height
-        fmt = texture.format
-        bytes_per_row = (w * 4 + 255) // 256 * 256
+        engine = getattr(scene, '_js_engine', None)
+        if engine is not None:
+            engine.render()
+            w, h = scene.canvas.width, scene.canvas.height
+            fmt = str(scene.canvas.format)
+            tex = scene.canvas.context.getCurrentTexture()
+        else:
+            tex = scene.canvas.target_texture
+            w, h = tex.width, tex.height
+            fmt = str(tex.format)
 
-        b64_data = platform.js._doReadback(
-            scene.device.handle,
-            scene.canvas.target_texture,
-            w, h,
-        )
+        bytes_per_row = (w * 4 + 255) // 256 * 256
+        b64_data = platform.js._doReadback(scene.device.handle, tex, w, h)
 
         raw = base64.b64decode(b64_data)
         data = np.frombuffer(raw, dtype=np.uint8).reshape(
@@ -328,6 +327,7 @@ def webgpu_env(browser):
         init_device_sync()
         yield env
     """
+    os.environ["WEBGPU_TESTING"] = "1"
     import webgpu.platform as platform
 
     # Prevent webgpu.jupyter auto-init on import
@@ -375,6 +375,9 @@ def webgpu_env(browser):
 
     # Navigate browser -> triggers WS connection -> unblocks platform.init
     test_page = browser.new_page()
+    # Forward browser console to pytest output for debugging.
+    test_page.on("console", lambda msg: print(f"[browser:{msg.type}] {msg.text}"))
+    test_page.on("pageerror", lambda exc: print(f"[browser:pageerror] {exc}"))
     test_page.goto(f"http://127.0.0.1:{http_port}/index.html")
     assert init_done.wait(timeout=30), "Platform init timed out (WS handshake)"
     if init_error[0]:

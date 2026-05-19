@@ -34,6 +34,7 @@ class InputHandler {
   }
 
   _onPointerDown(ev) {
+    ev.preventDefault();
     if (ev.button === 0 && !ev.shiftKey && !ev.ctrlKey && !ev.altKey) {
       this._isRotating = true;
     } else if (ev.button === 1 || (ev.button === 0 && ev.shiftKey)) {

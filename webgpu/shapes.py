@@ -41,11 +41,13 @@ class ShapeData:
                 np.array(vertex_data, dtype=np.float32),
                 usage=BufferUsage.VERTEX | BufferUsage.COPY_DST,
                 label="vertex_data",
+                reuse=self._buffers.get("vertex_data"),
             ),
             "triangles": buffer_from_array(
                 np.array(self.triangles, dtype=np.uint32),
                 label="triangles",
                 usage=BufferUsage.INDEX | BufferUsage.COPY_DST,
+                reuse=self._buffers.get("triangles"),
             ),
         }
         return self._buffers
@@ -315,16 +317,23 @@ class ShapeRenderer(Renderer):
 
         self.n_vertices = self.shape_data.triangles.size
         self.n_instances = self.positions_buffer._used_size // 12
-        self._uniforms = ShapeUniforms()
+        if self._uniforms is None:
+            self._uniforms = ShapeUniforms()
         self._uniforms.scale = self.scale
         self._uniforms.scale_mode = self.scale_mode
         self._uniforms.update_buffer()
 
         # Complex direction support
         if self.directions_imag_buffer is not None:
-            self._complex_uniforms = ShapeComplexUniform(phase=0.0, is_complex=1)
+            if self._complex_uniforms is None:
+                self._complex_uniforms = ShapeComplexUniform(phase=0.0, is_complex=1)
+            else:
+                self._complex_uniforms.is_complex = 1
         else:
-            self._complex_uniforms = ShapeComplexUniform(phase=0.0, is_complex=0)
+            if self._complex_uniforms is None:
+                self._complex_uniforms = ShapeComplexUniform(phase=0.0, is_complex=0)
+            else:
+                self._complex_uniforms.is_complex = 0
             # Create a dummy zero imag buffer
             self.directions_imag_buffer = buffer_from_array(
                 np.zeros(3, dtype=np.float32),

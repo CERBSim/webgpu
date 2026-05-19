@@ -89,8 +89,8 @@ class UniformBase(ct.Structure):
         return [UniformBinding(self._binding, self._buffer)]
 
     def __del__(self):
-        if self._buffer is not None:
-            self._buffer.destroy()
+        # Do NOT auto-destroy: the JS engine may still reference this buffer.
+        pass
 
 
 class MeshUniforms(UniformBase):

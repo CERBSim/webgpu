@@ -30,6 +30,11 @@ Camera and lighting
 Interaction and UI helpers
 --------------------------
 
+.. automodule:: webgpu.gui_param
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. automodule:: webgpu.input_handler
    :members:
    :undoc-members:

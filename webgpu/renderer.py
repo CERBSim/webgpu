@@ -254,7 +254,7 @@ class BaseRenderer:
         pass
 
     def get_export_interactions(self, options, buffer_registry):
-        """Return ExportInteraction entries this renderer wants to emit.
+        """Return Interaction entries this renderer wants to emit.
 
         Override in renderers that need custom JS-side interactions
         (e.g. time-animation sliders). Default: none.

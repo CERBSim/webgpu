@@ -531,7 +531,7 @@ def buffer_from_array(
     n = len(data)
 
     if n < 1024:
-        if reuse and hasattr(reuse, '_data') and data == reuse._data and not (reuse.usage & BufferUsage.COPY_SRC):
+        if reuse and hasattr(reuse, '_data') and data == reuse._data:
             return reuse
         ori_data = data
 
@@ -539,8 +539,7 @@ def buffer_from_array(
         data = data + b"\x00" * (4 - n % 4)  # pad to 4 bytes
         n = n + (4 - n % 4)
 
-    import os
-    extra = BufferUsage.COPY_SRC if os.environ.get("WEBGPU_EXPORTING") else 0
+    extra = BufferUsage.COPY_SRC
     buffer = create_buffer(
         size=n, usage=usage | BufferUsage.COPY_DST | extra, label=label, reuse=reuse
     )

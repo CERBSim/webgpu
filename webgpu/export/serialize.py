@@ -119,7 +119,7 @@ def deserialize_scene(blob: bytes):
     from .format import (
         ExportBuffer,
         ExportComputePass,
-        ExportInteraction,
+        Interaction,
         ExportRenderPass,
         ExportScene,
         ExportTexture,
@@ -203,7 +203,7 @@ def deserialize_scene(blob: bytes):
     ]
 
     interactions = [
-        ExportInteraction(
+        Interaction(
             type=i["type"],
             buffer_id=i["buffer_id"],
             config=i.get("config", {}),

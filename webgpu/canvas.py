@@ -290,7 +290,7 @@ class Canvas:
                     "device": self.device.handle,
                     "format": self.format,
                     "alphaMode": "premultiplied",
-                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST,
+                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST | TextureUsage.COPY_SRC,
                 }
             )
 

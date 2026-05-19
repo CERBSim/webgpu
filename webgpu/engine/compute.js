@@ -51,6 +51,19 @@ function buildLayoutEntries(bindings, visibility, shader) {
   return entries;
 }
 
+// Built-in shader: cap the indirect instanceCount at the output buffer capacity.
+const CAP_INDIRECT_SHADER = `
+@group(0) @binding(0) var<storage, read_write> counter: atomic<u32>;
+@group(0) @binding(1) var<storage, read_write> indirect: array<u32, 4>;
+@group(0) @binding(2) var<uniform> max_instances: u32;
+
+@compute @workgroup_size(1)
+fn main() {
+  let count = atomicLoad(&counter);
+  indirect[1] = min(count, max_instances);
+}
+`;
+
 class ComputeDAG {
   constructor() {
     this.passes = new Map(); // id → pass descriptor
@@ -60,6 +73,7 @@ class ComputeDAG {
     this.stagingBuffers = new Map(); // id → GPUBuffer for counter readback
     this._pendingReadbacks = [];
     this._readbackInFlight = false;
+    this._capPipelines = new Map(); // id → { pipeline, bindGroup, maxBuf }
   }
 
   addPass(id, { shader, bindings, workgroups, triggers, resetBuffers, indirectSetup, countThenFill }) {
@@ -119,9 +133,18 @@ class ComputeDAG {
         const { counterId, indirectId, vertexCount } = pass.indirectSetup;
         const counterBuf = buffers.get(counterId);
         const indirectBuf = buffers.get(indirectId);
-        // Write vertexCount at offset 0, then copy counter to offset 4 (instanceCount)
         device.queue.writeBuffer(indirectBuf, 0, new Uint32Array([vertexCount]));
+        // Baseline: copy raw counter (fallback if cap shader unavailable)
         commandEncoder.copyBufferToBuffer(counterBuf, 0, indirectBuf, 4, 4);
+        // Cap shader overwrites indirect[1] with min(counter, capacity)
+        const cap = this._capPipelines.get(id + '_indirect');
+        if (cap) {
+          const capPass = commandEncoder.beginComputePass();
+          capPass.setPipeline(cap.pipeline);
+          capPass.setBindGroup(0, cap.bindGroup);
+          capPass.dispatchWorkgroups(1);
+          capPass.end();
+        }
       }
 
       // countThenFill: set up indirect for current frame + copy counter to staging
@@ -131,12 +154,27 @@ class ComputeDAG {
           const counterBuf = buffers.get(counterId);
           const indirectBuf = buffers.get(indirectId);
           device.queue.writeBuffer(indirectBuf, 0, new Uint32Array([vertexCount]));
+          // Baseline: copy raw counter (fallback if cap shader unavailable)
           commandEncoder.copyBufferToBuffer(counterBuf, 0, indirectBuf, 4, 4);
+          // Cap shader overwrites indirect[1] with min(counter, capacity)
+          const cap = this._capPipelines.get(id + '_ctf');
+          if (cap) {
+            const capPass = commandEncoder.beginComputePass();
+            capPass.setPipeline(cap.pipeline);
+            capPass.setBindGroup(0, cap.bindGroup);
+            capPass.dispatchWorkgroups(1);
+            capPass.end();
+          }
         }
-        const counterBuf = buffers.get(counterId);
-        const staging = this.stagingBuffers.get(id);
-        commandEncoder.copyBufferToBuffer(counterBuf, 0, staging, 0, 4);
-        this._pendingReadbacks.push(id);
+        // Only copy to staging for resize readback if no readback is in flight,
+        // otherwise the staging buffer is mapped/pending-map and the submit
+        // would fail with "used in submit while mapped".
+        if (!this._readbackInFlight) {
+          const counterBuf = buffers.get(counterId);
+          const staging = this.stagingBuffers.get(id);
+          commandEncoder.copyBufferToBuffer(counterBuf, 0, staging, 0, 4);
+          this._pendingReadbacks.push(id);
+        }
       }
 
       this.dirty.add(id);
@@ -146,6 +184,28 @@ class ComputeDAG {
   }
 
   async initPipelines(device, buffers) {
+    // Create the shared cap-indirect pipeline (one shader for all passes)
+    if (!this._capModule) {
+      try {
+        this._capModule = device.createShaderModule({ code: CAP_INDIRECT_SHADER });
+        const capLayout = device.createBindGroupLayout({
+          entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+          ],
+        });
+        this._capLayout = capLayout;
+        this._capPipelineGPU = await device.createComputePipelineAsync({
+          layout: device.createPipelineLayout({ bindGroupLayouts: [capLayout] }),
+          compute: { module: this._capModule, entryPoint: 'main' },
+        });
+      } catch (e) {
+        console.warn('[ComputeDAG] Cap-indirect pipeline failed, using fallback:', e);
+        this._capModule = null;
+      }
+    }
+
     for (const [id, pass] of this.passes) {
       const module = device.createShaderModule({ code: pass.shader });
 
@@ -178,8 +238,45 @@ class ComputeDAG {
           label: `${id}_staging`,
         });
         this.stagingBuffers.set(id, staging);
+        this._buildCapBindGroup(device, buffers, id, '_ctf', pass.countThenFill);
+      }
+      if (pass.indirectSetup) {
+        this._buildCapBindGroup(device, buffers, id, '_indirect', pass.indirectSetup);
       }
     }
+  }
+
+  _buildCapBindGroup(device, buffers, passId, suffix, setup) {
+    const { counterId, indirectId, outputId, elementSize } = setup;
+    const counterBuf = buffers.get(counterId);
+    const indirectBuf = buffers.get(indirectId);
+    // Compute max instances from output buffer size
+    const outputBuf = outputId ? buffers.get(outputId) : null;
+    const elemSize = elementSize || 64;
+    const maxInstances = outputBuf ? Math.floor(outputBuf.size / elemSize) : 0xFFFFFFFF;
+
+    // Destroy previous maxBuf if rebuilding
+    const key = passId + suffix;
+    const prev = this._capPipelines.get(key);
+    if (prev && prev.maxBuf) prev.maxBuf.destroy();
+
+    // Uniform buffer holding max_instances
+    const maxBuf = device.createBuffer({
+      size: 4,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      label: `${passId}${suffix}_cap_max`,
+    });
+    device.queue.writeBuffer(maxBuf, 0, new Uint32Array([maxInstances]));
+
+    const bindGroup = device.createBindGroup({
+      layout: this._capLayout,
+      entries: [
+        { binding: 0, resource: { buffer: counterBuf } },
+        { binding: 1, resource: { buffer: indirectBuf } },
+        { binding: 2, resource: { buffer: maxBuf } },
+      ],
+    });
+    this._capPipelines.set(key, { pipeline: this._capPipelineGPU, bindGroup, maxBuf });
   }
 
   async processReadbacks(device, buffers, onRerender) {
@@ -205,14 +302,18 @@ class ComputeDAG {
       const currentBuf = buffers.get(ctf.outputId);
 
       if (neededSize > currentBuf.size || neededSize < currentBuf.size / 4) {
-        currentBuf.destroy();
+        // Overallocate 2x when growing to provide headroom for rapid changes
+        // (e.g. dragging clipping slider). Shrink uses exact size.
+        const allocSize = neededSize > currentBuf.size ? neededSize * 2 : neededSize;
         const newBuf = device.createBuffer({
-          size: neededSize,
+          size: allocSize,
           usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
           label: ctf.outputId,
         });
         buffers.set(ctf.outputId, newBuf);
         this._rebuildBindGroups(device, buffers, ctf.outputId);
+        // Rebuild cap bind group with updated max_instances
+        this._buildCapBindGroup(device, buffers, id, '_ctf', ctf);
         needsRerender = true;
       }
 

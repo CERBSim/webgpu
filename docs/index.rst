@@ -36,6 +36,7 @@ Key features
 
    installation
    guide
+   interactions
    deployment
    performance
    testing

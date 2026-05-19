@@ -1,4 +1,5 @@
 import time
+import os
 
 from . import platform
 from .canvas import Canvas, debounce
@@ -49,6 +50,7 @@ class Scene:
         self.t_last = 0
 
         self.input_handler = InputHandler()
+        self._js_engine = None
 
     def __getstate__(self):
         """Return picklable state so scenes can be serialized between processes/notebooks."""
@@ -70,6 +72,7 @@ class Scene:
         self.canvas = None
         self.input_handler = InputHandler()
         self._render_mutex = None
+        self._js_engine = None
 
         if is_pyodide:
             _scenes_by_id[self._id] = self
@@ -131,6 +134,76 @@ class Scene:
             canvas.on_visibility(self._on_visibility_changed)
 
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
+
+        # After core init, try to install the JS engine as the live renderer.
+        # Drops to legacy Python rendering if RenderEngine isn't reachable.
+        # Skipped during export and tests (the export path emits a fresh blob-
+        # driven engine; tests rely on the legacy Python render path for now).
+        self._js_engine = None
+        if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
+            self._install_live_engine()
+
+    def _install_live_engine(self):
+        """Build a live descriptor and hand it to RenderEngine.createLive.
+
+        Idempotent: safe to call again after pipelines change (rebuilds via
+        ``engine.update`` if an engine is already installed).
+        """
+        if not hasattr(platform, 'js') or platform.js is None:
+            return
+        RenderEngine = getattr(platform.js, 'RenderEngine', None)
+        if RenderEngine is None:
+            return
+
+        from .export.capture import capture_scene_live, build_live_resource_maps
+        from dataclasses import asdict
+
+        with self._render_mutex:
+            export, registry = capture_scene_live(self)
+
+        buffers, textures, samplers, frame_buffers = build_live_resource_maps(registry)
+
+        descriptor = {
+            "device": self.canvas.device.handle,
+            "context": self.canvas.context,
+            "canvasFormat": self.canvas.format,
+            "buffers": buffers,
+            "textures": textures,
+            "samplers": samplers,
+            "frame_buffers": frame_buffers,
+            "render_passes":  [asdict(p) for p in export.render_passes],
+            "compute_passes": [asdict(p) for p in export.compute_passes],
+            "interactions":   [asdict(i) for i in export.interactions],
+            "camera": export.camera,
+            "light":  export.light,
+        }
+
+        js_descriptor = platform.toJS(descriptor)
+
+        # Mark renderers that have JS-side compute so they skip Python dispatch
+        for obj in self.render_objects:
+            if hasattr(obj, '_js_compute') and export.compute_passes:
+                if hasattr(obj, 'get_export_compute_passes'):
+                    obj._js_compute = True
+
+        if self._js_engine is None:
+            promise = RenderEngine.createLive(self.canvas.canvas, js_descriptor)
+            # In Pyodide we get a JsPromise; in websocket mode the call is sync.
+            try:
+                self._js_engine = promise.syncify() if hasattr(promise, 'syncify') else promise
+            except Exception:
+                # Fallback: store the promise; render() will await/skip until ready.
+                self._js_engine = promise
+        else:
+            self._js_engine.update(platform.toJS({
+                "render_passes":  descriptor["render_passes"],
+                "compute_passes": descriptor["compute_passes"],
+                "interactions":   descriptor["interactions"],
+                "buffers":        buffers,
+                "textures":       textures,
+                "samplers":       samplers,
+                "frame_buffers":  frame_buffers,
+            }))
 
     def __on_update_html_canvas(self, html_canvas):
         """Update event wiring when the underlying HTML canvas element changes."""
@@ -306,6 +379,8 @@ class Scene:
 
     def redraw(self, blocking=False, fps=10):
         """Request a redraw, either blocking immediately or debounced on the event loop."""
+        for obj in self.render_objects:
+            obj.set_needs_update()
         self.options.timestamp = time.time()
         if blocking:
             self.render._original(self)
@@ -324,6 +399,29 @@ class Scene:
     def render(self, t=0, rerender_if_update_needed=True):
         """Main render loop: enqueue a frame and optionally keep rendering while objects update."""
         if self.canvas is None or self.canvas.height == 0:
+            return
+
+        # Live JS engine path: it owns the rAF loop; we only ensure
+        # buffer contents are up-to-date and renderers that explicitly need
+        # rebuild are re-captured into the engine.
+        if self._js_engine is not None:
+            with self._render_mutex:
+                self.options.update_buffers()
+                any_dirty = any(
+                    obj.needs_update for obj in self.render_objects if obj.active
+                )
+                if any_dirty:
+                    self.options.timestamp = time.time()
+                    for obj in self.render_objects:
+                        if obj.active:
+                            obj._update_and_create_render_pipeline(self.options)
+                    self._install_live_engine()  # idempotent → engine.update()
+            try:
+                if any_dirty:
+                    self._js_engine.notifyDirty(None)
+                self._js_engine.render()
+            except Exception as e:
+                print(f'warning: js_engine.render() failed: {e}')
             return
 
         if is_pyodide_main_thread:
@@ -346,6 +444,12 @@ class Scene:
 
     def cleanup(self):
         """Detach the scene from its canvas, unregister callbacks, and release JS proxies."""
+        if self._js_engine is not None:
+            try:
+                self._js_engine.dispose()
+            except Exception:
+                pass
+            self._js_engine = None
         if self._render_mutex is None:
             return
         with self._render_mutex:
@@ -382,6 +486,11 @@ class Scene:
     def _on_resize(self):
         """Called on canvas resize. Update camera uniforms (aspect ratio) and re-render."""
         self.options.update_buffers()
+        if self._js_engine is not None:
+            try:
+                self._js_engine.handleResize()
+            except Exception as e:
+                print(f'warning: js_engine.handleResize() failed: {e}')
         self.render()
 
     def _on_visibility_changed(self, visible):

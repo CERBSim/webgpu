@@ -3,6 +3,7 @@ from .format import (
     ExportTexture,
     ExportComputePass,
     ExportRenderPass,
+    Interaction,
     ExportInteraction,
     ExportScene,
     BufferRegistry,

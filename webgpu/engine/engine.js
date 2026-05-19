@@ -7,14 +7,6 @@ const SAMPLE_COUNT = 4;
 const CLEAR_COLOR = { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
 const DEPTH_FORMAT = 'depth24plus';
 
-const TOPOLOGY_MAP = {
-  'triangle-list': 'triangle-list',
-  'triangle-strip': 'triangle-strip',
-  'line-list': 'line-list',
-  'line-strip': 'line-strip',
-  'point-list': 'point-list',
-};
-
 const TRANSPARENT_BLEND = {
   color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
   alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
@@ -75,8 +67,40 @@ class RenderEngine {
     return engine;
   }
 
+  /**
+   * Live entry point: bind the engine to GPU resources owned by an external
+   * runtime (e.g. Pyodide). The descriptor provides already-allocated
+   * GPUBuffer / GPUTexture / GPUSampler proxies.
+   *
+   * descriptor = {
+   *   device: GPUDevice,
+   *   context: GPUCanvasContext,           // already configure()d
+   *   canvasFormat?: string,
+   *   buffers:  Map<string, GPUBuffer>  | object,
+   *   textures: Map<string, GPUTexture> | object,
+   *   samplers: Map<string, GPUSampler> | object,
+   *   render_passes:  ExportRenderPass[],
+   *   compute_passes: ExportComputePass[],
+   *   interactions?:  ExportInteraction[],
+   *   camera?: { matrix?, center?, buffer_id? },
+   *   light?:  { buffer_id?, data? },
+   * }
+   */
+  static async createLive(canvas, descriptor) {
+    try {
+      const engine = new RenderEngine();
+      await engine.initLive(canvas, descriptor);
+      canvas.__engine = engine;
+      return engine;
+    } catch (err) {
+      console.error('[engine] createLive failed:', err && (err.stack || err.message || err));
+      throw err;
+    }
+  }
+
   async init(canvas, arrayBuffer) {
     this.canvas = canvas;
+    this.mode = 'blob';
 
     // --- Parse blob ---
     this.scene = parseSceneBlob(arrayBuffer);
@@ -124,6 +148,78 @@ class RenderEngine {
     // --- Light ---
     this._applyLight();
 
+    await this._finishInit();
+  }
+
+  async initLive(canvas, descriptor) {
+    this.canvas = canvas;
+    this.mode = 'live';
+
+    if (!descriptor.device)  throw new Error('createLive: descriptor.device required');
+    if (!descriptor.context) throw new Error('createLive: descriptor.context required');
+
+    this.device = descriptor.device;
+    this.context = descriptor.context;
+    this.canvasFormat = descriptor.canvasFormat
+      || (navigator.gpu && navigator.gpu.getPreferredCanvasFormat())
+      || 'bgra8unorm';
+
+    // Synthesize a scene-shaped object so the rest of the engine stays generic.
+    // No raw bytes — every GPU resource is supplied by the host.
+    this.scene = {
+      buffers: {},
+      textures: {},
+      compute_passes: descriptor.compute_passes || [],
+      render_passes:  descriptor.render_passes  || [],
+      interactions:   descriptor.interactions   || [],
+      camera: descriptor.camera || {},
+      light:  descriptor.light  || {},
+    };
+
+    this.buffers  = _toMap(descriptor.buffers);
+    this.textures = _toMap(descriptor.textures);
+    this.samplers = new Map();
+    this.texViews = new Map();
+    this.frameBuffers = new Map();
+
+    // Frame buffers (CPU-only blobs for animation snapshots)
+    if (descriptor.frame_buffers) {
+      for (const [id, data] of Object.entries(descriptor.frame_buffers)) {
+        this.frameBuffers.set(id, data);
+      }
+    }
+
+    for (const [id, buf] of this.buffers) {
+      this.scene.buffers[id] = { usage: _usageFromId(id), size: buf.size };
+    }
+    for (const [id, tex] of this.textures) {
+      this.scene.textures[id] = { format: tex.format, width: tex.width, height: tex.height };
+      this.texViews.set(id, tex.createView());
+    }
+
+    // Sampler lookup is supplied directly by the host.
+    this._samplerLookup = _toMap(descriptor.samplers || {});
+
+    this._createDepthAndMSAA();
+
+    // --- Camera ---
+    this.camera = new Camera();
+    if (this.scene.camera) {
+      const c = this.scene.camera;
+      if (c.matrix) this.camera.transform._mat = Float64Array.from(c.matrix);
+      if (c.center) this.camera.transform._center = [...c.center];
+    }
+    this._updateCameraBuffer();
+
+    // In live mode the host typically writes the light buffer directly.
+    if (this.scene.light && this.scene.light.data) this._applyLight();
+
+    await this._finishInit();
+  }
+
+  async _finishInit() {
+    const canvas = this.canvas;
+
     // --- Compute ---
     this.computeDAG = new ComputeDAG();
     for (const cp of this.scene.compute_passes) {
@@ -160,15 +256,22 @@ class RenderEngine {
     await this._createRenderPipelines();
 
     // --- Input ---
-    this.camera.registerObserver(() => {
-      this._updateCameraBuffer();
-      // Mark camera-dependent compute passes dirty
-      for (const cp of this.scene.compute_passes) {
-        for (const t of cp.triggers) this.computeDAG.markDirty(t);
-      }
-      this.render();
-    });
-    this.input = new InputHandler(canvas, this.camera, () => this.render());
+    // Live mode: the host (Python) owns input handling and writes the camera
+    // uniform and calls notifyDirty() explicitly when buffers change.
+    if (this.mode !== 'live') {
+      this.camera.registerObserver(() => {
+        this._updateCameraBuffer();
+        // Only mark the camera buffer dirty — compute passes that actually
+        // depend on the camera (list it in their triggers) will re-run.
+        // Passes triggered by other buffers (e.g. clipping plane) are
+        // unaffected by camera movement.
+        if (this._cameraBufferId) {
+          this.computeDAG.markDirty(this._cameraBufferId);
+        }
+        this.render();
+      });
+      this.input = new InputHandler(canvas, this.camera, () => this.render());
+    }
 
     // --- Interactions (lil-gui) ---
     const guiContainerId = canvas.id.replace('canvas', 'lilgui');
@@ -179,11 +282,105 @@ class RenderEngine {
     }
 
     // --- Resize handling ---
-    this._resizeObserver = new ResizeObserver(() => this._onResize());
-    this._resizeObserver.observe(canvas);
+    // Live mode: the host owns the canvas and drives resize via its own
+    // observer; it tells us when to react via engine.handleResize().
+    if (this.mode !== 'live') {
+      this._resizeObserver = new ResizeObserver(() => this._onResize());
+      this._resizeObserver.observe(canvas);
+    }
 
     // --- First frame ---
+    // In live mode, the host decides when to render. Don't auto-render.
+    if (this.mode !== 'live') this.render();
+  }
+
+  /**
+   * Capture the next rendered frame as a CPU-readable Uint8Array.
+   * Resolves with { data, width, height, format } after the next render.
+   * Used by screenshots and headless tests.
+   */
+  captureNextFrame() {
+    return new Promise((resolve) => {
+      (this._frameCaptureRequests = this._frameCaptureRequests || []).push(resolve);
+      this.render();
+    });
+  }
+
+  /**
+   * Push updated render/compute pass descriptors and rebuild pipelines.
+   * Used by the host (Python) when the renderer set or its options change.
+   */
+  async update({ render_passes, compute_passes, interactions, buffers, textures, samplers, frame_buffers } = {}) {
+    if (render_passes)  this.scene.render_passes  = render_passes;
+    if (compute_passes) this.scene.compute_passes = compute_passes;
+    if (interactions)   this.scene.interactions   = interactions;
+    // Update live buffer/texture/sampler maps when the host recreates GPU resources.
+    if (buffers) {
+      this.buffers = _toMap(buffers);
+    }
+    if (textures) {
+      this.textures = _toMap(textures);
+      this.texViews = new Map();
+      for (const [id, tex] of this.textures) {
+        this.texViews.set(id, tex.createView());
+      }
+    }
+    if (samplers) {
+      this._samplerLookup = _toMap(samplers);
+    }
+    if (frame_buffers) {
+      for (const [id, data] of Object.entries(frame_buffers)) {
+        this.frameBuffers.set(id, data);
+      }
+    }
+    // Re-setup interactions if they changed (e.g. new animation frames)
+    if (interactions && this.interactions) {
+      if (this.interactions.gui) {
+        this.interactions.gui.destroy();
+        this.interactions.gui = null;
+      }
+      await this.interactions.setup(this.scene.interactions);
+    }
+    // Rebuild render pipelines from scratch — cheap relative to a full reload.
+    this._updating = true;
+    this.renderPassObjects = [];
+    await this._createRenderPipelines();
+    this._updating = false;
     this.render();
+  }
+
+  /**
+   * Live-mode hook: the host has resized the canvas. Recreate depth + MSAA
+   * targets and re-render. The host is also responsible for updating the
+   * camera uniform (aspect ratio change).
+   */
+  handleResize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = rect.width > 0 ? Math.round(rect.width * dpr) : this.canvas.width;
+    const h = rect.height > 0 ? Math.round(rect.height * dpr) : this.canvas.height;
+    if (w === this.width && h === this.height) return;
+    if (w === 0 || h === 0) return;
+    if (this.depthTexture) this.depthTexture.destroy();
+    if (this.msaaTexture)  this.msaaTexture.destroy();
+    this._createDepthAndMSAA();
+    this.render();
+  }
+
+  /**
+   * Live-mode hook: mark a buffer (or a list of them) as dirty so any
+   * compute pass triggered by it re-runs on the next render. Pass no args
+   * to mark every compute trigger dirty (used after pipeline rebuilds).
+   */
+  notifyDirty(bufferIds) {
+    if (!bufferIds) {
+      for (const cp of this.scene.compute_passes) {
+        for (const t of cp.triggers) this.computeDAG.markDirty(t);
+      }
+      return;
+    }
+    const ids = Array.isArray(bufferIds) ? bufferIds : [bufferIds];
+    for (const id of ids) this.computeDAG.markDirty(id);
   }
 
   // =========================================================================
@@ -265,8 +462,10 @@ class RenderEngine {
   }
 
   _createDepthAndMSAA() {
-    const w = this.canvas.width || this.canvas.clientWidth;
-    const h = this.canvas.height || this.canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = rect.width > 0 ? Math.round(rect.width * dpr) : this.canvas.width;
+    const h = rect.height > 0 ? Math.round(rect.height * dpr) : this.canvas.height;
     // Set canvas backing resolution
     this.canvas.width = w;
     this.canvas.height = h;
@@ -335,7 +534,7 @@ class RenderEngine {
         entryPoint: rp.fragment_entry_point || 'fragment_main',
         targets: [{ format: this.canvasFormat, blend }],
       },
-      primitive: { topology: TOPOLOGY_MAP[rp.topology] || 'triangle-list' },
+      primitive: { topology: rp.topology || 'triangle-list' },
       depthStencil: {
         format: DEPTH_FORMAT,
         depthWriteEnabled: rp.depth_write,
@@ -478,6 +677,16 @@ class RenderEngine {
       this.renderPassObjects[i].bindGroup = this.device.createBindGroup({
         layout, entries, label: rp.id,
       });
+      // Also update direct buffer references in case a buffer was recreated
+      if (rp.vertex_buffers) {
+        this.renderPassObjects[i].vertexBufferRefs = rp.vertex_buffers.map(vb => this.buffers.get(vb.buffer_id));
+      }
+      if (rp.draw_indirect) {
+        this.renderPassObjects[i].indirectBuffer = this.buffers.get(rp.draw_indirect);
+      }
+      if (rp.index_buffer_id) {
+        this.renderPassObjects[i].indexBuffer = this.buffers.get(rp.index_buffer_id);
+      }
     }
   }
 
@@ -488,6 +697,7 @@ class RenderEngine {
   render() {
     if (!this.device || !this.context) return;
     if (this.width === 0 || this.height === 0) return;
+    if (this._updating) return;
 
     const device = this.device;
     const encoder = device.createCommandEncoder();
@@ -535,7 +745,52 @@ class RenderEngine {
     }
 
     renderPass.end();
+
+    // If a captureNextFrame() is pending, copy the resolved canvas texture
+    // into a staging buffer before submission.
+    let pendingCaptures = null;
+    let captureBuffer = null;
+    let captureMeta = null;
+    if (this._frameCaptureRequests && this._frameCaptureRequests.length) {
+      pendingCaptures = this._frameCaptureRequests;
+      this._frameCaptureRequests = [];
+      const w = canvasTexture.width;
+      const h = canvasTexture.height;
+      const bpp = _bytesPerPixel(this.canvasFormat) || 4;
+      const bytesPerRow = Math.ceil((w * bpp) / 256) * 256;
+      captureBuffer = device.createBuffer({
+        size: bytesPerRow * h,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+        label: 'frame-capture',
+      });
+      encoder.copyTextureToBuffer(
+        { texture: canvasTexture },
+        { buffer: captureBuffer, bytesPerRow, rowsPerImage: h },
+        [w, h, 1],
+      );
+      captureMeta = { width: w, height: h, bytesPerRow, format: this.canvasFormat };
+    }
+
     device.queue.submit([encoder.finish()]);
+
+    if (pendingCaptures) {
+      captureBuffer.mapAsync(GPUMapMode.READ).then(() => {
+        const src = new Uint8Array(captureBuffer.getMappedRange()).slice();
+        captureBuffer.unmap();
+        captureBuffer.destroy();
+        // Strip row padding so callers get tight width*bpp*height bytes.
+        const { width, height, bytesPerRow, format } = captureMeta;
+        const bpp = _bytesPerPixel(format) || 4;
+        const tight = new Uint8Array(width * height * bpp);
+        for (let y = 0; y < height; y++) {
+          tight.set(src.subarray(y * bytesPerRow, y * bytesPerRow + width * bpp), y * width * bpp);
+        }
+        // Resolve with the raw ArrayBuffer so the websocket bridge transfers
+        // the bytes via its dedicated buffer channel rather than serializing
+        // a typed-array proxy.
+        for (const resolve of pendingCaptures) resolve({ data: tight.buffer, width, height, format });
+      });
+    }
 
     // Async readback for count-then-fill passes
     this.computeDAG.processReadbacks(this.device, this.buffers, () => {
@@ -585,12 +840,36 @@ class RenderEngine {
     if (this._resizeObserver) this._resizeObserver.disconnect();
     if (this.input) this.input.dispose();
     if (this.interactions) this.interactions.dispose();
-    for (const buf of this.buffers.values()) buf.destroy();
-    for (const tex of this.textures.values()) tex.destroy();
     if (this.depthTexture) this.depthTexture.destroy();
     if (this.msaaTexture) this.msaaTexture.destroy();
-    if (this.device) this.device.destroy();
+    // In live mode the host owns buffers/textures/samplers and the device.
+    if (this.mode !== 'live') {
+      for (const buf of this.buffers.values()) buf.destroy();
+      for (const tex of this.textures.values()) tex.destroy();
+      if (this.device) this.device.destroy();
+    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers shared by createLive
+// ---------------------------------------------------------------------------
+
+/** Accept either a Map or a plain object and return a Map. */
+function _toMap(x) {
+  if (!x) return new Map();
+  if (x instanceof Map) return x;
+  return new Map(Object.entries(x));
+}
+
+/** Recover buffer usage category from the id prefix used by BufferRegistry. */
+function _usageFromId(id) {
+  if (id.startsWith('uniform_'))  return 'uniform';
+  if (id.startsWith('storage_'))  return 'storage';
+  if (id.startsWith('vertex_'))   return 'vertex';
+  if (id.startsWith('index_'))    return 'index';
+  if (id.startsWith('indirect_')) return 'indirect';
+  return 'storage';
 }
 
 // ---------------------------------------------------------------------------
