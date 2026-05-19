@@ -67,11 +67,9 @@ class UniformBase(ct.Structure):
     def _ensure_buffer(self):
         if self._buffer is None:
             device = get_device()
-            import os
-            extra = BufferUsage.COPY_SRC if os.environ.get("WEBGPU_EXPORTING") else 0
             self._buffer = device.createBuffer(
                 size=len(bytes(self)),
-                usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST | extra,
+                usage=BufferUsage.UNIFORM | BufferUsage.COPY_DST | BufferUsage.COPY_SRC,
                 label=type(self).__name__,
             )
             self.update_buffer()

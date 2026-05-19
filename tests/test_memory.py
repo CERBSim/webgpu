@@ -47,8 +47,14 @@ class TestJSObjectRelease:
         _ = platform.js.document.createElement("div")
         del _
         gc.collect()
+        gc.collect()
+        # Flush any pending deletes from prior tests or the warmup itself
+        platform.link._flush_release_queue()
         _ = platform.js.document.title
         time.sleep(0.2)
+        # Second flush to catch any stragglers from async finalizers
+        platform.link._flush_release_queue()
+        _ = platform.js.document.title
 
         before = js_object_count(page)
 
