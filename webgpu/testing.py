@@ -114,8 +114,6 @@ def _make_test_html(ws_port, link_js_content):
 window.__crosslink = WebsocketLink('ws://127.0.0.1:{ws_port}');
 {engine_js}
 {_READBACK_JS}
-// Disable patchedRequestAnimationFrame: legacy stub.
-window.patchedRequestAnimationFrame = (device, context, target) => {{}};
 </script>
 </body>
 </html>"""

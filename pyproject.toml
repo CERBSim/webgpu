@@ -28,7 +28,7 @@ local_scheme = "no-local-version"
 include = ["webgpu*"]
 
 [tool.setuptools.package-data]
-"webgpu" = ["shaders/*.wgsl", "font.bin", "link/*.js"]
+"webgpu" = ["shaders/*.wgsl", "font.bin", "link/*.js", "engine/*.js"]
 
 [tool.isort]
 profile = "black"

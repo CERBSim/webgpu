@@ -371,11 +371,12 @@ class Scene:
         if self.canvas is None or self.canvas.height == 0:
             return
         self._render_objects(to_canvas=False, update_pipelines=False)
-        platform.js.patchedRequestAnimationFrame(
-            self.canvas.device.handle,
-            self.canvas.context,
-            self.canvas.target_texture,
-        )
+        if not os.environ.get("WEBGPU_TESTING"):
+            platform.js.patchedRequestAnimationFrame(
+                self.canvas.device.handle,
+                self.canvas.context,
+                self.canvas.target_texture,
+            )
 
     def redraw(self, blocking=False, fps=10):
         """Request a redraw, either blocking immediately or debounced on the event loop."""
@@ -436,11 +437,15 @@ class Scene:
                 return
             self._render_objects(to_canvas=False)
 
-            platform.js.patchedRequestAnimationFrame(
-                self.canvas.device.handle,
-                self.canvas.context,
-                self.canvas.target_texture,
-            )
+            # patchedRequestAnimationFrame copies target_texture → canvas for
+            # display. In headless test mode this is unnecessary and its async
+            # queue.submit interferes with bridge mapAsync calls.
+            if not os.environ.get("WEBGPU_TESTING"):
+                platform.js.patchedRequestAnimationFrame(
+                    self.canvas.device.handle,
+                    self.canvas.context,
+                    self.canvas.target_texture,
+                )
 
     def cleanup(self):
         """Detach the scene from its canvas, unregister callbacks, and release JS proxies."""

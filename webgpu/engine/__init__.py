@@ -8,9 +8,8 @@ def _load_js():
     parts = []
     for f in _js_files:
         p = _engine_dir / f
-        if p.exists():
-            parts.append(f"// --- {f} ---")
-            parts.append(p.read_text().replace("export ", ""))
+        parts.append(f"// --- {f} ---")
+        parts.append(p.read_text().replace("export ", ""))
     # Top-level `class`/`function` declarations in a <script> are scoped to
     # the script, not the global object. Explicitly publish RenderEngine so
     # the websocket bridge / Pyodide can resolve `platform.js.RenderEngine`.
