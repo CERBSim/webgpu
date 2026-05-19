@@ -384,7 +384,7 @@ class Scene:
             obj.set_needs_update()
         self.options.timestamp = time.time()
         if blocking:
-            self.render._original(self)
+            self.render._original()
         else:
             self.render()
 

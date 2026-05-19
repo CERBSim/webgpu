@@ -22,6 +22,93 @@ _TARGET_FPS = 60
 #     running: bool = False
 #     pending: bool = False
 
+class _InstanceDebounce:
+    """Descriptor that creates per-instance debounced methods.
+
+    When used as a decorator on a method, each instance gets its own
+    debounce state (lock, timer, last_call, pending) so that calls on
+    different instances never interfere with each other.
+    """
+
+    def __init__(self, fn, rate_hz=60):
+        self._fn = fn
+        self._rate_hz = rate_hz
+        self._attr = f"_debounce_{fn.__name__}"
+        functools.update_wrapper(self, fn)
+
+    def __set_name__(self, owner, name):
+        self._attr = f"_debounce_{name}"
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        # Return a bound debounced callable for this instance
+        state = getattr(obj, self._attr, None)
+        if state is None:
+            state = _DebounceState(self._fn, obj, self._rate_hz)
+            object.__setattr__(obj, self._attr, state)
+        return state
+
+
+class _DebounceState:
+    """Per-instance debounce state and callable."""
+
+    __slots__ = ("_fn", "_obj", "_interval", "_lock", "_last_call", "_timer", "_pending")
+
+    def __init__(self, fn, obj, rate_hz):
+        self._fn = fn
+        self._obj = obj
+        self._interval = 1.0 / rate_hz
+        self._lock = threading.RLock()
+        self._last_call = 0.0
+        self._timer = None
+        self._pending = None
+
+    def _original(self, *args, **kwargs):
+        """Bypass debounce and call the underlying function immediately."""
+        return self._fn(self._obj, *args, **kwargs)
+
+    def _schedule(self, delay):
+        self._timer = threading.Timer(delay, self._run_pending)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _run_pending(self):
+        with self._lock:
+            if self._pending is None:
+                self._timer = None
+                return
+
+            args, kwargs = self._pending
+            self._pending = None
+            self._last_call = time.monotonic()
+
+        self._fn(self._obj, *args, **kwargs)
+
+        with self._lock:
+            self._timer = None
+            if self._pending is not None:
+                delay = max(0.0, self._interval - (time.monotonic() - self._last_call))
+                self._schedule(delay)
+
+    def __call__(self, *args, **kwargs):
+        with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_call
+            if elapsed >= self._interval and self._timer is None:
+                self._last_call = now
+                run_now = True
+            else:
+                self._pending = (args, kwargs)
+                run_now = False
+
+                if self._timer is None:
+                    self._schedule(max(0.0, self._interval - elapsed))
+
+        if run_now:
+            self._fn(self._obj, *args, **kwargs)
+
+
 def debounce(arg=None, *, rate_hz=60):
 
     if platform.is_pyodide:
@@ -32,71 +119,14 @@ def debounce(arg=None, *, rate_hz=60):
 
       return _rate_limited
 
-    def _rate_limited(fn, rate_hz):
-        interval = 1.0 / rate_hz
-        lock = threading.RLock()
-        last_call = 0.0
-        timer = None
-        pending = None
-
-        def schedule(delay):
-            nonlocal timer
-            timer = threading.Timer(delay, run_pending)
-            timer.daemon = True
-            timer.start()
-
-        def run_pending():
-            nonlocal last_call, timer, pending
-
-            with lock:
-                if pending is None:
-                    timer = None
-                    return
-
-                args, kwargs = pending
-                pending = None
-                # print("call frequency = ", 1.0 / (time.monotonic() - last_call))
-                last_call = time.monotonic()
-
-            fn(*args, **kwargs)
-
-            with lock:
-                timer = None
-                if pending is not None:
-                    delay = max(0.0, interval - (time.monotonic() - last_call))
-                    schedule(delay)
-
-        @wraps(fn)
-        def wrapper(*args, **kwargs):
-            nonlocal last_call, pending
-
-            with lock:
-                now = time.monotonic()
-                elapsed = now - last_call
-                if elapsed >= interval and timer is None:
-                    # print("call frequency = ", 1.0 / elapsed if elapsed > 0 else float('inf'))
-                    last_call = now
-                    run_now = True
-                else:
-                    pending = (args, kwargs)
-                    run_now = False
-
-                    if timer is None:
-                        schedule(max(0.0, interval - elapsed))
-
-            if run_now:
-                fn(*args, **kwargs)
-
-        return wrapper
-
     if callable(arg):
-        return _rate_limited(arg, rate_hz)
+        return _InstanceDebounce(arg, rate_hz)
 
     if arg is not None:
         rate_hz = arg
 
     def decorate(fn):
-        return _rate_limited(fn, rate_hz)
+        return _InstanceDebounce(fn, rate_hz)
     return decorate
 
 

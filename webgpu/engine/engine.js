@@ -278,7 +278,14 @@ class RenderEngine {
     const guiContainer = document.getElementById(guiContainerId);
     this.interactions = new Interactions(this, guiContainer);
     if (this.scene.interactions && this.scene.interactions.length > 0) {
-      await this.interactions.setup(this.scene.interactions);
+      try {
+        await Promise.race([
+          this.interactions.setup(this.scene.interactions),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('interactions setup timed out')), 5000)),
+        ]);
+      } catch (e) {
+        console.warn('[engine] interactions setup failed:', e.message || e);
+      }
     }
 
     // --- Resize handling ---

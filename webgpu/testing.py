@@ -257,6 +257,11 @@ class WebGPUTestEnv:
             fmt = str(scene.canvas.format)
             tex = scene.canvas.context.getCurrentTexture()
         else:
+            # Ensure target_texture reflects current scene state.
+            # The debounced scene.render() from _draw_scene may not have
+            # re-run after state changes (e.g. toggling renderer.active).
+            with scene._render_mutex:
+                scene._render_objects(to_canvas=False)
             tex = scene.canvas.target_texture
             w, h = tex.width, tex.height
             fmt = str(tex.format)
