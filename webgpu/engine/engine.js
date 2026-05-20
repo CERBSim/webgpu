@@ -322,8 +322,17 @@ class RenderEngine {
     if (compute_passes) this.scene.compute_passes = compute_passes;
     if (interactions)   this.scene.interactions   = interactions;
     // Update live buffer/texture/sampler maps when the host recreates GPU resources.
+    // Preserve buffers that the JS engine has resized via countThenFill —
+    // Python doesn't know about JS-side resizes, so its references are stale
+    // for those buffers. The JS engine is the authority for output buffer sizing.
     if (buffers) {
-      this.buffers = _toMap(buffers);
+      const incoming = _toMap(buffers);
+      const resized = this.computeDAG ? this.computeDAG._resizedBufferIds : new Set();
+      for (const [id, buf] of incoming) {
+        if (!resized.has(id)) {
+          this.buffers.set(id, buf);
+        }
+      }
     }
     if (textures) {
       this.textures = _toMap(textures);
@@ -346,14 +355,25 @@ class RenderEngine {
         this.interactions.gui.destroy();
         this.interactions.gui = null;
       }
-      await this.interactions.setup(this.scene.interactions);
+      try {
+        await this.interactions.setup(this.scene.interactions);
+      } catch (e) {
+        console.warn('[engine] interactions setup in update() failed:', e.message || e);
+      }
     }
     // Rebuild render pipelines from scratch — cheap relative to a full reload.
     this._updating = true;
     this.renderPassObjects = [];
-    await this._createRenderPipelines();
+    try {
+      await this._createRenderPipelines();
+    } catch (e) {
+      console.error('[engine] _createRenderPipelines failed in update():', e.message || e);
+    }
     this._updating = false;
-    this.render();
+    // Do NOT render here — the caller (Python scene.render) will call
+    // notifyDirty() + render() next.  Rendering here would produce a stale
+    // frame because the compute DAG hasn't been triggered yet (the clipping
+    // uniform has new data but compute hasn't re-run).
   }
 
   /**

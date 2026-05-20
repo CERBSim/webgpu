@@ -143,6 +143,38 @@ class Scene:
         if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
             self._install_live_engine()
 
+    def reconnect(self, canvas):
+        """Re-attach a previously initialized scene to a (new) canvas.
+
+        Unlike :meth:`init`, this skips the expensive pipeline rebuild for
+        all render objects.  Use after :meth:`cleanup` when the scene data
+        (buffers, pipelines) is still valid but the canvas changed.
+        """
+        self.canvas = canvas
+        self.input_handler.set_canvas(canvas.canvas)
+        self.options.set_canvas(canvas)
+
+        self._render_mutex = Lock(True) if is_pyodide else canvas._update_mutex
+
+        with self._render_mutex:
+            self.options.update_buffers()
+
+            camera = self.options.camera
+            if not hasattr(self, '_js_render') or self._js_render is None:
+                self._js_render = platform.create_proxy(self._render_direct)
+            camera.register_callbacks(self.input_handler, self.get_position)
+            camera.register_observer(self._on_camera_changed)
+
+            self._select_buffer_valid = False
+
+            canvas.on_resize(self._on_resize)
+            canvas.on_visibility(self._on_visibility_changed)
+            canvas.on_update_html_canvas(self.__on_update_html_canvas)
+
+        self._js_engine = None
+        if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
+            self._install_live_engine()
+
     def _install_live_engine(self):
         """Build a live descriptor and hand it to RenderEngine.createLive.
 
@@ -212,6 +244,19 @@ class Scene:
         camera.unregister_callbacks(self.input_handler)
         camera.unregister_observer(self._on_camera_changed)
 
+        # Dispose the old JS engine — its context/canvas references are stale.
+        if self._js_engine is not None:
+            try:
+                self._js_engine.dispose()
+            except Exception:
+                pass
+            self._js_engine = None
+            # Reset _js_compute flag on renderers so they fall back to Python-
+            # side compute dispatch until a new engine is installed.
+            for obj in self.render_objects:
+                if hasattr(obj, '_js_compute'):
+                    obj._js_compute = False
+
         if html_canvas is not None:
             self.input_handler.set_canvas(html_canvas)
             camera.register_callbacks(self.input_handler, self.get_position)
@@ -262,6 +307,8 @@ class Scene:
     def select(self, x: int, y: int):
         """Perform an object selection at (x, y) and dispatch callbacks on matching renderers."""
         if self._render_mutex is None:
+            return
+        if self.canvas is None:
             return
         objects = self.render_objects
 
@@ -496,6 +543,11 @@ class Scene:
                 self._js_engine.handleResize()
             except Exception as e:
                 print(f'warning: js_engine.handleResize() failed: {e}')
+        elif not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
+            # Engine was disposed (e.g. canvas element changed). Reinstall now
+            # that the canvas has valid dimensions.
+            if self.canvas is not None and self.canvas.width > 0 and self.canvas.height > 0:
+                self._install_live_engine()
         self.render()
 
     def _on_visibility_changed(self, visible):
