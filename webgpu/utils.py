@@ -48,9 +48,16 @@ def init_device_sync():
             platform.js.alert("WebGPU is not supported")
             sys.exit(1)
 
+        import os
+        _pref_env = os.environ.get("WEBGPU_POWER_PREFERENCE", "high-performance")
+        _power_pref = (
+            PowerPreference.low_power
+            if _pref_env == "low-power"
+            else PowerPreference.high_performance
+        )
         reqAdapter = platform.js.navigator.gpu.requestAdapter
         options = RequestAdapterOptions(
-            powerPreference=PowerPreference.high_performance,
+            powerPreference=_power_pref,
         ).toJS()
         adapter = Adapter(reqAdapter(options))
         maxBufferSize = adapter.limits.maxBufferSize
