@@ -79,10 +79,11 @@ class Write:
         return d
 
 
-def gui_interaction(label, controls, writes, vars=None) -> Interaction:
+def gui_interaction(label, controls, writes, vars=None, open=False) -> Interaction:
     """Build a generic ``gui`` ``Interaction``.
 
     ``vars`` defaults to ``{c.var: c.default}`` over all controls.
+    Set ``open=True`` to have the folder expanded by default.
     """
     if vars is None:
         vars = {c.var: c.default for c in controls if hasattr(c, "default") and c.default is not None}
@@ -90,13 +91,16 @@ def gui_interaction(label, controls, writes, vars=None) -> Interaction:
         for c in controls:
             if isinstance(c, Checkbox) and c.var not in vars:
                 vars[c.var] = c.default
+    config = {
+        "label": label,
+        "vars": vars,
+        "controls": [c.to_dict() for c in controls],
+        "writes": [w.to_dict() for w in writes],
+    }
+    if open:
+        config["open"] = True
     return Interaction(
         type="gui",
         buffer_id="",  # unused by gui handler
-        config={
-            "label": label,
-            "vars": vars,
-            "controls": [c.to_dict() for c in controls],
-            "writes": [w.to_dict() for w in writes],
-        },
+        config=config,
     )

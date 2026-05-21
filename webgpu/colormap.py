@@ -286,12 +286,7 @@ class Colorbar(Renderer):
         super().render(options)
         self.gpu_objects.labels.render(options)
 
-    def add_options_to_gui(self, gui):
-        if gui is None:
-            return
-        folder = gui.folder("Colormap", closed=True)
-        folder.value("min", self.gpu_objects.colormap.minval, self.set_min)
-        folder.value("max", self.gpu_objects.colormap.maxval, self.set_max)
+
 
     def set_min(self, minval):
         self.gpu_objects.colormap.set_min(minval)

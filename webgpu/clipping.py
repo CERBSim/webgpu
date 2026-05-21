@@ -82,18 +82,6 @@ class Clipping(BaseRenderer):
         # Do NOT auto-destroy: the JS engine may still reference this buffer.
         pass
 
-    def add_options_to_gui(self, gui):
-        if gui is None:
-            return
-        folder = gui.folder("Clipping", closed=True)
-        folder.checkbox("enabled", self.mode != self.Mode.DISABLED, self.enable_clipping)
-        folder.value("x", self.center[0], self.set_x_value)
-        folder.value("y", self.center[1], self.set_y_value)
-        folder.value("z", self.center[2], self.set_z_value)
-        folder.value("nx", self.normal[0], self.set_nx_value)
-        folder.value("ny", self.normal[1], self.set_ny_value)
-        folder.value("nz", self.normal[2], self.set_nz_value)
-
     def render(self, options: RenderOptions):
         pass
 

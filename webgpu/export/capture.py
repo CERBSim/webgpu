@@ -181,6 +181,8 @@ def _clipping_gui_interaction(buf_id, clip):
     cx, cy, cz = [float(v) for v in clip.center]
     radius = float(clip.radius)
     mode = int(clip.mode)
+    # When clipping is disabled by default, use PLANE mode (1) when enabled via GUI
+    enabled_mode = mode if mode != 0 else 1
     # The expr packs the full 48-byte ClippingUniforms struct:
     #   plane (vec4<f32>): nx, ny, nz, d
     #   sphere (vec4<f32>): cx, cy, cz, radius
@@ -196,8 +198,8 @@ def _clipping_gui_interaction(buf_id, clip):
         f" const f=new Float32Array(ab),u=new Uint32Array(ab);"
         f" f[0]=Nx;f[1]=Ny;f[2]=Nz;f[3]=d;"
         f" f[4]=cx;f[5]=cy;f[6]=cz;f[7]={radius};"
-        f" u[8]=enabled?{mode}:0;"
-        f" return ab;}})()"  
+        f" u[8]=enabled?{enabled_mode}:0;"
+        f" return ab;}})()"
     )
     return Interaction(
         type="gui", buffer_id=buf_id, config={

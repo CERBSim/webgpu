@@ -105,7 +105,7 @@ struct ShapeComplexUniform {
     input: ShapeVertexOut,
 ) -> @location(0) vec4<u32> {
     checkClipping(input.p);
-    return vec4<u32>(@RENDER_OBJECT_ID@, input.instance, bitcast<u32>(input.color.x), 0);
+    return vec4<u32>(@RENDER_OBJECT_ID@, bitcast<u32>(input.position.z), input.instance, bitcast<u32>(input.color.x));
 }
 
 fn quaternion(vTo: vec3f, vFrom: vec3f) -> vec4f {

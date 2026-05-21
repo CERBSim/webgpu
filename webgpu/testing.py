@@ -168,7 +168,7 @@ class WebGPUTestEnv:
                 <canvas id="{cid}" width="{width}" height="{height}"
                     style="background:#d0d0d0;width:{width}px;height:{height}px;">
                 </canvas>
-                <div id="{gid}" style="flex:1;"></div>`;
+                <div id="{gid}" style="position:absolute;top:0;right:0;z-index:10;"></div>`;
             document.getElementById('__webgpu_container').appendChild(root);
         }})()""")
         return cid

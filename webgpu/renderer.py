@@ -250,9 +250,6 @@ class BaseRenderer:
             defines=self.shader_defines | defines | {"RENDER_OBJECT_ID": str(self._id)},
         )
 
-    def add_options_to_gui(self, gui):
-        pass
-
     def get_export_interactions(self, options, buffer_registry):
         """Return Interaction entries this renderer wants to emit.
 

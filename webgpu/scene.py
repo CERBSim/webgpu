@@ -17,7 +17,7 @@ class Scene:
     canvas: Canvas = None
     render_objects: list[BaseRenderer]
     options: RenderOptions
-    gui: object = None
+
 
     def __init__(
         self,
@@ -502,6 +502,7 @@ class Scene:
             except Exception:
                 pass
             self._js_engine = None
+
         if self._render_mutex is None:
             return
         with self._render_mutex:
@@ -532,11 +533,13 @@ class Scene:
             self.options.camera.unregister_callbacks(self.input_handler)
             self.options.camera.unregister_observer(self._on_camera_changed)
             return
+        self._select_buffer_valid = False
         self.options.update_buffers()
         self.render()
 
     def _on_resize(self):
         """Called on canvas resize. Update camera uniforms (aspect ratio) and re-render."""
+        self._select_buffer_valid = False
         self.options.update_buffers()
         if self._js_engine is not None:
             try:

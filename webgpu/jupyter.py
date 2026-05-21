@@ -5,7 +5,6 @@ import time
 
 from . import platform, utils
 from .canvas import Canvas
-from .lilgui import LilGUI
 from .link import js_code as _link_js_code
 from .renderer import *
 from .scene import Scene
@@ -59,8 +58,6 @@ def _draw_scene(scene: Scene, width, height, id_):
 
     while html_canvas is None:
         html_canvas = platform.js.document.getElementById(f"{id_}canvas")
-    gui_element = platform.js.document.getElementById(f"{id_}lilgui")
-
     # Lazily inject the JS render engine into the browser scope so that
     # Scene.init() can call RenderEngine.createLive(...).
     if not _engine_emitted:
@@ -74,13 +71,7 @@ def _draw_scene(scene: Scene, width, height, id_):
 
     # Lazily initialize the WebGPU device the first time we draw.
     canvas = Canvas(init_device_sync(), html_canvas)
-    scene.gui = LilGUI(gui_element, scene)
     scene.init(canvas)
-    # If the JS engine is active, its Interactions class owns the GUI.
-    # Suppress the Python LilGUI so add_options_to_gui() calls become no-ops.
-    if scene._js_engine is not None:
-        scene.gui.gui.destroy()
-        scene.gui = None
     scene.render()
 
 
@@ -96,25 +87,6 @@ def _DrawPyodide(b64_data: str):
 
 _engine_emitted = False
 _export_keep_alive = None  # holds Playwright objects to prevent GC
-
-
-class _NullGUI:
-    """Swallow all GUI calls during export.
-
-    User notebooks routinely call ``add_options_to_gui(scene.gui)`` to wire
-    sliders/checkboxes. In export mode the GUI is rebuilt client-side from
-    Interaction entries, so any Python-side calls during export are
-    irrelevant — they just need to not crash.
-    """
-
-    def _noop(self, *a, **kw):
-        return self
-
-    def __getattr__(self, name):
-        return self._noop
-
-    def __call__(self, *a, **kw):
-        return self
 
 
 def _DrawHTML(scene, width=640, height=600):
@@ -141,11 +113,6 @@ def _DrawHTML(scene, width=640, height=600):
     # scene.init() already filled all GPU buffers via update().
     scene.render = lambda *a, **kw: None
     scene._on_camera_changed = lambda *a, **kw: None
-
-    # Provide a no-op GUI stub so user code that calls add_options_to_gui()
-    # doesn't crash during export. The real GUI is rebuilt client-side by
-    # the JS Interactions class from Interaction entries.
-    scene.gui = _NullGUI()
 
     # Export scene to blob (scene.init already filled all GPU buffers)
     blob = scene.export()

@@ -4,11 +4,12 @@
  * Get an existing child folder by title, or create a new one.
  * Prevents duplicate folders when multiple renderers export the same interaction type.
  */
-function getOrCreateFolder(gui, title) {
+function getOrCreateFolder(gui, title, { open = false } = {}) {
   for (const f of gui.folders) {
     if (f._title === title) return f;
   }
   const folder = gui.addFolder(title);
+  if (!open) folder.close();
 
   // Remove any 'Empty' placeholder leaf nodes that lil-gui inserts for empty folders.
   try {
@@ -84,7 +85,7 @@ interactionHandlers.time_animation = function (engine, interaction, gui) {
     engine.render();
   }
 
-  const folder = getOrCreateFolder(gui, cfg.label || 'Animation');
+  const folder = getOrCreateFolder(gui, cfg.label || 'Animation', { open: !!cfg.open });
   folder.add(state, 'time', 0, nFrames - 1, 1).name('Frame').onChange(applyFrame);
 
   // Apply initial frame so the canvas matches frame 0 on load.
@@ -195,7 +196,7 @@ interactionHandlers.gui = function (engine, interaction, gui) {
     ensureLoop();
   }
 
-  const container = getOrCreateFolder(gui, cfg.label || 'Controls');
+  const container = getOrCreateFolder(gui, cfg.label || 'Controls', { open: !!cfg.open });
   for (const c of controls) {
     const name = c.name || c.var;
     if (c.kind === 'checkbox') {
@@ -224,6 +225,7 @@ class Interactions {
 
     const GUI = await loadLilGui();
     this.gui = new GUI({ container: this.guiContainer, autoPlace: !this.guiContainer, title: 'Controls' });
+    this.gui.close();
 
     for (const interaction of interactions) {
       const handler = interactionHandlers[interaction.type];

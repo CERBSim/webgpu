@@ -482,22 +482,6 @@ class ShapeRenderer(Renderer):
             ),
         ]
 
-    def add_options_to_gui(self, gui):
-        if gui is None:
-            return
-
-        def set_scale(value):
-            self.scale = value
-
-        gui.slider(
-            value=self.scale,
-            func=set_scale,
-            min=self._scale_range[0],
-            max=self._scale_range[1],
-            step=self._scale_range[2],
-            label="Scale Shapes",
-        )
-
     def get_shader_code(self) -> str:
         return read_shader_file("shapes.wgsl")
 
