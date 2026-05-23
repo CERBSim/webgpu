@@ -38,6 +38,50 @@ class ColorbarUniforms(UniformBase):
     ]
 
 
+def _clean_autoscale_range(minval, maxval):
+    """Clean up autoscale min/max values for display.
+
+    - Rounds values that are negligibly small relative to the range to zero
+      (e.g. 1e-13 to 1 becomes 0 to 1).
+    - Handles constant functions (min == max) by providing a sensible range
+      to avoid numerical flickering.
+    """
+    range_size = maxval - minval
+    abs_max_val = max(abs(minval), abs(maxval))
+
+    # Handle constant function (min == max or very close)
+    # Also treat as constant if both values are negligibly small (near-zero noise)
+    is_constant = (
+        range_size == 0
+        or abs(range_size) < 1e-10 * max(abs_max_val, 1e-300)
+        or abs_max_val < 1e-12  # both values essentially zero
+    )
+    if is_constant:
+        # Use a representative value (midpoint)
+        value = (minval + maxval) * 0.5
+        if abs(value) < 1e-12:
+            # Constant zero: use 0 to 1
+            return 0.0, 1.0
+        elif value > 0:
+            # Positive constant: use 0 to value
+            return 0.0, value
+        else:
+            # Negative constant: use value to 0
+            return value, 0.0
+
+    # Round near-zero values relative to the range
+    # If a boundary is less than 1e-8 of the range away from zero,
+    # it's likely a floating-point artifact and should be snapped to zero.
+    threshold = abs(range_size) * 1e-8
+
+    if abs(minval) < threshold:
+        minval = 0.0
+    if abs(maxval) < threshold:
+        maxval = 0.0
+
+    return minval, maxval
+
+
 class Colormap(BaseRenderer):
     texture: Texture
 
@@ -109,7 +153,10 @@ class Colormap(BaseRenderer):
             self._autoscale_max = -1e99
         self._autoscale_min = min(getattr(self, '_autoscale_min', minval), minval)
         self._autoscale_max = max(getattr(self, '_autoscale_max', maxval), maxval)
-        self.set_min_max(self._autoscale_min, self._autoscale_max, set_autoscale=False)
+        clean_min, clean_max = _clean_autoscale_range(
+            self._autoscale_min, self._autoscale_max
+        )
+        self.set_min_max(clean_min, clean_max, set_autoscale=False)
 
     def set_min_max(self, minval, maxval, set_autoscale=True):
         self.minval = minval
