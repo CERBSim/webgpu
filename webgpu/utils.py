@@ -527,7 +527,7 @@ def create_buffer(
 
 
 def buffer_from_array(
-    data, usage=BufferUsage.STORAGE, label="from_array", reuse: Buffer | None = None
+    data, usage=BufferUsage.STORAGE, label="from_array", reuse: Buffer | None = None, use_cache: bool = True
 ) -> Buffer:
 
     device = get_device()
@@ -537,7 +537,7 @@ def buffer_from_array(
 
     n = len(data)
 
-    if n < 1024:
+    if use_cache and n < 1024:
         if reuse and hasattr(reuse, '_data') and data == reuse._data:
             return reuse
         ori_data = data
@@ -559,7 +559,7 @@ def buffer_from_array(
     else:
         device.queue.writeBuffer(buffer, 0, data, 0, len(data))
 
-    if n < 1024:
+    if use_cache and n < 1024:
         buffer._data = ori_data
 
     return buffer
