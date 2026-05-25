@@ -126,6 +126,163 @@ def _DrawHTML(scene, width=640, height=600):
     return scene
 
 
+def _DrawHTMLLazy(scene, width=640, height=600):
+    """Export scene as a lazy-loading HTML snippet with a pre-baked screenshot.
+
+    The screenshot is rendered in a separate subprocess (own Chrome + GPU device)
+    so it doesn't interfere with the main build process's mapAsync calls.
+    The scene blob and engine JS are saved as separate static files and only
+    fetched when the user clicks to interact.
+    """
+    global _engine_emitted
+    from IPython.display import HTML, Javascript, display
+
+    from .engine import engine_js
+
+    if isinstance(scene, Renderer):
+        scene = [scene]
+    if isinstance(scene, list):
+        scene = Scene(scene)
+
+    id_ = f"__webgpu_{next(_id_counter)}_"
+    canvas_id = f"{id_}canvas"
+
+    # Create a canvas in the headless Chrome DOM for GPU initialization.
+    js = platform.js
+    html_canvas = js.document.createElement("canvas")
+    html_canvas.width = width
+    html_canvas.height = height
+    html_canvas.id = canvas_id
+    js.document.body.appendChild(html_canvas)
+
+    canvas = Canvas(init_device_sync(), html_canvas)
+    scene.init(canvas)
+
+    # Disable render() — patchedRequestAnimationFrame hangs in headless Chrome.
+    scene.render = lambda *a, **kw: None
+    scene._on_camera_changed = lambda *a, **kw: None
+
+    # Export scene to blob (scene.init already filled all GPU buffers)
+    blob = scene.export()
+    blob_b64 = base64.b64encode(blob).decode()
+
+    # Save blob and engine JS as static files for deferred loading.
+    # Use a unique hash to avoid collisions across notebooks.
+    import hashlib
+    blob_hash = hashlib.md5(blob).hexdigest()[:10]
+    static_dir = _get_static_dir()
+
+    # Save blob as a JS file (script src works on file:// unlike fetch)
+    scene_filename = f"scene_{blob_hash}.js"
+    scene_var = f"__webgpu_blob_{blob_hash}"
+    (static_dir / scene_filename).write_text(
+        f"window.{scene_var} = \"{blob_b64}\";"
+    )
+    scene_url = f"_static/webgpu_scenes/{scene_filename}"
+
+    if not _engine_emitted:
+        (static_dir / "engine.js").write_text(engine_js)
+        _engine_emitted = True
+    engine_url = "_static/webgpu_scenes/engine.js"
+
+    # Capture screenshot in a separate subprocess
+    screenshot_b64 = _capture_screenshot_subprocess(blob_b64, width, height)
+    screenshot_filename = f"screenshot_{blob_hash}.png"
+    if screenshot_b64:
+        (static_dir / screenshot_filename).write_bytes(base64.b64decode(screenshot_b64))
+    screenshot_url = f"_static/webgpu_scenes/{screenshot_filename}"
+
+    # Emit the lazy-load HTML: only screenshot + overlay, everything else loaded on click
+    lazy_html = f"""
+    <div id='{id_}root'
+         style="position: relative; width: {width}px; max-width: 100%; overflow: hidden;"
+    >
+        <img id='{id_}img'
+             src='{screenshot_url}'
+             style='width: {width}px; height: {height}px; max-width: 100%; display: block;'
+        />
+        <div id='{id_}overlay'
+             style='position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                    display: flex; align-items: center; justify-content: center;
+                    background: rgba(0,0,0,0); cursor: pointer; transition: background 0.2s;'
+             onmouseover="this.style.background='rgba(0,0,0,0.18)'; this.querySelector('span').style.opacity='1'"
+             onmouseout="this.style.background='rgba(0,0,0,0)'; this.querySelector('span').style.opacity='0'"
+             onclick="(function() {{ var r = document.getElementById('{id_}root'); if (r.__activated) return; r.__activated = true; function activate() {{ document.getElementById('{id_}img').style.display = 'none'; document.getElementById('{id_}overlay').style.display = 'none'; document.getElementById('{canvas_id}').style.display = 'block'; RenderEngine.create('{canvas_id}', window.{scene_var}); }} function loadBlob() {{ var s = document.createElement('script'); s.src = '{scene_url}'; s.onload = activate; document.head.appendChild(s); }} if (typeof RenderEngine === 'undefined') {{ var s = document.createElement('script'); s.src = '{engine_url}'; s.onload = loadBlob; document.head.appendChild(s); }} else {{ loadBlob(); }} }})()"
+        >
+            <span style='color: white; font-size: 1.3em; font-weight: bold;
+                         text-shadow: 0 1px 4px rgba(0,0,0,0.7); pointer-events: none;
+                         opacity: 0; transition: opacity 0.2s;'
+            >&#9654; Click to interact</span>
+        </div>
+        <canvas
+            id='{canvas_id}'
+            style='background-color: white; width: {width}px; height: {height}px;
+                   touch-action: none; max-width: 100%; display: none;'
+        ></canvas>
+        <div id='{id_}lilgui'
+             style='position: absolute; top: 0; right: 0; z-index: 10;'
+        ></div>
+    </div>
+    """
+
+    display(HTML(lazy_html))
+    return scene
+
+
+def _get_static_dir():
+    """Get or create the static directory for webgpu scene assets."""
+    from pathlib import Path
+    # Try to find the docs source _static directory
+    for candidate in [
+        Path("docs/_static/webgpu_scenes"),
+        Path("_static/webgpu_scenes"),
+        Path("webgpu_scenes"),
+    ]:
+        # Check if the parent _static dir exists (we're in a docs build)
+        if candidate.parent.exists():
+            candidate.mkdir(parents=True, exist_ok=True)
+            return candidate
+    # Fallback: create in current directory
+    fallback = Path("_static/webgpu_scenes")
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+# Persistent screenshot worker process (launched once, handles all screenshots)
+_screenshot_worker = None
+
+
+def _capture_screenshot_subprocess(blob_b64, width, height):
+    """Send a screenshot request to the persistent worker process."""
+    import subprocess
+    import sys
+
+    global _screenshot_worker
+    if _screenshot_worker is None or _screenshot_worker.poll() is not None:
+        _screenshot_worker = subprocess.Popen(
+            [sys.executable, "-m", "webgpu.export.screenshot"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        # Wait for READY signal
+        ready = _screenshot_worker.stdout.readline().strip()
+        if ready != "READY":
+            print(f"Warning: screenshot worker failed to start: {ready}")
+            _screenshot_worker = None
+            return ""
+
+    try:
+        _screenshot_worker.stdin.write(f"{width} {height} {blob_b64}\n")
+        _screenshot_worker.stdin.flush()
+        result = _screenshot_worker.stdout.readline().strip()
+        return result
+    except Exception as e:
+        print(f"Warning: screenshot capture failed: {e}")
+        return ""
+
+
 def _init_export_gpu():
     """Start headless Chrome with WebGPU for buffer export during nbconvert.
 
@@ -265,7 +422,11 @@ if not platform.is_pyodide and "Javascript" in dir():
     if is_exporting:
         # Launch headless Chrome for GPU access during export
         _init_export_gpu()
-        Draw = _DrawHTML
+        is_lazy_load = "WEBGPU_LAZY_LOAD" in os.environ
+        if is_lazy_load:
+            Draw = _DrawHTMLLazy
+        else:
+            Draw = _DrawHTML
     else:
         # Not exporting and not running in pyodide -> Start a websocket server
         # and wait for the client to connect.

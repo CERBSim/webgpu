@@ -7,6 +7,7 @@ import os
 import zipfile
 
 os.environ["WEBGPU_EXPORTING"] = "1"
+os.environ["WEBGPU_LAZY_LOAD"] = "1"
 master_doc = "index"
 source_suffix = [".rst", ".md"]
 

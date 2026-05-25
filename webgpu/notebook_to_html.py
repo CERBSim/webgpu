@@ -36,6 +36,8 @@ def main():
     parser.add_argument("-o", "--output", help="Output HTML path (default: same name .html)")
     parser.add_argument("--timeout", type=int, default=120, help="Cell execution timeout in seconds")
     parser.add_argument("--kernel", default=None, help="Jupyter kernel name")
+    parser.add_argument("--lazy-load", action="store_true", default=False,
+                        help="Embed screenshot previews that load the WebGPU scene on click")
     args = parser.parse_args()
 
     if not os.path.exists(args.notebook):
@@ -45,6 +47,8 @@ def main():
     # Build environment
     env = os.environ.copy()
     env["WEBGPU_EXPORTING"] = "1"
+    if args.lazy_load:
+        env["WEBGPU_LAZY_LOAD"] = "1"
 
     if not _has_real_gpu():
         icd = _find_lavapipe_icd()

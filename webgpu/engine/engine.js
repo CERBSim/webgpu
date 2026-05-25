@@ -123,6 +123,7 @@ class RenderEngine {
       device: this.device,
       format: this.canvasFormat,
       alphaMode: 'premultiplied',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
 
     // --- Create GPU resources ---
