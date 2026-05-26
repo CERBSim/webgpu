@@ -55,8 +55,14 @@ blob_b64 = base64.b64encode(scene.export()).decode()
 
 canvas_id = "showcase_canvas"
 html = f"""\
-<div style="width:100%; max-width:800px; height:400px; margin:0 auto 1em auto; position:relative;">
-<canvas id="{canvas_id}" width="800" height="400" style="width:100%; height:100%; border-radius:8px; display:block;"></canvas>
+<style>
+#showcase_root {{ --webgpu-canvas-bg: #ffffff; }}
+@media (prefers-color-scheme: dark) {{
+  #showcase_root {{ --webgpu-canvas-bg: #adadad; }}
+}}
+</style>
+<div id="showcase_root" style="width:min(800px,100%); max-width:100%; margin:0 auto 1em auto; position:relative;">
+<canvas id="{canvas_id}" width="800" height="400" style="background-color:var(--webgpu-canvas-bg,#ffffff); width:100%; max-width:100%; height:auto; aspect-ratio:800 / 400; border-radius:8px; display:block;"></canvas>
 <script>
 {engine_js}
 RenderEngine.create("{canvas_id}", "{blob_b64}");

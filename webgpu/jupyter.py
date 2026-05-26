@@ -26,19 +26,28 @@ def _init_html(scene, width, height, flex=None):
 
     id_ = f"__webgpu_{next(_id_counter)}_"
 
-    style = f"background-color: white; width: {width}px; height: {height}px; touch-action: none;"
+    style = (
+        f"background-color: var(--webgpu-canvas-bg, #ffffff); width: min({width}px, 100%); max-width: 100%; "
+        f"height: auto; aspect-ratio: {width} / {height}; touch-action: none;"
+    )
     if flex is not None:
         style += f" flex: {flex};"
 
     display(
         HTML(
             f"""
+            <style>
+              #{id_}root {{ --webgpu-canvas-bg: #ffffff; }}
+              @media (prefers-color-scheme: dark) {{
+                #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
+              }}
+            </style>
             <div id='{id_}root'
-            style="position: relative; width: {width}px; max-width: 100%; overflow: hidden;"
+            style="position: relative; width: min({width}px, 100%); max-width: 100%; overflow: hidden;"
             >
-                <canvas 
+                <canvas
                     id='{id_}canvas'
-                    style='{style} max-width: 100%; display: block;'
+                    style='{style} display: block;'
                 >
                 </canvas>
                 <div id='{id_}lilgui'
@@ -204,12 +213,18 @@ def _DrawHTMLLazy(scene, width=640, height=600):
 
     # Emit the lazy-load HTML: only screenshot + overlay, everything else loaded on click
     lazy_html = f"""
+    <style>
+      #{id_}root {{ --webgpu-canvas-bg: #ffffff; }}
+      @media (prefers-color-scheme: dark) {{
+        #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
+      }}
+    </style>
     <div id='{id_}root'
-         style="position: relative; width: {width}px; max-width: 100%; overflow: hidden;"
+         style="position: relative; width: min({width}px, 100%); max-width: 100%; overflow: hidden;"
     >
         <img id='{id_}img'
              src='{screenshot_url}'
-             style='width: {width}px; height: {height}px; max-width: 100%; display: block;'
+             style='width: 100%; max-width: 100%; height: auto; aspect-ratio: {width} / {height}; display: block;'
         />
         <div id='{id_}overlay'
              style='position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -226,8 +241,8 @@ def _DrawHTMLLazy(scene, width=640, height=600):
         </div>
         <canvas
             id='{canvas_id}'
-            style='background-color: white; width: {width}px; height: {height}px;
-                   touch-action: none; max-width: 100%; display: none;'
+            style='background-color: var(--webgpu-canvas-bg, #ffffff); width: 100%; max-width: 100%; height: auto;
+                   aspect-ratio: {width} / {height}; touch-action: none; display: none;'
         ></canvas>
         <div id='{id_}lilgui'
              style='position: absolute; top: 0; right: 0; z-index: 10;'

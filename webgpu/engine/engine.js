@@ -4,7 +4,10 @@
 // All are concatenated into the same scope by the Python loader — no imports.
 
 const SAMPLE_COUNT = 4;
-const CLEAR_COLOR = { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
+const LIGHT_CLEAR_COLOR = Object.freeze({ r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+const DARK_CLEAR_COLOR  = Object.freeze({ r: 0.68, g: 0.68, b: 0.68, a: 1.0 });
+const LIGHT_CANVAS_BG = '#ffffff';
+const DARK_CANVAS_BG  = '#adadad';
 const DEPTH_FORMAT = 'depth24plus';
 
 const TRANSPARENT_BLEND = {
@@ -296,6 +299,10 @@ class RenderEngine {
       this._resizeObserver = new ResizeObserver(() => this._onResize());
       this._resizeObserver.observe(canvas);
     }
+
+    // --- Theme handling ---
+    this._applyTheme();
+    this._setupThemeObserver();
 
     // --- First frame ---
     // In live mode, the host decides when to render. Don't auto-render.
@@ -741,7 +748,7 @@ class RenderEngine {
         resolveTarget: canvasTexture.createView(),
         loadOp: 'clear',
         storeOp: 'store',
-        clearValue: CLEAR_COLOR,
+        clearValue: this.clearColor || LIGHT_CLEAR_COLOR,
       }],
       depthStencilAttachment: {
         view: this.depthTexture.createView(),
@@ -864,8 +871,50 @@ class RenderEngine {
     return out;
   }
 
+  _isDarkMode() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } catch {
+      return false;
+    }
+  }
+
+  _applyTheme() {
+    const dark = this._isDarkMode();
+    this.clearColor = dark ? DARK_CLEAR_COLOR : LIGHT_CLEAR_COLOR;
+    if (this.canvas && this.canvas.style) {
+      this.canvas.style.backgroundColor = dark ? DARK_CANVAS_BG : LIGHT_CANVAS_BG;
+    }
+  }
+
+  _setupThemeObserver() {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    this._themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    this._onThemeChange = () => {
+      this._applyTheme();
+      this.render();
+    };
+    if (this._themeMediaQuery.addEventListener) {
+      this._themeMediaQuery.addEventListener('change', this._onThemeChange);
+    } else if (this._themeMediaQuery.addListener) {
+      this._themeMediaQuery.addListener(this._onThemeChange);
+    }
+  }
+
+  _teardownThemeObserver() {
+    if (!this._themeMediaQuery || !this._onThemeChange) return;
+    if (this._themeMediaQuery.removeEventListener) {
+      this._themeMediaQuery.removeEventListener('change', this._onThemeChange);
+    } else if (this._themeMediaQuery.removeListener) {
+      this._themeMediaQuery.removeListener(this._onThemeChange);
+    }
+    this._themeMediaQuery = null;
+    this._onThemeChange = null;
+  }
+
   dispose() {
     if (this._resizeObserver) this._resizeObserver.disconnect();
+    this._teardownThemeObserver();
     if (this.input) this.input.dispose();
     if (this.interactions) this.interactions.dispose();
     if (this.depthTexture) this.depthTexture.destroy();
