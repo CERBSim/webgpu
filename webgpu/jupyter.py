@@ -172,25 +172,35 @@ def _DrawHTMLLazy(scene, width=640, height=600):
     blob_hash = hashlib.md5(blob).hexdigest()[:10]
     static_dir = _get_static_dir()
 
+    # Compute relative prefix from the notebook page to _static/.
+    # static_dir is <docs_root>/_static/webgpu_scenes, so its grandparent
+    # is the docs source root.  The kernel cwd is the notebook's directory.
+    # We need the relative path from cwd to that docs root.
+    from pathlib import Path
+    docs_root = static_dir.parent.parent  # _static/../
+    rel_prefix = os.path.relpath(docs_root, Path.cwd()) + "/"
+    if rel_prefix == "./":
+        rel_prefix = ""
+
     # Save blob as a JS file (script src works on file:// unlike fetch)
     scene_filename = f"scene_{blob_hash}.js"
     scene_var = f"__webgpu_blob_{blob_hash}"
     (static_dir / scene_filename).write_text(
         f"window.{scene_var} = \"{blob_b64}\";"
     )
-    scene_url = f"_static/webgpu_scenes/{scene_filename}"
+    scene_url = f"{rel_prefix}_static/webgpu_scenes/{scene_filename}"
 
     if not _engine_emitted:
         (static_dir / "engine.js").write_text(engine_js)
         _engine_emitted = True
-    engine_url = "_static/webgpu_scenes/engine.js"
+    engine_url = f"{rel_prefix}_static/webgpu_scenes/engine.js"
 
     # Capture screenshot in a separate subprocess
     screenshot_b64 = _capture_screenshot_subprocess(blob_b64, width, height)
     screenshot_filename = f"screenshot_{blob_hash}.png"
     if screenshot_b64:
         (static_dir / screenshot_filename).write_bytes(base64.b64decode(screenshot_b64))
-    screenshot_url = f"_static/webgpu_scenes/{screenshot_filename}"
+    screenshot_url = f"{rel_prefix}_static/webgpu_scenes/{screenshot_filename}"
 
     # Emit the lazy-load HTML: only screenshot + overlay, everything else loaded on click
     lazy_html = f"""
@@ -232,16 +242,21 @@ def _DrawHTMLLazy(scene, width=640, height=600):
 def _get_static_dir():
     """Get or create the static directory for webgpu scene assets."""
     from pathlib import Path
-    # Try to find the docs source _static directory
-    for candidate in [
-        Path("docs/_static/webgpu_scenes"),
-        Path("_static/webgpu_scenes"),
-        Path("webgpu_scenes"),
-    ]:
-        # Check if the parent _static dir exists (we're in a docs build)
-        if candidate.parent.exists():
+    # Walk up from cwd to find the _static directory that Sphinx will copy
+    # into the build output.  The kernel cwd may be a subdirectory of the
+    # docs source tree (e.g. docs/notebooks/) so a simple relative check
+    # is not sufficient.
+    cwd = Path.cwd().resolve()
+    for parent in [cwd] + list(cwd.parents):
+        candidate = parent / "_static" / "webgpu_scenes"
+        if (parent / "_static").is_dir():
             candidate.mkdir(parents=True, exist_ok=True)
             return candidate
+        # Also check docs/_static in case we're at the repo root
+        docs_candidate = parent / "docs" / "_static" / "webgpu_scenes"
+        if (parent / "docs" / "_static").is_dir():
+            docs_candidate.mkdir(parents=True, exist_ok=True)
+            return docs_candidate
     # Fallback: create in current directory
     fallback = Path("_static/webgpu_scenes")
     fallback.mkdir(parents=True, exist_ok=True)
