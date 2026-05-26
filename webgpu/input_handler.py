@@ -1,3 +1,4 @@
+import math
 from typing import Callable
 from .utils import Lock
 
@@ -30,6 +31,13 @@ class InputHandler:
         self._is_mousedown = False
 
         self.html_canvas = None
+
+        # Touch state tracking
+        self._touches = {}  # identifier -> (x, y)
+        self._prev_touch_dist = None
+        self._prev_touch_centroid = None
+        self._touch_is_down = False
+        self._last_single_touch_pos = None
 
         self.on_mousedown(self.__on_mousedown, None, None, None)
         self.on_mouseup(self.__on_mouseup, None, None, None)
@@ -135,30 +143,286 @@ class InputHandler:
 
     def _handle_js_event(self, event_type):
         def wrapper(event):
-            if event_type in self._callbacks:
-                try:
-                    import pyodide.ffi
+            try:
+                import pyodide.ffi
 
-                    if isinstance(event, pyodide.ffi.JsProxy):
-                        ev = {}
-                        for key in dir(event):
-                            ev[key] = getattr(event, key)
-                        event = ev
-                except ImportError:
-                    pass
+                if isinstance(event, pyodide.ffi.JsProxy):
+                    ev = {}
+                    for key in dir(event):
+                        ev[key] = getattr(event, key)
+                    # Extract touch data from JsProxy for touch events
+                    if event_type.startswith("touch"):
+                        ev["touches"] = self._extract_touch_list(event.touches)
+                        ev["changedTouches"] = self._extract_touch_list(
+                            event.changedTouches
+                        )
+                    event = ev
+            except ImportError:
+                pass
 
+            if event_type.startswith("touch"):
+                self._process_touch(event_type, event)
+            elif event_type in self._callbacks:
                 self.emit(event_type, event)
 
         return wrapper
 
+    @staticmethod
+    def _extract_touch_list(touch_list):
+        """Convert a JsProxy TouchList to a Python list of dicts."""
+        result = []
+        try:
+            for i in range(touch_list.length):
+                t = touch_list.item(i)
+                result.append(
+                    {
+                        "identifier": t.identifier,
+                        "clientX": t.clientX,
+                        "clientY": t.clientY,
+                    }
+                )
+        except Exception:
+            pass
+        return result
+
+    def _process_touch(self, event_type, ev):
+        """Process touch events and synthesize mouse/wheel events."""
+        touches_data = ev.get("touches", [])
+        changed_data = ev.get("changedTouches", [])
+
+        if event_type == "touchstart":
+            # Update tracked touches
+            for t in changed_data:
+                self._touches[t["identifier"]] = (t["clientX"], t["clientY"])
+
+            if len(self._touches) == 1:
+                # Single finger down → emit mousedown with button=0
+                t = changed_data[0]
+                synthetic = {
+                    "button": 0,
+                    "buttons": 1,
+                    "x": t["clientX"],
+                    "y": t["clientY"],
+                    "movementX": 0,
+                    "movementY": 0,
+                    "altKey": False,
+                    "shiftKey": False,
+                    "ctrlKey": False,
+                }
+                self._touch_is_down = True
+                self._last_single_touch_pos = (t["clientX"], t["clientY"])
+                self.emit("mousedown", synthetic)
+            elif len(self._touches) == 2:
+                # Second finger down → initialize pinch/pan state
+                points = list(self._touches.values())
+                self._prev_touch_dist = self._touch_distance(points[0], points[1])
+                self._prev_touch_centroid = self._touch_centroid(points[0], points[1])
+                # Cancel single-finger rotation by emitting mouseup, then
+                # emit mousedown with button=1 to start panning mode
+                if self._touch_is_down:
+                    synthetic = {
+                        "button": 0,
+                        "buttons": 0,
+                        "x": 0,
+                        "y": 0,
+                        "movementX": 0,
+                        "movementY": 0,
+                        "altKey": False,
+                        "shiftKey": False,
+                        "ctrlKey": False,
+                    }
+                    self.emit("mouseup", synthetic)
+                    self._touch_is_down = False
+                # Emit mousedown with button=1 (middle) to activate panning
+                centroid = self._touch_centroid(points[0], points[1])
+                pan_start = {
+                    "button": 1,
+                    "buttons": 4,
+                    "x": centroid[0],
+                    "y": centroid[1],
+                    "movementX": 0,
+                    "movementY": 0,
+                    "altKey": False,
+                    "shiftKey": False,
+                    "ctrlKey": False,
+                }
+                self.emit("mousedown", pan_start)
+
+        elif event_type == "touchmove":
+            # Update tracked touches with current positions
+            for t in touches_data:
+                if t["identifier"] in self._touches:
+                    self._touches[t["identifier"]] = (t["clientX"], t["clientY"])
+
+            if len(self._touches) == 1:
+                # Single finger move → emit mousemove for rotation
+                t = touches_data[0]
+                cur = (t["clientX"], t["clientY"])
+
+                prev_pos = getattr(self, "_last_single_touch_pos", None)
+                self._last_single_touch_pos = cur
+                if prev_pos is not None:
+                    dx = cur[0] - prev_pos[0]
+                    dy = cur[1] - prev_pos[1]
+                else:
+                    dx = 0
+                    dy = 0
+
+                synthetic = {
+                    "button": 0,
+                    "buttons": 1,
+                    "x": cur[0],
+                    "y": cur[1],
+                    "movementX": dx,
+                    "movementY": dy,
+                    "altKey": False,
+                    "shiftKey": False,
+                    "ctrlKey": False,
+                }
+                self.emit("mousemove", synthetic)
+
+            elif len(self._touches) >= 2:
+                # Two-finger gesture → pinch zoom + pan
+                points = list(self._touches.values())
+                p0, p1 = points[0], points[1]
+
+                # Pinch: emit wheel event
+                dist = self._touch_distance(p0, p1)
+                if self._prev_touch_dist is not None and self._prev_touch_dist > 0:
+                    delta = self._prev_touch_dist - dist
+                    if abs(delta) > 0.5:
+                        wheel_ev = {
+                            "button": 0,
+                            "buttons": 0,
+                            "x": (p0[0] + p1[0]) / 2,
+                            "y": (p0[1] + p1[1]) / 2,
+                            "deltaX": 0,
+                            "deltaY": delta * 2,
+                            "deltaMode": 0,
+                            "movementX": 0,
+                            "movementY": 0,
+                            "altKey": False,
+                            "shiftKey": False,
+                            "ctrlKey": False,
+                        }
+                        self.emit("wheel", wheel_ev)
+                self._prev_touch_dist = dist
+
+                # Pan: emit mousemove with middle button (buttons=4)
+                centroid = self._touch_centroid(p0, p1)
+                if self._prev_touch_centroid is not None:
+                    dx = centroid[0] - self._prev_touch_centroid[0]
+                    dy = centroid[1] - self._prev_touch_centroid[1]
+                    if abs(dx) > 0.5 or abs(dy) > 0.5:
+                        pan_ev = {
+                            "button": 1,
+                            "buttons": 4,
+                            "x": centroid[0],
+                            "y": centroid[1],
+                            "movementX": dx,
+                            "movementY": dy,
+                            "altKey": False,
+                            "shiftKey": False,
+                            "ctrlKey": False,
+                        }
+                        self.emit("mousemove", pan_ev)
+                        self.emit("drag", pan_ev)
+                self._prev_touch_centroid = centroid
+
+        elif event_type in ("touchend", "touchcancel"):
+            # Remove ended touches
+            for t in changed_data:
+                self._touches.pop(t["identifier"], None)
+
+            if len(self._touches) == 0:
+                # All fingers lifted → end any active gesture
+                end_ev = {
+                    "button": 0,
+                    "buttons": 0,
+                    "x": changed_data[0]["clientX"] if changed_data else 0,
+                    "y": changed_data[0]["clientY"] if changed_data else 0,
+                    "movementX": 0,
+                    "movementY": 0,
+                    "altKey": False,
+                    "shiftKey": False,
+                    "ctrlKey": False,
+                }
+                self.emit("mouseup", end_ev)
+                self._touch_is_down = False
+                self._prev_touch_dist = None
+                self._prev_touch_centroid = None
+                self._last_single_touch_pos = None
+            elif len(self._touches) == 1:
+                # Went from 2 fingers to 1 → end pan, restart rotation
+                # First emit mouseup to end panning
+                end_ev = {
+                    "button": 1,
+                    "buttons": 0,
+                    "x": 0,
+                    "y": 0,
+                    "movementX": 0,
+                    "movementY": 0,
+                    "altKey": False,
+                    "shiftKey": False,
+                    "ctrlKey": False,
+                }
+                self.emit("mouseup", end_ev)
+                self._prev_touch_dist = None
+                self._prev_touch_centroid = None
+                remaining = list(self._touches.values())[0]
+                self._last_single_touch_pos = remaining
+                # Re-emit mousedown for single-finger rotation
+                synthetic = {
+                    "button": 0,
+                    "buttons": 1,
+                    "x": remaining[0],
+                    "y": remaining[1],
+                    "movementX": 0,
+                    "movementY": 0,
+                    "altKey": False,
+                    "shiftKey": False,
+                    "ctrlKey": False,
+                }
+                self._touch_is_down = True
+                self.emit("mousedown", synthetic)
+
+    @staticmethod
+    def _touch_distance(p0, p1):
+        """Euclidean distance between two touch points."""
+        dx = p1[0] - p0[0]
+        dy = p1[1] - p0[1]
+        return math.sqrt(dx * dx + dy * dy)
+
+    @staticmethod
+    def _touch_centroid(p0, p1):
+        """Midpoint between two touch points."""
+        return ((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
+
     def register_callbacks(self):
         from .platform import create_event_handler
 
-        for event in ["mousedown", "mouseup", "mousemove", "wheel", "mouseout", "dblclick"]:
+        # Prevent default touch actions (scrolling/zooming) on the canvas
+        try:
+            self.html_canvas.style.touchAction = "none"
+        except Exception:
+            pass
+
+        for event in [
+            "mousedown",
+            "mouseup",
+            "mousemove",
+            "wheel",
+            "mouseout",
+            "dblclick",
+            "touchstart",
+            "touchmove",
+            "touchend",
+            "touchcancel",
+        ]:
             js_handler = create_event_handler(
                 self._handle_js_event(event),
                 prevent_default=True,
-                stop_propagation=event not in ["mousemove", "mouseout"],
+                stop_propagation=event not in ["mousemove", "mouseout", "touchmove"],
             )
             self.html_canvas["on" + event] = js_handler
             self._js_handlers[event] = js_handler

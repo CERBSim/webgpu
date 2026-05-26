@@ -31,6 +31,18 @@ function serializeEvent(event) {
     obj.canvasX = Math.round((event.x - rect.x) * dpr);
     obj.canvasY = Math.round((event.y - rect.y) * dpr);
   }
+  if (event.touches !== undefined) {
+    obj.touches = Array.from(event.touches).map((t) => ({
+      identifier: t.identifier,
+      clientX: t.clientX,
+      clientY: t.clientY,
+    }));
+    obj.changedTouches = Array.from(event.changedTouches).map((t) => ({
+      identifier: t.identifier,
+      clientX: t.clientX,
+      clientY: t.clientY,
+    }));
+  }
   return obj;
 }
 
