@@ -25,9 +25,11 @@ fn getColor(value: f32) -> vec4<f32> {
 
   v = clamp(v, 0.0, 1.0);
 
-  var colorIndex = v * (Nf - 1.0);
+  var colorIndex: f32;
   if (u_cmap_uniforms.discrete == 1u) {
-    colorIndex = floor(colorIndex);
+    colorIndex = min(floor(v * Nf), Nf - 1.0);
+  } else {
+    colorIndex = v * (Nf - 1.0);
   }
 
   var uv = vec2f(0.5, 0.5);
