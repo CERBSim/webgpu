@@ -5,9 +5,9 @@
 
 const SAMPLE_COUNT = 4;
 const LIGHT_CLEAR_COLOR = Object.freeze({ r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
-const DARK_CLEAR_COLOR  = Object.freeze({ r: 0.68, g: 0.68, b: 0.68, a: 1.0 });
+const DARK_CLEAR_COLOR  = Object.freeze({ r: 0.8078, g: 0.8392, b: 0.8667, a: 1.0 });
 const LIGHT_CANVAS_BG = '#ffffff';
-const DARK_CANVAS_BG  = '#adadad';
+const DARK_CANVAS_BG  = '#ced6dd';
 const DEPTH_FORMAT = 'depth24plus';
 
 const TRANSPARENT_BLEND = {

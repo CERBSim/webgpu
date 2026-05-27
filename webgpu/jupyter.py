@@ -39,9 +39,9 @@ def _init_html(scene, width, height, flex=None):
             <style>
               #{id_}root {{ --webgpu-canvas-bg: #ffffff; }}
               @media (prefers-color-scheme: dark) {{
-                #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
+                #{id_}root {{ --webgpu-canvas-bg: #ced6dd; }}
               }}
-              html[data-theme="dark"] #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
+              html[data-theme="dark"] #{id_}root {{ --webgpu-canvas-bg: #ced6dd; }}
             </style>
             <div id='{id_}root'
             style="position: relative; width: min({width}px, 100%); max-width: 100%; overflow: hidden;"
@@ -229,9 +229,9 @@ def _DrawHTMLLazy(scene, width=640, height=600):
     <style>
       #{id_}root {{ --webgpu-canvas-bg: #ffffff; }}
       @media (prefers-color-scheme: dark) {{
-        #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
+        #{id_}root {{ --webgpu-canvas-bg: #ced6dd; }}
       }}
-      html[data-theme="dark"] #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
+      html[data-theme="dark"] #{id_}root {{ --webgpu-canvas-bg: #ced6dd; }}
     </style>
     <div id='{id_}root'
          style="position: relative; width: min({width}px, 100%); max-width: 100%; overflow: hidden;"
