@@ -204,27 +204,47 @@ def _DrawHTMLLazy(scene, width=640, height=600):
         _engine_emitted = True
     engine_url = f"{rel_prefix}_static/webgpu_scenes/engine.js"
 
-    # Capture screenshot in a separate subprocess
-    screenshot_b64 = _capture_screenshot_subprocess(blob_b64, width, height)
-    screenshot_filename = f"screenshot_{blob_hash}.png"
-    if screenshot_b64:
-        (static_dir / screenshot_filename).write_bytes(base64.b64decode(screenshot_b64))
-    screenshot_url = f"{rel_prefix}_static/webgpu_scenes/{screenshot_filename}"
+    # Capture screenshots (light + dark) in a separate subprocess.
+    screenshot_light_b64 = _capture_screenshot_subprocess(blob_b64, width, height, color_scheme="light")
+    screenshot_dark_b64 = _capture_screenshot_subprocess(blob_b64, width, height, color_scheme="dark")
+
+    screenshot_light_filename = f"screenshot_{blob_hash}_light.png"
+    screenshot_dark_filename = f"screenshot_{blob_hash}_dark.png"
+
+    if screenshot_light_b64:
+        (static_dir / screenshot_light_filename).write_bytes(base64.b64decode(screenshot_light_b64))
+    if screenshot_dark_b64:
+        (static_dir / screenshot_dark_filename).write_bytes(base64.b64decode(screenshot_dark_b64))
+
+    screenshot_light_url = f"{rel_prefix}_static/webgpu_scenes/{screenshot_light_filename}"
+    # Fallback to light if dark capture failed
+    screenshot_dark_url = (
+        f"{rel_prefix}_static/webgpu_scenes/{screenshot_dark_filename}"
+        if screenshot_dark_b64 else screenshot_light_url
+    )
 
     # Emit the lazy-load HTML: only screenshot + overlay, everything else loaded on click
     lazy_html = f"""
     <style>
       #{id_}root {{ --webgpu-canvas-bg: #ffffff; }}
+      #{id_}img_light {{ display: block; }}
+      #{id_}img_dark {{ display: none; }}
       @media (prefers-color-scheme: dark) {{
         #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
+        #{id_}img_light {{ display: none; }}
+        #{id_}img_dark {{ display: block; }}
       }}
     </style>
     <div id='{id_}root'
          style="position: relative; width: min({width}px, 100%); max-width: 100%; overflow: hidden;"
     >
-        <img id='{id_}img'
-             src='{screenshot_url}'
+        <img id='{id_}img_light'
+             src='{screenshot_light_url}'
              style='width: 100%; max-width: 100%; height: auto; aspect-ratio: {width} / {height}; display: block;'
+        />
+        <img id='{id_}img_dark'
+             src='{screenshot_dark_url}'
+             style='width: 100%; max-width: 100%; height: auto; aspect-ratio: {width} / {height}; display: none;'
         />
         <div id='{id_}overlay'
              style='position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -232,7 +252,7 @@ def _DrawHTMLLazy(scene, width=640, height=600):
                     background: rgba(0,0,0,0); cursor: pointer; transition: background 0.2s;'
              onmouseover="this.style.background='rgba(0,0,0,0.18)'; this.querySelector('span').style.opacity='1'"
              onmouseout="this.style.background='rgba(0,0,0,0)'; this.querySelector('span').style.opacity='0'"
-             onclick="(function() {{ var r = document.getElementById('{id_}root'); if (r.__activated) return; r.__activated = true; function activate() {{ document.getElementById('{id_}img').style.display = 'none'; document.getElementById('{id_}overlay').style.display = 'none'; document.getElementById('{canvas_id}').style.display = 'block'; RenderEngine.create('{canvas_id}', window.{scene_var}); }} function loadBlob() {{ var s = document.createElement('script'); s.src = '{scene_url}'; s.onload = activate; document.head.appendChild(s); }} if (typeof RenderEngine === 'undefined') {{ var s = document.createElement('script'); s.src = '{engine_url}'; s.onload = loadBlob; document.head.appendChild(s); }} else {{ loadBlob(); }} }})()"
+             onclick="(function() {{ var r = document.getElementById('{id_}root'); if (r.__activated) return; r.__activated = true; function activate() {{ var il = document.getElementById('{id_}img_light'); if (il) il.style.display = 'none'; var id = document.getElementById('{id_}img_dark'); if (id) id.style.display = 'none'; document.getElementById('{id_}overlay').style.display = 'none'; document.getElementById('{canvas_id}').style.display = 'block'; RenderEngine.create('{canvas_id}', window.{scene_var}); }} function loadBlob() {{ var s = document.createElement('script'); s.src = '{scene_url}'; s.onload = activate; document.head.appendChild(s); }} if (typeof RenderEngine === 'undefined') {{ var s = document.createElement('script'); s.src = '{engine_url}'; s.onload = loadBlob; document.head.appendChild(s); }} else {{ loadBlob(); }} }})()"
         >
             <span style='color: white; font-size: 1.3em; font-weight: bold;
                          text-shadow: 0 1px 4px rgba(0,0,0,0.7); pointer-events: none;
@@ -282,7 +302,7 @@ def _get_static_dir():
 _screenshot_worker = None
 
 
-def _capture_screenshot_subprocess(blob_b64, width, height):
+def _capture_screenshot_subprocess(blob_b64, width, height, color_scheme):
     """Send a screenshot request to the persistent worker process."""
     import subprocess
     import sys
@@ -304,7 +324,7 @@ def _capture_screenshot_subprocess(blob_b64, width, height):
             return ""
 
     try:
-        _screenshot_worker.stdin.write(f"{width} {height} {blob_b64}\n")
+        _screenshot_worker.stdin.write(f"{width} {height} {color_scheme} {blob_b64}\n")
         _screenshot_worker.stdin.flush()
         result = _screenshot_worker.stdout.readline().strip()
         return result

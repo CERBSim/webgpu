@@ -4,7 +4,9 @@ Launches one Chrome instance on a virtual display (Xvfb) and handles multiple
 screenshot requests over stdin/stdout.
 
 Protocol (line-based):
-    Request:  <width> <height> <blob_b64>\n
+    Request:  <width> <height> <color_scheme> <blob_b64>\n
+              where <color_scheme> is "light" or "dark".
+
     Response: <png_b64>\n
     Shutdown: (close stdin)
 
@@ -90,18 +92,22 @@ def _run_worker():
     sys.stdout.flush()
 
     # Process requests from stdin
+    request_id = 0
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
 
-        parts = line.split(' ', 2)
-        if len(parts) != 3:
+        parts = line.split(' ', 3)
+        if len(parts) != 4:
             sys.stdout.write("\n")
             sys.stdout.flush()
             continue
 
-        width, height, blob_b64 = int(parts[0]), int(parts[1]), parts[2]
+        width, height = int(parts[0]), int(parts[1])
+        color_scheme, blob_b64 = parts[2], parts[3]
+        if color_scheme not in ("light", "dark"):
+            color_scheme = "light"
 
         html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;overflow:hidden;">
 <canvas id="c" width="{width}" height="{height}" style="display:block;"></canvas>
@@ -118,7 +124,9 @@ def _run_worker():
 </script></body></html>"""
 
         (tmpdir / "index.html").write_text(html)
-        page.goto(f"http://127.0.0.1:{port}/index.html")
+        page.emulate_media(color_scheme=color_scheme)
+        request_id += 1
+        page.goto(f"http://127.0.0.1:{port}/index.html?rid={request_id}")
 
         try:
             page.wait_for_function(

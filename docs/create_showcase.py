@@ -62,7 +62,7 @@ html = f"""\
 }}
 </style>
 <div id="showcase_root" style="width:min(800px,100%); max-width:100%; margin:0 auto 1em auto; position:relative;">
-<canvas id="{canvas_id}" width="800" height="400" style="background-color:var(--webgpu-canvas-bg,#ffffff); width:100%; max-width:100%; height:auto; aspect-ratio:800 / 400; border-radius:8px; display:block;"></canvas>
+<canvas id="{canvas_id}" width="800" height="400" style="background-color:var(--webgpu-canvas-bg,#ffffff); width:100%; max-width:100%; height:auto; aspect-ratio:800 / 400; touch-action:none; border-radius:8px; display:block;"></canvas>
 <script>
 {engine_js}
 RenderEngine.create("{canvas_id}", "{blob_b64}");
