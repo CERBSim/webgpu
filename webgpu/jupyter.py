@@ -41,6 +41,7 @@ def _init_html(scene, width, height, flex=None):
               @media (prefers-color-scheme: dark) {{
                 #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
               }}
+              html[data-theme="dark"] #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
             </style>
             <div id='{id_}root'
             style="position: relative; width: min({width}px, 100%); max-width: 100%; overflow: hidden;"
@@ -227,24 +228,23 @@ def _DrawHTMLLazy(scene, width=640, height=600):
     lazy_html = f"""
     <style>
       #{id_}root {{ --webgpu-canvas-bg: #ffffff; }}
-      #{id_}img_light {{ display: block; }}
-      #{id_}img_dark {{ display: none; }}
       @media (prefers-color-scheme: dark) {{
         #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
-        #{id_}img_light {{ display: none; }}
-        #{id_}img_dark {{ display: block; }}
       }}
+      html[data-theme="dark"] #{id_}root {{ --webgpu-canvas-bg: #adadad; }}
     </style>
     <div id='{id_}root'
          style="position: relative; width: min({width}px, 100%); max-width: 100%; overflow: hidden;"
     >
         <img id='{id_}img_light'
+             class='only-light dark-light'
              src='{screenshot_light_url}'
              style='width: 100%; max-width: 100%; height: auto; aspect-ratio: {width} / {height}; display: block;'
         />
         <img id='{id_}img_dark'
+             class='only-dark dark-light'
              src='{screenshot_dark_url}'
-             style='width: 100%; max-width: 100%; height: auto; aspect-ratio: {width} / {height}; display: none;'
+             style='width: 100%; max-width: 100%; height: auto; aspect-ratio: {width} / {height}; display: block;'
         />
         <div id='{id_}overlay'
              style='position: absolute; top: 0; left: 0; width: 100%; height: 100%;

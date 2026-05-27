@@ -873,6 +873,11 @@ class RenderEngine {
 
   _isDarkMode() {
     try {
+      // Prefer explicit page-level theme (e.g. pydata-sphinx-theme toggle)
+      const htmlTheme = document.documentElement && document.documentElement.dataset && document.documentElement.dataset.theme;
+      if (htmlTheme === 'dark') return true;
+      if (htmlTheme === 'light') return false;
+      // Fall back to OS-level preference
       return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     } catch {
       return false;
@@ -899,6 +904,17 @@ class RenderEngine {
     } else if (this._themeMediaQuery.addListener) {
       this._themeMediaQuery.addListener(this._onThemeChange);
     }
+    // Also observe data-theme attribute changes (e.g. pydata-sphinx-theme)
+    if (document.documentElement && typeof MutationObserver !== 'undefined') {
+      this._themeAttrObserver = new MutationObserver(() => {
+        this._applyTheme();
+        this.render();
+      });
+      this._themeAttrObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-theme'],
+      });
+    }
   }
 
   _teardownThemeObserver() {
@@ -910,6 +926,10 @@ class RenderEngine {
     }
     this._themeMediaQuery = null;
     this._onThemeChange = null;
+    if (this._themeAttrObserver) {
+      this._themeAttrObserver.disconnect();
+      this._themeAttrObserver = null;
+    }
   }
 
   dispose() {

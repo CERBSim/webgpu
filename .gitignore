@@ -12,3 +12,4 @@ docs/html
 /docs/.virtual_documents/
 /.virtual_documents/
 /tests/output/
+/docs/_static/webgpu_scenes/
