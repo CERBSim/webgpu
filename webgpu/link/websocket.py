@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlparse
 
 import websockets
-import websockets.asyncio.client
 from websockets.http11 import Response
 from websockets.datastructures import Headers
 
@@ -15,7 +14,7 @@ from .base import LinkBaseAsync
 
 class WebsocketLinkBase(LinkBaseAsync):
     _websocket_thread: threading.Thread
-    _connection: websockets.asyncio.client.ClientConnection
+    _connection: object
     _event_is_connected: threading.Event
     _event_is_running: threading.Event
     _start_handling_messages: threading.Event
@@ -44,35 +43,6 @@ class WebsocketLinkBase(LinkBaseAsync):
 
     def _connect(self):
         raise NotImplementedError
-
-
-class WebsocketLinkClient(WebsocketLinkBase):
-    _url: str
-
-    def __init__(self, url):
-        super().__init__()
-        self._url = url
-
-    def _connect(self):
-        async def start_websocket():
-            async for websocket in websockets.connect(self._url):
-                try:
-                    # print("client connected")
-                    self._connection = websocket
-                    self._event_is_connected.set()
-                    self._start_handling_messages.wait()
-                    async for message in websocket:
-                        self._on_message(message)
-                except websockets.exceptions.ConnectionClosed:
-                    continue
-                except Exception:
-                    break
-
-        try:
-            asyncio.set_event_loop(self._send_loop)
-            self._send_loop.run_until_complete(start_websocket())
-        except Exception:
-            print("closing connection")
 
 
 class WebsocketLinkServer(WebsocketLinkBase):
