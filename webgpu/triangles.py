@@ -21,7 +21,8 @@ class TriangulationRenderer(Renderer):
         if normals is None:
             ps = self.points.reshape(-1, 3, 3)
             normals = np.cross((ps[:, 1] - ps[:, 0]), (ps[:, 2] - ps[:, 0]))
-            normals = normals / np.linalg.norm(normals, axis=1)[:, None]
+            norm = np.maximum(np.linalg.norm(normals, axis=1), 1e-10)
+            normals = normals / norm[:, None]
             self.normals = np.concatenate([normals, normals, normals], axis=1).flatten()
         else:
             self.normals = np.asarray(normals, dtype=np.float32).reshape(-1)
