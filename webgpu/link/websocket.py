@@ -103,13 +103,32 @@ class WebsocketLinkServer(WebsocketLinkBase):
             return Response(403, "Forbidden", Headers())
         return None
 
+    @staticmethod
+    def _is_response(message):
+        """Quick check if a message is a response (cheap, avoids full deserialization)."""
+        if isinstance(message, (memoryview, bytes)):
+            # Binary message: JSON metadata starts at byte 4
+            try:
+                prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
+                header = message[4:prefix_size]
+                return b'"type":"response"' in bytes(header) or b'"type": "response"' in bytes(header)
+            except Exception:
+                return False
+        return '"type":"response"' in message or '"type": "response"' in message
+
     async def _websocket_handler(self, websocket, path=""):
         try:
             # print("client connected")
             self._connection = websocket
             self._event_is_connected.set()
             async for message in websocket:
-                self._executor.submit(self._on_message, message)
+                # Handle responses inline to avoid deadlock: if all executor
+                # threads are blocked waiting for JS responses, queued response
+                # messages would never be processed.
+                if self._is_response(message):
+                    self._on_message(message)
+                else:
+                    self._executor.submit(self._on_message, message)
         finally:
             self._connection = None
 

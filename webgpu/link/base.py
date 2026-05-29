@@ -459,7 +459,11 @@ class LinkBase:
 
             match msg_type:
                 case "response":
-                    event, key = self._requests[request_id]
+                    pending = self._requests.get(request_id)
+                    if pending is None or not isinstance(pending, tuple):
+                        print(f"warning: response for unknown or already-timed-out request {request_id}, ignoring")
+                        return
+                    event, key = pending
                     response = self._load_data(data.get("value", None), buffers)
                     self._requests[request_id] = response
                     if key and data.get("cache", False):
