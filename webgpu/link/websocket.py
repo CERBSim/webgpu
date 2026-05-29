@@ -21,6 +21,7 @@ class WebsocketLinkBase(LinkBaseAsync):
 
     def __init__(self):
         super().__init__()
+        self._connection = None
         self._event_is_connected = threading.Event()
         self._event_is_running = threading.Event()
         self._start_handling_messages = threading.Event()
