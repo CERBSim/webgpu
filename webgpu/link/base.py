@@ -555,6 +555,7 @@ class LinkBaseAsync(LinkBase):
         super().__init__()
         self._send_loop = asyncio.new_event_loop()
         self._callback_loop = asyncio.new_event_loop()
+        self._callback_queue = asyncio.Queue()
         self._callback_task = None
         self._callback_thread = threading.Thread(target=self._start_callback_thread, daemon=True)
         self._callback_thread.start()
@@ -669,7 +670,6 @@ class LinkBaseAsync(LinkBase):
         try:
             self._callback_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._callback_loop)
-            self._callback_queue = asyncio.Queue()
             self._callback_task = self._callback_loop.create_task(handle_callbacks())
             try:
                 self._callback_loop.run_forever()
