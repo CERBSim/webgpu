@@ -23,8 +23,6 @@ class LightUniforms(UniformBase):
 
 class Light:
     def __init__(self):
-        self.key = [-0.6, 0.2, .8, 1.0]
-        self.fill = [0.4, 0.6, 1.0, 0.25]
         self.key = [1, 3, 3, 1.0]
         self.fill = [-1, -2, 3, 0.5]
         self.ambient = 0.15 
