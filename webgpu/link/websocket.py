@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import websockets
 import websockets.asyncio.client
@@ -76,6 +77,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
 
     def __init__(self):
         self._port = 8700
+        self._executor = ThreadPoolExecutor(max_workers=8)
         super().__init__()
         self._stop = self._send_loop.create_future()
 
@@ -89,8 +91,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
             self._connection = websocket
             self._event_is_connected.set()
             async for message in websocket:
-                thread = threading.Thread(target=self._on_message, args=(message,), daemon=True)
-                thread.start()
+                self._executor.submit(self._on_message, message)
         finally:
             self._connection = None
 
@@ -134,6 +135,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
             self._send_loop.close()
 
     def stop(self):
+        self._executor.shutdown(wait=False)
         try:
             if not self._stop.done():
                 self._send_loop.call_soon_threadsafe(self._stop.set_result, None)
