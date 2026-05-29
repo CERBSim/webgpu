@@ -516,7 +516,8 @@ class ShapeRenderer(Renderer):
             return None
         bmin, bmax = self.shape_data.get_bounding_box()
         r = np.linalg.norm(bmax - bmin) / 2
-        r *= self.directions.max()
+        if self._directions is not None and self._directions.size > 0:
+            r *= np.abs(self._directions).max()
         for i in range(3):
             bmin[i] = self.positions[i::3].min()
             bmax[i] = self.positions[i::3].max()
