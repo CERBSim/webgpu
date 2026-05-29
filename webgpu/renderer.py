@@ -177,7 +177,10 @@ class GPUObjects:
         super().__setattr__("_gpu_objects", {})
 
     def __getattr__(self, name):
-        return self._gpu_objects.get(name, None)
+        try:
+            return self._gpu_objects[name]
+        except KeyError:
+            raise AttributeError(f"'{type(self).__name__}' has no GPU object '{name}'")
 
     def __setattr__(self, name, value):
         self._gpu_objects[name] = value

@@ -292,7 +292,7 @@ def _detect_interactions(scene, registry) -> list:
         # Check clipping
         clip = getattr(obj, '_clipping', None) or getattr(obj, 'clipping', None)
         if clip is None and hasattr(obj, 'gpu_objects'):
-            clip = obj.gpu_objects.clipping
+            clip = getattr(obj.gpu_objects, 'clipping', None)
         if isinstance(clip, Clipping) and getattr(clip, 'uniforms', None) is not None:
             buf = getattr(clip.uniforms, '_buffer', None)
             if buf is not None:
@@ -308,7 +308,7 @@ def _detect_interactions(scene, registry) -> list:
         # Check colormap
         cmap = None
         if hasattr(obj, 'gpu_objects'):
-            cmap = obj.gpu_objects.colormap
+            cmap = getattr(obj.gpu_objects, 'colormap', None)
         if isinstance(cmap, Colormap) and getattr(cmap, 'uniforms', None) is not None:
             buf = getattr(cmap.uniforms, '_buffer', None)
             if buf is not None:
