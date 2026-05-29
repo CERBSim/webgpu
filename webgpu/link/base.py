@@ -342,6 +342,10 @@ class LinkBase:
         if data["type"] == "buffer":
             return buffers[data["index"]]
 
+        if data["type"] == "error":
+            print(f"Remote error: [{data.get('error_type', 'Error')}] {data.get('error', 'Unknown error')}")
+            return None
+
         raise Exception(f"Unknown result type: {data}")
 
     def expose(self, name: str, obj):
@@ -505,6 +509,16 @@ class LinkBase:
             print("error in on_message", data, type(e), str(e))
             import traceback
             traceback.print_exception(*sys.exc_info())
+            if request_id is not None:
+                try:
+                    self._send_response(request_id, {
+                        "__is_crosslink_type__": True,
+                        "type": "error",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    })
+                except Exception:
+                    pass  # Best effort — don't crash the handler on send failure
 
 
 class PyodideLink(LinkBase):

@@ -186,7 +186,7 @@ class CrossLink {
     data.request_id = request_id;
     try {
       const result = await new Promise((resolve, reject) => {
-        this.requests[request_id] = resolve;
+        this.requests[request_id] = { resolve, reject };
         this.connection.send(data);
         setTimeout(() => {
           reject(
@@ -519,9 +519,17 @@ class CrossLink {
           }
         }
         break;
-      case 'response':
-        this.requests[request_id](this._loadData(data.value, buffer));
+      case 'response': {
+        const req = this.requests[request_id];
+        if (!req) break;
+        const value = this._loadData(data.value, buffer);
+        if (value && value.__is_crosslink_type__ && value.type === 'error') {
+          req.reject(new Error(`[${value.error_type}] ${value.error}`));
+        } else {
+          req.resolve(value);
+        }
         break;
+      }
       case 'chunk':
         const id = 'chunk_' + data.parent_request_id;
 
