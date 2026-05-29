@@ -80,11 +80,11 @@ class Proxy:
     def __call__(self, *args, _ignore_result=False):
         return self._link.call(self._id, list(args), self._parent_id, _ignore_result)
 
-    def _call_method(self, prop, args=[], ignore_result=False):
-        return self._link.call_method(self._id, prop, args, ignore_result)
+    def _call_method(self, prop, args=None, ignore_result=False):
+        return self._link.call_method(self._id, prop, args or [], ignore_result)
 
-    def _call_method_ignore_return(self, prop, args=[]):
-        return self._link.call_method_ignore_return(self._id, prop, args)
+    def _call_method_ignore_return(self, prop, args=None):
+        return self._link.call_method_ignore_return(self._id, prop, args or [])
 
     def _new(self, *args):
         return self._link.call_new(self._id, args=list(args))

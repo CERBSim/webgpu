@@ -182,20 +182,20 @@ class LinkBase:
             "buffer": buffer if buffer else None,
         }
 
-    def call_new(self, id=None, prop=None, args=[], ignore_result=False):
+    def call_new(self, id=None, prop=None, args=None, ignore_result=False):
         return self._split_and_send(
-            self._call_data(id, prop, args, ignore_result) | {"type": "new"}
+            self._call_data(id, prop, args or [], ignore_result) | {"type": "new"}
         )
 
-    def call_method(self, id=None, prop=None, args=[], ignore_result=False):
-        return self._split_and_send(self._call_data(id, prop, args, ignore_result))
+    def call_method(self, id=None, prop=None, args=None, ignore_result=False):
+        return self._split_and_send(self._call_data(id, prop, args or [], ignore_result))
 
-    def call_method_ignore_return(self, id=None, prop=None, args=[]):
-        return self.call(id, prop=prop, args=args, ignore_result=True)
+    def call_method_ignore_return(self, id=None, prop=None, args=None):
+        return self.call(id, prop=prop, args=args or [], ignore_result=True)
 
-    def call(self, id, args=[], parent_id=None, ignore_result=False, prop=None):
+    def call(self, id, args=None, parent_id=None, ignore_result=False, prop=None):
         return self._split_and_send(
-            self._call_data(id, prop, args, ignore_result) | {"parent_id": parent_id}
+            self._call_data(id, prop, args or [], ignore_result) | {"parent_id": parent_id}
         )
 
     def set_item(self, id, key, value):

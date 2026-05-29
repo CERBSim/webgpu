@@ -368,13 +368,16 @@ class Renderer(BaseRenderer):
     vertex_entry_point: str = "vertex_main"
     fragment_entry_point: str = "fragment_main"
     select_entry_point: str = "fragment_select_default"
-    vertex_buffer_layouts: list[VertexBufferLayout] = []
-    vertex_buffers: list[Buffer] = []
     transparent: bool = False
 
-    _last_bindings: list[BaseBinding] = []
     _last_transparent: bool = False
     _transparent_pipeline = None
+
+    def __init__(self, label=None):
+        super().__init__(label=label)
+        self.vertex_buffer_layouts = []
+        self.vertex_buffers = []
+        self._last_bindings = []
 
     def create_render_pipeline(self, options: RenderOptions) -> None:
         bindings = options.get_bindings() + self.get_bindings()
