@@ -24,18 +24,20 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 
 def main():
-    # Use Xvfb for a private display so Chrome stays invisible
-    for disp_num in range(99, 120):
-        if not os.path.exists(f'/tmp/.X11-unix/X{disp_num}'):
-            break
+    # Use Xvfb with -displayfd to let the OS assign a free display
+    # and signal readiness via a pipe (no race, no sleep).
+    read_fd, write_fd = os.pipe()
     xvfb_proc = subprocess.Popen(
-        ['Xvfb', f':{disp_num}', '-screen', '0', '1280x1024x24', '-ac'],
+        ['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x1024x24', '-ac'],
+        pass_fds=(write_fd,),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
+    os.close(write_fd)
+    # Xvfb writes the display number to the fd once ready
+    with os.fdopen(read_fd) as f:
+        disp_num = f.read().strip()
     os.environ['DISPLAY'] = f':{disp_num}'
     os.environ.pop('WAYLAND_DISPLAY', None)
-    import time
-    time.sleep(0.3)
 
     try:
         _run_worker()
