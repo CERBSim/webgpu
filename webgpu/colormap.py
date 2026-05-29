@@ -41,11 +41,20 @@ class ColorbarUniforms(UniformBase):
 def _clean_autoscale_range(minval, maxval):
     """Clean up autoscale min/max values for display.
 
+    - Handles invalid/uninitialized ranges (NaN, inf, inverted sentinels).
     - Rounds values that are negligibly small relative to the range to zero
       (e.g. 1e-13 to 1 becomes 0 to 1).
     - Handles constant functions (min == max) by providing a sensible range
       to avoid numerical flickering.
     """
+    import math
+
+    # Handle NaN, inf, or inverted ranges (e.g. from uninitialized sentinels)
+    if (math.isnan(minval) or math.isnan(maxval)
+            or math.isinf(minval) or math.isinf(maxval)
+            or minval > maxval):
+        return 0.0, 1.0
+
     range_size = maxval - minval
     abs_max_val = max(abs(minval), abs(maxval))
 
@@ -145,7 +154,16 @@ class Colormap(BaseRenderer):
 
         On the first call with a new timestamp, resets to inverted range so
         each frame starts fresh. Subsequent calls in the same frame widen.
+        Ignores invalid values (NaN, inf, or sentinel 1e99/-1e99 pairs).
         """
+        import math
+
+        # Skip invalid values that come from uninitialized/failed data
+        if (math.isnan(minval) or math.isnan(maxval)
+                or math.isinf(minval) or math.isinf(maxval)
+                or minval > maxval):
+            return
+
         ts = getattr(self, '_autoscale_ts', None)
         if timestamp is not None and timestamp != ts:
             self._autoscale_ts = timestamp
