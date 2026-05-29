@@ -121,7 +121,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
                         self._websocket_handler,
                         "127.0.0.1",
                         self._port,
-                        max_size=2 * 1024**3,
+                        max_size=110 * 1024**2,  # slightly above 100 MB chunk size
                         compression=None,
                         process_request=self._check_auth,
                     ):
