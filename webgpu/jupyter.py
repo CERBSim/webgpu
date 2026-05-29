@@ -365,6 +365,7 @@ def _init_export_gpu():
 
     port_ready = threading.Event()
     port_container = [None]
+    token_container = [None]
     errors = []
     server_done = threading.Event()
 
@@ -372,6 +373,7 @@ def _init_export_gpu():
         try:
             def _on_server(server):
                 port_container[0] = server.port
+                token_container[0] = server.auth_token
                 port_ready.set()
             platform.init(
                 before_wait_for_connection=_on_server,
@@ -401,12 +403,13 @@ def _init_export_gpu():
 
             # Serve HTML via a separate HTTP server (WebGPU needs secure context)
             tmpdir = Path(tempfile.mkdtemp(prefix="webgpu_export_"))
+            ws_token = token_container[0]
             html = (
                 "<html><body><script>\n"
                 # Disable patchedRequestAnimationFrame — it blocks mapAsync in headless
                 + "window.patchedRequestAnimationFrame = () => {};\n"
                 + _link_js_code + "\n"
-                + f"WebsocketLink('ws://127.0.0.1:{ws_port}');\n"
+                + f"WebsocketLink('ws://127.0.0.1:{ws_port}?token={ws_token}');\n"
                 + "</script></body></html>"
             )
             (tmpdir / "index.html").write_text(html)
@@ -485,8 +488,8 @@ if not platform.is_pyodide and "Javascript" in dir():
             js = _link_js_code + """
 const __is_vscode = (typeof location !== 'undefined' && location.protocol === 'vscode-webview:');
 const __webgpu_host = __is_vscode ? '127.0.0.1' : ((typeof location !== 'undefined' && location.hostname) || '127.0.0.1');
-WebsocketLink('ws://' + __webgpu_host + ':{port}');
-""".format(port=server.port)
+WebsocketLink('ws://' + __webgpu_host + ':{port}?token={token}');
+""".format(port=server.port, token=server.auth_token)
             display(Javascript(js))
 
         is_vscode = "VSCODE_PID" in os.environ

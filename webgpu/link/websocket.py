@@ -1,10 +1,14 @@
 import asyncio
 import json
+import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import parse_qs, urlparse
 
 import websockets
 import websockets.asyncio.client
+from websockets.http11 import Response
+from websockets.datastructures import Headers
 
 from .base import LinkBaseAsync
 
@@ -74,16 +78,30 @@ class WebsocketLinkClient(WebsocketLinkBase):
 class WebsocketLinkServer(WebsocketLinkBase):
     _stop: asyncio.Future
     _port: int = None
+    _auth_token: str
 
     def __init__(self):
         self._port = 8700
+        self._auth_token = secrets.token_urlsafe(32)
         self._executor = ThreadPoolExecutor(max_workers=8)
         super().__init__()
         self._stop = self._send_loop.create_future()
 
     @property
+    def auth_token(self):
+        return self._auth_token
+
+    @property
     def port(self):
         return self._port
+
+    def _check_auth(self, connection, request):
+        """Reject WebSocket connections that don't carry a valid token."""
+        params = parse_qs(urlparse(request.path).query)
+        tokens = params.get("token", [])
+        if not tokens or tokens[0] != self._auth_token:
+            return Response(403, "Forbidden", Headers())
+        return None
 
     async def _websocket_handler(self, websocket, path=""):
         try:
@@ -101,10 +119,11 @@ class WebsocketLinkServer(WebsocketLinkBase):
                 try:
                     async with websockets.serve(
                         self._websocket_handler,
-                        "",
+                        "127.0.0.1",
                         self._port,
                         max_size=2 * 1024**3,
                         compression=None,
+                        process_request=self._check_auth,
                     ):
                         self._event_is_running.set()
                         await self._stop

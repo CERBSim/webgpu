@@ -100,7 +100,7 @@ def _find_link_js():
     return link_js
 
 
-def _make_test_html(ws_port, link_js_content):
+def _make_test_html(ws_port, ws_token, link_js_content):
     """Generate HTML with canvas and websocket connection to Python."""
     inline_js = link_js_content.replace("export ", "")
     from webgpu.engine import engine_js
@@ -111,7 +111,7 @@ def _make_test_html(ws_port, link_js_content):
 <div id="__webgpu_container"></div>
 <script>
 {inline_js}
-window.__crosslink = WebsocketLink('ws://127.0.0.1:{ws_port}');
+window.__crosslink = WebsocketLink('ws://127.0.0.1:{ws_port}?token={ws_token}');
 {engine_js}
 {_READBACK_JS}
 </script>
@@ -357,8 +357,11 @@ def webgpu_env(browser):
     ws_port = [None]
     init_error = [None]
 
+    ws_token = [None]
+
     def on_server_ready(server):
         ws_port[0] = server.port
+        ws_token[0] = server.auth_token
         port_ready.set()
 
     def run_init():
@@ -373,7 +376,7 @@ def webgpu_env(browser):
 
     # Write HTML now that we know the WS port
     (tmpdir / "index.html").write_text(
-        _make_test_html(ws_port[0], link_js_content)
+        _make_test_html(ws_port[0], ws_token[0], link_js_content)
     )
 
     # Navigate browser -> triggers WS connection -> unblocks platform.init

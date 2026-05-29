@@ -571,6 +571,14 @@ class CrossLink {
 }
 
 export function WebsocketLink(url) {
+  // Auto-append auth token from page URL if not already in the WS URL
+  if (url.indexOf('token=') === -1 && typeof location !== 'undefined') {
+    const params = new URLSearchParams(location.search);
+    const token = params.get('wsToken');
+    if (token) {
+      url += (url.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(token);
+    }
+  }
   const socket = new WebSocket(url);
   socket.binaryType = 'arraybuffer';
   return new CrossLink({
@@ -654,7 +662,7 @@ window.createLilGUI = async (args) => {
   if (window.lil === undefined) {
     const url = 'https://cdn.jsdelivr.net/npm/lil-gui@0.20';
     if (window.define === undefined) {
-      await import(url);
+      await import(/* @vite-ignore */ url);
     } else {
       await new Promise(async (resolve) => {
         require([url], (module) => {
