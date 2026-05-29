@@ -87,8 +87,10 @@ class WebsocketLinkServer(WebsocketLinkBase):
         return '"type":"response"' in message or '"type": "response"' in message
 
     async def _websocket_handler(self, websocket, path=""):
+        if self._connection is not None:
+            await websocket.close(4000, "Another session is already active")
+            return
         try:
-            # print("client connected")
             self._connection = websocket
             self._event_is_connected.set()
             async for message in websocket:
