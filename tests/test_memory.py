@@ -481,30 +481,19 @@ class TestSynchronization:
         platform = webgpu_env.platform
         link = platform.link
 
-        # Call a non-existent function ID — JS will error and may not respond.
-        # Python should not hang forever.
-        import signal
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
-        hung = [False]
+        def do_call():
+            link.call(999888777, args=[], parent_id=None, ignore_result=False)
 
-        def handler(signum, frame):
-            hung[0] = True
-            raise TimeoutError("Bridge call hung")
-
-        old_handler = signal.signal(signal.SIGALRM, handler)
-        signal.alarm(5)  # 5 second deadline
-
-        try:
-            # Call an object ID that doesn't exist on JS side
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(do_call)
             try:
-                link.call(999888777, args=[], parent_id=None, ignore_result=False)
+                future.result(timeout=5)
+            except FuturesTimeout:
+                raise AssertionError("Bridge call hung forever — no timeout on event.wait()")
             except Exception:
                 pass  # Any exception is fine — just must not hang
-        finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
-
-        assert not hung[0], "Bridge call hung forever — no timeout on event.wait()"
 
 
 class TestDeleteBatchProtocol:
