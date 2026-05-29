@@ -84,8 +84,8 @@ class WebsocketLinkServer(WebsocketLinkBase):
         self._port = 8700
         self._auth_token = secrets.token_urlsafe(32)
         self._executor = ThreadPoolExecutor(max_workers=8)
+        self._stop = None
         super().__init__()
-        self._stop = self._send_loop.create_future()
 
     @property
     def auth_token(self):
@@ -134,6 +134,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
 
     def _connect(self):
         async def start_websocket():
+            self._stop = asyncio.get_event_loop().create_future()
             while True:
                 try:
                     async with websockets.serve(
@@ -175,7 +176,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
     def stop(self):
         self._executor.shutdown(wait=False)
         try:
-            if not self._stop.done():
+            if self._stop is not None and not self._stop.done():
                 self._send_loop.call_soon_threadsafe(self._stop.set_result, None)
         except RuntimeError:
             pass  # Event loop already closed
