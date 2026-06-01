@@ -322,6 +322,21 @@ class RenderEngine {
   }
 
   /**
+   * Capture the next rendered frame and return just the raw ArrayBuffer.
+   * Unlike captureNextFrame(), the ArrayBuffer is returned at the top level
+   * (not nested in an object) so it transfers correctly through the bridge.
+   * Width/height/format should be read from the canvas separately.
+   */
+  captureFrameBuffer() {
+    return new Promise((resolve) => {
+      (this._frameCaptureRequests = this._frameCaptureRequests || []).push(
+        ({ data }) => resolve(data)
+      );
+      this.render();
+    });
+  }
+
+  /**
    * Push updated render/compute pass descriptors and rebuild pipelines.
    * Used by the host (Python) when the renderer set or its options change.
    */
