@@ -70,13 +70,19 @@ class InputHandler {
     // Suppress pointer-based rotation/pan while a multi-touch gesture is active
     if (this._activeTouches.size >= 2) return;
 
+    // On high-DPI screens (e.g. macOS Retina) the OS reports pointer movement
+    // in device pixels, which are then divided by devicePixelRatio to produce
+    // CSS-pixel deltas.  Multiply back by DPR so that the same physical finger
+    // movement always produces the same camera rotation/pan, regardless of
+    // the screen's pixel density.
+    const dpr = window.devicePixelRatio || 1;
     const t = this.camera.transform;
     if (this._isRotating) {
-      t.rotate(0.3 * ev.movementY, 0.3 * ev.movementX);
+      t.rotate(0.3 * dpr * ev.movementY, 0.3 * dpr * ev.movementX);
       this.camera._notify();
       this.onRender();
     } else if (this._isPanning) {
-      t.translate(0.01 * ev.movementX, -0.01 * ev.movementY);
+      t.translate(0.01 * dpr * ev.movementX, -0.01 * dpr * ev.movementY);
       this.camera._notify();
       this.onRender();
     }

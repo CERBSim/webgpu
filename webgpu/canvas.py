@@ -284,6 +284,8 @@ class Canvas:
         )
         self.multisample = MultisampleState(count=multisample_count)
 
+        self.dpr = 1.0  # updated in resize(); kept as attribute for camera uniforms
+
         self.update_html_canvas(canvas)
 
     def __del__(self):
@@ -409,6 +411,7 @@ class Canvas:
             canvas.width = width
             canvas.height = height
 
+            self.dpr = dpr
             device = self.device
 
             self.destroy_textures()

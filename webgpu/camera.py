@@ -18,7 +18,7 @@ class CameraUniforms(UniformBase):
         ("aspect", ct.c_float),
         ("width", ct.c_uint32),
         ("height", ct.c_uint32),
-        ("padding", ct.c_uint32),
+        ("dpr", ct.c_float),
     ]
 
     def update(self, transform, canvas):
@@ -81,6 +81,7 @@ class CameraUniforms(UniformBase):
         self.rot_mat[:] = rot_mat4.transpose().flatten()
         self.width = canvas.width
         self.height = canvas.height
+        self.dpr = float(getattr(canvas, 'dpr', 1.0))
         self.update_buffer()
 
         return model_view_proj, model_view

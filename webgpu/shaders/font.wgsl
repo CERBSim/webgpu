@@ -35,11 +35,18 @@ fn fontGetSizeInTexture() -> vec2<f32> {
 }
 
 fn fontGetSizeOnScreen() -> vec3<f32> {
+    // u_camera.dpr is 0.0 in old exported blobs — treat that as 1.0 (no
+    // correction) so existing assets are not broken.
+    let dpr = max(1.0, u_camera.dpr);
+    // u_camera.width/height are device pixels; divide by dpr to get CSS pixels
+    // so that font_size values behave like CSS pixels on every screen density.
+    let css_width  = f32(u_camera.width)  / dpr;
+    let css_height = f32(u_camera.height) / dpr;
     let size = f32(u_font.size * u_font.size_scaling);
-    let h = 2.0 * size / f32(u_camera.height);
-    let size_horizontal = 2.0 * size / f32(u_camera.width);
+    let h = 2.0 * size / css_height;
+    let size_horizontal = 2.0 * size / css_width;
     let w = size_horizontal * u_font.aspect;
-    let shift = 2.0 * u_font.advance * u_font.size / f32(u_camera.width);
+    let shift = 2.0 * u_font.advance * u_font.size / css_width;
     return vec3<f32>(w, h, shift);
 }
 

@@ -229,7 +229,7 @@ class Camera {
    *   aspect  (f32)         [320..323]
    *   width   (u32)         [324..327]
    *   height  (u32)         [328..331]
-   *   padding (u32)         [332..335]
+   *   dpr     (f32)         [332..335]  device-pixel ratio (0 in old blobs)
    */
   updateUniforms(width, height) {
     if (height === 0) return null;
@@ -301,7 +301,7 @@ class Camera {
     f32[80] = aspect;
     u32[81] = width;
     u32[82] = height;
-    u32[83] = 0;
+    f32[83] = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 
     return buf;
   }

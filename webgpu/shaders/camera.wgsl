@@ -7,8 +7,10 @@ struct CameraUniforms {
   aspect: f32,
   width: u32,
   height: u32,
-
-  padding: u32,
+  // Device-pixel ratio of the canvas (e.g. 2.0 on Retina).  Used by the font
+  // shader to convert device-pixel dimensions to CSS-pixel dimensions so that
+  // font sizes are DPI-independent.  Zero in old blobs — treated as 1.0.
+  dpr: f32,
 };
 
 @group(0) @binding(0) var<uniform> u_camera : CameraUniforms;
