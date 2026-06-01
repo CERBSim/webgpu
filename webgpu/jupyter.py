@@ -486,9 +486,7 @@ if not platform.is_pyodide and "Javascript" in dir():
 
         def _webgpu_js(server):
             js = _link_js_code + """
-const __is_vscode = (typeof location !== 'undefined' && location.protocol === 'vscode-webview:');
-const __webgpu_host = __is_vscode ? '127.0.0.1' : ((typeof location !== 'undefined' && location.hostname) || '127.0.0.1');
-WebsocketLink('ws://' + __webgpu_host + ':{port}?token={token}');
+WebsocketLink('ws://127.0.0.1:{port}?token={token}');
 """.format(port=server.port, token=server.auth_token)
             display(Javascript(js))
 

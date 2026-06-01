@@ -1,9 +1,19 @@
 import asyncio
 import json
+import os
 import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlparse
+
+# Browser WebSocket handshakes automatically attach cookies for the target
+# (loopback) host, and the JS WebSocket API exposes no way to omit them. On
+# machines with large cookies for localhost/127.0.0.1 the resulting Cookie
+# header line can exceed websockets' default 8192-byte limit, making the
+# handshake fail with SecurityError("line too long"). Raise the limit before
+# importing websockets (the value is read at import time of websockets.http11).
+# Note: only honored on websockets versions that support this env var.
+os.environ.setdefault("WEBSOCKETS_MAX_LINE_LENGTH", "32768")
 
 import websockets
 from websockets.http11 import Response
