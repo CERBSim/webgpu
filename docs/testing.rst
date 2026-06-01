@@ -175,6 +175,65 @@ attributes and methods:
    output is copied **to** the baseline instead of compared, making it
    easy to regenerate references.
 
+.. method:: assert_min_fps(scene, min_fps=60, *, frames=20, warmup=5, label=None)
+
+   Assert that a scene renders at a minimum frame rate.
+
+   Once a scene is fully initialized, rendering a frame is just submitting
+   GPU commands — there should be no expensive CPU recomputation per frame.
+   This method catches regressions where work accidentally leaks into the
+   per-frame path (e.g. a CoefficientFunction being re-evaluated on every
+   render call, or a pipeline being recreated each frame).
+
+   **How it works:**
+
+   1. Renders *warmup* frames (discarded) to let pipelines compile and
+      caches fill.
+   2. Renders *frames* frames and records each frame time.
+   3. Asserts that the **median** frame time is below ``1 / min_fps``
+      seconds.
+
+   Using the median (not mean) makes the check robust against a single GC
+   pause or OS scheduling hiccup without masking real regressions.
+
+   **Choosing** ``min_fps``:
+
+   +-----------------------------------------+----------------+
+   | Scene type                              | Recommended    |
+   +=========================================+================+
+   | Simple/medium (mesh, CF, vectors, 2D)   | ``60`` (default) |
+   +-----------------------------------------+----------------+
+   | Heavy (3D + clipping, large meshes)     | ``20``         |
+   +-----------------------------------------+----------------+
+
+   **Parameters:**
+
+   :param scene: The scene to render (must already be initialized with a
+       canvas).
+   :param min_fps: Minimum acceptable frames per second (median).
+   :param frames: Number of frames to measure after warmup.
+   :param warmup: Number of frames to discard before measurement.
+   :param label: A descriptive label included in the failure message.
+
+   **Example usage:**
+
+   .. code-block:: python
+
+      def test_my_scene(self, webgpu_env):
+          webgpu_env.ensure_canvas(600, 600)
+          scene = Draw(ngs.x * ngs.y, mesh, width=600, height=600)
+
+          webgpu_env.assert_min_fps(scene, min_fps=60, label="scalar CF")
+          webgpu_env.assert_matches_baseline(scene, "my_scene.png")
+
+   **Failure message example:**
+
+   .. code-block:: text
+
+      Scene [scalar CF] too slow: 0.8 fps (median frame 1250.3ms),
+      minimum required: 60 fps (17ms/frame).
+      Frame times: min=1180.2ms, max=1320.1ms, p90=1290.5ms
+
 
 Quick start for downstream packages
 ------------------------------------

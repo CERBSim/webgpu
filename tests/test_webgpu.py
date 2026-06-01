@@ -104,4 +104,5 @@ class TestRendering:
         renderer = self._make_triangle_renderer()
         scene = webgpu_env.wj.Draw([renderer], width=400, height=400)
 
+        webgpu_env.assert_min_fps(scene, min_fps=60, label="single triangle")
         webgpu_env.assert_matches_baseline(scene, "triangle.png")

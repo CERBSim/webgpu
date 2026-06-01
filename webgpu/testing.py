@@ -282,6 +282,92 @@ class WebGPUTestEnv:
         img.save(str(path))
         return path
 
+    def assert_min_fps(self, scene, min_fps=60, *, frames=20, warmup=5, label=None):
+        """Assert a scene can render at least *min_fps* frames per second.
+
+        This is designed to catch performance regressions (e.g. a
+        CoefficientFunction being re-evaluated every frame, or an O(n²)
+        loop that should be O(n)).
+
+        Strategy
+        --------
+        - Renders *warmup* frames to let JIT/caches/pipelines stabilize.
+        - Then renders *frames* frames and measures the **median** frame time.
+        - Asserts that the median frame time is below ``1/min_fps`` seconds.
+        - Uses median (not mean) so a single GC pause or scheduling hiccup
+          doesn't cause a false failure.
+
+        Choosing ``min_fps``
+        --------------------
+        Once a scene is initialized, rendering a frame is just submitting
+        GPU commands — there is no reason for it to be slow unless something
+        is being recomputed on the CPU each frame.
+
+        - Simple/medium scenes (mesh, CF, vectors): ``min_fps=60`` (default)
+        - Heavy scenes (3D + clipping, high-order, large meshes): ``min_fps=20``
+
+        Parameters
+        ----------
+        scene : Scene
+            The scene to render (must already be initialized with a canvas).
+        min_fps : float
+            Minimum acceptable frames per second (median).
+        frames : int
+            Number of frames to measure (after warmup).
+        warmup : int
+            Number of frames to discard before measurement.
+        label : str, optional
+            A descriptive label for the assertion error message.
+        """
+        import statistics
+        import time
+
+        assert scene is not None, "Scene is None"
+        assert scene.canvas is not None, "Scene has no canvas"
+
+        # Warmup: pipeline creation, shader compilation, buffer uploads
+        for _ in range(warmup):
+            with scene._render_mutex:
+                scene._render_objects(to_canvas=False)
+
+        # Measure individual frame times
+        frame_times = []
+        for _ in range(frames):
+            t0 = time.perf_counter()
+            with scene._render_mutex:
+                scene._render_objects(to_canvas=False)
+            frame_times.append(time.perf_counter() - t0)
+
+        median_time = statistics.median(frame_times)
+        measured_fps = 1.0 / median_time if median_time > 0 else float("inf")
+        max_frame_time = 1.0 / min_fps
+
+        desc = f" [{label}]" if label else ""
+        assert median_time <= max_frame_time, (
+            f"Scene{desc} too slow: {measured_fps:.1f} fps "
+            f"(median frame {median_time*1000:.1f}ms), "
+            f"minimum required: {min_fps} fps ({max_frame_time*1000:.0f}ms/frame). "
+            f"Frame times: min={min(frame_times)*1000:.1f}ms, "
+            f"max={max(frame_times)*1000:.1f}ms, "
+            f"p90={sorted(frame_times)[int(len(frame_times)*0.9)]*1000:.1f}ms"
+        )
+
+
+def assert_min_fps(webgpu_env, scene, min_fps=60, *, frames=20, warmup=5, label=None):
+    """Standalone convenience wrapper around WebGPUTestEnv.assert_min_fps.
+
+    Use this in parametrized tests or when you want a functional call style::
+
+        from webgpu.testing import assert_min_fps
+
+        def test_my_scene(webgpu_env):
+            scene = build_scene()
+            assert_min_fps(webgpu_env, scene, min_fps=60, label="basic triangle")
+
+    See :meth:`WebGPUTestEnv.assert_min_fps` for parameter docs.
+    """
+    webgpu_env.assert_min_fps(scene, min_fps, frames=frames, warmup=warmup, label=label)
+
 
 # ---------------------------------------------------------------------------
 # Pytest fixtures
