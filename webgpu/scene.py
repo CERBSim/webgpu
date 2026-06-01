@@ -251,6 +251,7 @@ class Scene:
             "interactions":   [asdict(i) for i in export.interactions],
             "camera": export.camera,
             "light":  export.light,
+            "theme": export.theme,
         }
 
         js_descriptor = platform.toJS(descriptor)

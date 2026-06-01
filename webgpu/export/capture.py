@@ -57,6 +57,7 @@ def _capture(scene, live: bool):
         interactions=_detect_interactions(scene, registry),
         camera=_export_camera(options.camera, options, registry),
         light=_export_light(options.light, registry, live=live),
+        theme=_export_theme(scene, registry),
     )
     return export, registry
 
@@ -104,6 +105,28 @@ def _capture_renderer(obj, options, registry, render_passes, compute_passes):
                     if attr.n_vertices > 0 and attr.n_instances > 0:
                         render_passes.append(attr.get_export_descriptor(options, registry))
                         compute_passes.extend(attr.get_export_compute_passes(options, registry))
+
+
+def _export_theme(scene, registry) -> dict:
+    """Find any renderer's buffer for theme color updates."""
+    from ..renderer import Renderer
+    for obj in scene.render_objects:
+        buf_id = _find_theme_buffer(obj, registry)
+        if buf_id:
+            return {"buffer_id": buf_id}
+    return {}
+
+
+def _find_theme_buffer(obj, registry) -> str | None:
+    """Recursively check if a renderer provides a theme-sensitive buffer."""
+    if hasattr(obj, 'get_theme_buffer_id'):
+        return obj.get_theme_buffer_id(registry)
+    if hasattr(obj, 'render_objects'):
+        for child in obj.render_objects:
+            buf_id = _find_theme_buffer(child, registry)
+            if buf_id:
+                return buf_id
+    return None
 
 
 def _export_camera(camera, options, registry) -> dict:

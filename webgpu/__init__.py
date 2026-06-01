@@ -1,3 +1,4 @@
+from .background import Background
 from .clipping import Clipping
 from .colormap import Colormap, Colorbar
 from .font import Font

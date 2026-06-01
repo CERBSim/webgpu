@@ -178,6 +178,7 @@ class RenderEngine {
       interactions:   descriptor.interactions   || [],
       camera: descriptor.camera || {},
       light:  descriptor.light  || {},
+      theme: descriptor.theme || {},
     };
 
     this.buffers  = _toMap(descriptor.buffers);
@@ -904,6 +905,14 @@ class RenderEngine {
     this.clearColor = dark ? DARK_CLEAR_COLOR : LIGHT_CLEAR_COLOR;
     if (this.canvas && this.canvas.style) {
       this.canvas.style.backgroundColor = dark ? DARK_CANVAS_BG : LIGHT_CANVAS_BG;
+    }
+    // Update colorbar background color to match theme
+    if (this.scene && this.scene.theme && this.scene.theme.buffer_id) {
+      const buf = this.buffers && this.buffers.get(this.scene.theme.buffer_id);
+      if (buf) {
+        const c = this.clearColor;
+        this.device.queue.writeBuffer(buf, 16, new Float32Array([c.r, c.g, c.b]));
+      }
     }
   }
 

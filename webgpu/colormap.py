@@ -1,7 +1,8 @@
 import numpy as np
 
+from .background import Background
 from .labels import Labels
-from .renderer import BaseRenderer, Renderer, RenderOptions
+from .renderer import BaseRenderer, MultipleRenderer, Renderer, RenderOptions
 from .uniforms import Binding, UniformBase, ct
 from .utils import (
     SamplerBinding,
@@ -253,11 +254,33 @@ class Colormap(BaseRenderer):
         )
 
 
-class Colorbar(Renderer):
+class ColorbarStrip(Renderer):
+    """Renders the colored strip of the colorbar."""
     vertex_entry_point: str = "colormap_vertex"
     fragment_entry_point: str = "colormap_fragment"
     select_entry_point: str = ""
     n_vertices: int = 3
+
+    def __init__(self, get_bindings_fn):
+        super().__init__()
+        self._get_bindings_fn = get_bindings_fn
+
+    def get_shader_code(self):
+        return read_shader_file("colormap.wgsl")
+
+    def get_bindings(self):
+        return self._get_bindings_fn()
+
+    def update(self, options: RenderOptions):
+        pass
+
+    def get_export_descriptor(self, options, buffer_registry):
+        desc = super().get_export_descriptor(options, buffer_registry)
+        desc.pass_type = "transparent"
+        return desc
+
+
+class Colorbar(MultipleRenderer):
 
     def __init__(
         self,
@@ -267,16 +290,20 @@ class Colorbar(Renderer):
         height=0.05,
         number_format=None,
     ):
-        super().__init__()
-        self.gpu_objects.colormap = colormap or Colormap()
+        self.colormap = colormap or Colormap()
         self.number_format = number_format
-        self.gpu_objects.labels = Labels([], [], font_size=14, h_align="center", v_align="top")
         self.uniforms = None
 
         self._position = position
         self._width = width
         self._height = height
-        colormap._callbacks.append(self.set_needs_update)
+
+        self._bg = Background(position=position, width=width, height=height)
+        self._strip = ColorbarStrip(lambda: self._get_all_bindings())
+        self._labels = Labels([], [], font_size=14, h_align="center", v_align="top")
+
+        super().__init__([self._bg, self._strip, self._labels])
+        self.colormap._callbacks.append(self.set_needs_update)
 
     @property
     def position(self):
@@ -287,6 +314,7 @@ class Colorbar(Renderer):
         self._position = value
         if self.uniforms is not None:
             self.uniforms.position = value
+        self._bg.position = value
         self.set_needs_update()
 
     @property
@@ -298,6 +326,7 @@ class Colorbar(Renderer):
         self._width = value
         if self.uniforms is not None:
             self.uniforms.width = value
+        self._bg.width = value
         self.set_needs_update()
 
     @property
@@ -309,14 +338,12 @@ class Colorbar(Renderer):
         self._height = value
         if self.uniforms is not None:
             self.uniforms.height = value
+        self._bg.height = value
         self.set_needs_update()
 
-    def get_shader_code(self):
-        return read_shader_file("colormap.wgsl")
-
-    def get_bindings(self):
+    def _get_all_bindings(self):
         return (
-            self.gpu_objects.colormap.get_bindings() + self.gpu_objects.labels.get_bindings() + self.uniforms.get_bindings()
+            self.colormap.get_bindings() + self._labels.get_bindings() + self.uniforms.get_bindings()
         )
 
     def update(self, options: RenderOptions):
@@ -327,17 +354,18 @@ class Colorbar(Renderer):
             self.uniforms.height = self.height
 
         self.uniforms.update_buffer()
+        self.colormap.update(options)
 
-        self.n_instances = 2 * self.gpu_objects.colormap.n_colors
+        self._strip.n_instances = 2 * self.colormap.n_colors
 
-        self.gpu_objects.labels.labels = [
+        self._labels.labels = [
             format_number(v, self.number_format)
             for v in [
-                self.gpu_objects.colormap.minval + i / 4 * (self.gpu_objects.colormap.maxval - self.gpu_objects.colormap.minval)
+                self.colormap.minval + i / 4 * (self.colormap.maxval - self.colormap.minval)
                 for i in range(6)
             ]
         ]
-        self.gpu_objects.labels.positions = [
+        self._labels.positions = [
             (
                 self.position[0] + i * self.width / 4,
                 self.position[1] - 0.01,
@@ -345,20 +373,14 @@ class Colorbar(Renderer):
             )
             for i in range(5)
         ]
-        self.gpu_objects.labels.set_needs_update()
-
-    def render(self, options: RenderOptions):
-        super().render(options)
-        self.gpu_objects.labels.render(options)
-
-
+        super().update(options)
 
     def set_min(self, minval):
-        self.gpu_objects.colormap.set_min(minval)
+        self.colormap.set_min(minval)
         self.set_needs_update()
 
     def set_max(self, maxval):
-        self.gpu_objects.colormap.set_max(maxval)
+        self.colormap.set_max(maxval)
         self.set_needs_update()
 
 

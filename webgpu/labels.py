@@ -12,6 +12,7 @@ class Labels(Renderer):
     fragment_entry_point: str = "fragmentFont"
     select_entry_point: str = ""
     n_vertices: int = 6
+    transparent: bool = True
 
     """Render a list of strings on screen
     @param labels: list of strings to render

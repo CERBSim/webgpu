@@ -35,6 +35,7 @@ def serialize_scene(scene) -> bytes:
         "interactions": [],
         "camera": scene.camera,
         "light": _serialize_light(scene.light),
+        "theme": scene.theme,
     }
 
     for buf_id, buf in scene.buffers.items():
@@ -219,6 +220,7 @@ def deserialize_scene(blob: bytes):
         interactions=interactions,
         camera=metadata.get("camera", {}),
         light=metadata.get("light", {}),
+        theme=metadata.get("theme", {}),
     )
 
 

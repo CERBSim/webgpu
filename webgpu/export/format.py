@@ -81,6 +81,7 @@ class ExportScene:
     interactions: list = field(default_factory=list)
     camera: dict = field(default_factory=dict)
     light: dict = field(default_factory=dict)
+    theme: dict = field(default_factory=dict)
 
 
 class BufferRegistry:
