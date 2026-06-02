@@ -19,7 +19,7 @@ import websockets
 from websockets.http11 import Response
 from websockets.datastructures import Headers
 
-from .base import LinkBaseAsync
+from .base import LinkBaseAsync, _unpack_message
 
 
 class WebsocketLinkBase(LinkBaseAsync):
@@ -35,7 +35,6 @@ class WebsocketLinkBase(LinkBaseAsync):
         self._event_is_connected = threading.Event()
         self._event_is_running = threading.Event()
         self._start_handling_messages = threading.Event()
-        self._send_loop = asyncio.new_event_loop()
 
         self._websocket_thread = threading.Thread(target=self._connect, daemon=True)
         self._websocket_thread.start()
@@ -65,6 +64,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
         self._port = 8700
         self._auth_token = secrets.token_urlsafe(32)
         self._executor = ThreadPoolExecutor(max_workers=8)
+        self._chunk_buffers = {}
         self._stop = None
         super().__init__()
 
@@ -80,22 +80,50 @@ class WebsocketLinkServer(WebsocketLinkBase):
         """Reject WebSocket connections that don't carry a valid token."""
         params = parse_qs(urlparse(request.path).query)
         tokens = params.get("token", [])
-        if not tokens or tokens[0] != self._auth_token:
+        if not tokens or not secrets.compare_digest(tokens[0], self._auth_token):
             return Response(403, "Forbidden", Headers())
         return None
 
     @staticmethod
-    def _is_response(message):
-        """Quick check if a message is a response (cheap, avoids full deserialization)."""
-        if isinstance(message, (memoryview, bytes)):
-            # Binary message: JSON metadata starts at byte 4
-            try:
+    def _message_type(message):
+        """Return the top-level message type, parsing only the JSON header
+        (not buffer payloads). Returns None on malformed input."""
+        try:
+            if isinstance(message, (memoryview, bytes)):
                 prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
-                header = message[4:prefix_size]
-                return b'"type":"response"' in bytes(header) or b'"type": "response"' in bytes(header)
-            except Exception:
-                return False
-        return '"type":"response"' in message or '"type": "response"' in message
+                header = json.loads(bytes(message[4:prefix_size]).decode("utf-8"))
+            else:
+                header = json.loads(message)
+            return header.get("type") if isinstance(header, dict) else None
+        except Exception:
+            return None
+
+    def _is_response(self, message):
+        return self._message_type(message) == "response"
+
+    def _is_chunk(self, message):
+        return isinstance(message, (memoryview, bytes)) and self._message_type(message) == "chunk"
+
+    def _reassemble_chunk(self, message):
+        data, buffers = _unpack_message(message)
+        pid = data["parent_request_id"]
+        buf = self._chunk_buffers.get(pid)
+        if buf is None:
+            buf = bytearray(data["total_size"])
+            self._chunk_buffers[pid] = buf
+        chunk = buffers[0]
+        offset = data["offset"]
+        buf[offset : offset + len(chunk)] = chunk
+        if data["chunk_id"] + 1 == data["n_chunks"]:
+            del self._chunk_buffers[pid]
+            return bytes(buf)
+        return None
+
+    def _dispatch(self, message):
+        if self._is_response(message):
+            self._on_message(message)
+        else:
+            self._executor.submit(self._on_message, message)
 
     async def _websocket_handler(self, websocket, path=""):
         if self._connection is not None:
@@ -107,13 +135,17 @@ class WebsocketLinkServer(WebsocketLinkBase):
             async for message in websocket:
                 # Handle responses inline to avoid deadlock: if all executor
                 # threads are blocked waiting for JS responses, queued response
-                # messages would never be processed.
-                if self._is_response(message):
-                    self._on_message(message)
+                # messages would never be processed. Chunks are reassembled
+                # inline (single-threaded, ordered) then dispatched.
+                if self._is_chunk(message):
+                    full = self._reassemble_chunk(message)
+                    if full is not None:
+                        self._dispatch(full)
                 else:
-                    self._executor.submit(self._on_message, message)
+                    self._dispatch(message)
         finally:
             self._connection = None
+            self._chunk_buffers.clear()
 
     def _connect(self):
         async def start_websocket():

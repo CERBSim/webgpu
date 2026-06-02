@@ -1,5 +1,7 @@
 /* eslint-disable */
 
+const MAX_MESSAGE_SIZE = 100 * 1024 * 1024;
+
 function serializeEvent(event) {
   try {
     event.preventDefault();
@@ -403,11 +405,40 @@ class CrossLink {
       const prefixLen = 4 + jsonMsg.byteLength;
       const size = 4 + jsonMsg.byteLength + offset;
       var msg = new Uint8Array(size);
-      msg.set(new Uint32Array([jsonMsg.byteLength]), 0);
+      new DataView(msg.buffer).setUint32(0, jsonMsg.byteLength, true);
       msg.set(jsonMsg, 4);
 
       for (var bufferIndex = 0; bufferIndex < buffers.length; bufferIndex++)
         msg.set(buffers[bufferIndex], prefixLen + buffer_offsets[bufferIndex]);
+      this._sendFrame(msg.buffer, request_id);
+    }
+  }
+
+  _sendFrame(frame, parent_request_id) {
+    const total = frame.byteLength;
+    if (total <= MAX_MESSAGE_SIZE) {
+      this.connection.send(frame);
+      return;
+    }
+    const n_chunks = Math.ceil(total / MAX_MESSAGE_SIZE);
+    for (let i = 0; i < n_chunks; i++) {
+      const offset = i * MAX_MESSAGE_SIZE;
+      const chunk = new Uint8Array(frame, offset, Math.min(MAX_MESSAGE_SIZE, total - offset));
+      const meta = {
+        type: 'chunk',
+        parent_request_id,
+        chunk_id: i,
+        n_chunks,
+        offset,
+        size: chunk.byteLength,
+        total_size: total,
+        buffer_offsets: [0, chunk.byteLength],
+      };
+      const json = new TextEncoder().encode(JSON.stringify(meta));
+      const msg = new Uint8Array(4 + json.byteLength + chunk.byteLength);
+      new DataView(msg.buffer).setUint32(0, json.byteLength, true);
+      msg.set(json, 4);
+      msg.set(chunk, 4 + json.byteLength);
       this.connection.send(msg.buffer);
     }
   }

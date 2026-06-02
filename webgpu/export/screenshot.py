@@ -16,6 +16,7 @@ Requires: Xvfb, playwright, chrome
 import sys
 import os
 import base64
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -39,14 +40,16 @@ def main():
     os.environ['DISPLAY'] = f':{disp_num}'
     os.environ.pop('WAYLAND_DISPLAY', None)
 
+    tmpdir = Path(tempfile.mkdtemp(prefix="webgpu_ss_"))
     try:
-        _run_worker()
+        _run_worker(tmpdir)
     finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
         xvfb_proc.terminate()
         xvfb_proc.wait()
 
 
-def _run_worker():
+def _run_worker(tmpdir):
     from playwright.sync_api import sync_playwright
 
     ARGS = [
@@ -69,8 +72,6 @@ def _run_worker():
     engine_js += "\nif (typeof window !== 'undefined') { window.RenderEngine = RenderEngine; }\n"
 
     # Start HTTP server for serving pages to Chrome
-    tmpdir = Path(tempfile.mkdtemp(prefix="webgpu_ss_"))
-
     class Quiet(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=str(tmpdir), **kw)
