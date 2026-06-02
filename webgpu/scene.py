@@ -584,8 +584,9 @@ class Scene:
 
     def _on_resize(self):
         """Called on canvas resize. Update camera uniforms (aspect ratio) and re-render."""
-        self._select_buffer_valid = False
-        self.options.update_buffers()
+        with self._render_mutex:
+            self._select_buffer_valid = False
+            self.options.update_buffers()
         if self._js_engine is not None:
             try:
                 self._js_engine.handleResize()
