@@ -81,7 +81,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
         """Reject WebSocket connections that don't carry a valid token."""
         params = parse_qs(urlparse(request.path).query)
         tokens = params.get("token", [])
-        if not tokens or tokens[0] != self._auth_token:
+        if not tokens or not secrets.compare_digest(tokens[0], self._auth_token):
             return Response(403, "Forbidden", Headers())
         return None
 
