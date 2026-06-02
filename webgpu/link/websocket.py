@@ -86,28 +86,24 @@ class WebsocketLinkServer(WebsocketLinkBase):
         return None
 
     @staticmethod
-    def _is_response(message):
-        """Quick check if a message is a response (cheap, avoids full deserialization)."""
-        if isinstance(message, (memoryview, bytes)):
-            # Binary message: JSON metadata starts at byte 4
-            try:
-                prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
-                header = message[4:prefix_size]
-                return b'"type":"response"' in bytes(header) or b'"type": "response"' in bytes(header)
-            except Exception:
-                return False
-        return '"type":"response"' in message or '"type": "response"' in message
-
-    @staticmethod
-    def _is_chunk(message):
-        if not isinstance(message, (memoryview, bytes)):
-            return False
+    def _message_type(message):
+        """Return the top-level message type, parsing only the JSON header
+        (not buffer payloads). Returns None on malformed input."""
         try:
-            prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
-            header = bytes(message[4:prefix_size])
-            return b'"type":"chunk"' in header or b'"type": "chunk"' in header
+            if isinstance(message, (memoryview, bytes)):
+                prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
+                header = json.loads(bytes(message[4:prefix_size]).decode("utf-8"))
+            else:
+                header = json.loads(message)
+            return header.get("type") if isinstance(header, dict) else None
         except Exception:
-            return False
+            return None
+
+    def _is_response(self, message):
+        return self._message_type(message) == "response"
+
+    def _is_chunk(self, message):
+        return isinstance(message, (memoryview, bytes)) and self._message_type(message) == "chunk"
 
     def _reassemble_chunk(self, message):
         data, buffers = _unpack_message(message)
