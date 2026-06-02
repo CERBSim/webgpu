@@ -403,7 +403,7 @@ class CrossLink {
       const prefixLen = 4 + jsonMsg.byteLength;
       const size = 4 + jsonMsg.byteLength + offset;
       var msg = new Uint8Array(size);
-      msg.set(new Uint32Array([jsonMsg.byteLength]), 0);
+      new DataView(msg.buffer).setUint32(0, jsonMsg.byteLength, true);
       msg.set(jsonMsg, 4);
 
       for (var bufferIndex = 0; bufferIndex < buffers.length; bufferIndex++)
