@@ -19,7 +19,7 @@ import websockets
 from websockets.http11 import Response
 from websockets.datastructures import Headers
 
-from .base import LinkBaseAsync
+from .base import LinkBaseAsync, _unpack_message
 
 
 class WebsocketLinkBase(LinkBaseAsync):
@@ -65,6 +65,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
         self._port = 8700
         self._auth_token = secrets.token_urlsafe(32)
         self._executor = ThreadPoolExecutor(max_workers=8)
+        self._chunk_buffers = {}
         self._stop = None
         super().__init__()
 
@@ -97,6 +98,38 @@ class WebsocketLinkServer(WebsocketLinkBase):
                 return False
         return '"type":"response"' in message or '"type": "response"' in message
 
+    @staticmethod
+    def _is_chunk(message):
+        if not isinstance(message, (memoryview, bytes)):
+            return False
+        try:
+            prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
+            header = bytes(message[4:prefix_size])
+            return b'"type":"chunk"' in header or b'"type": "chunk"' in header
+        except Exception:
+            return False
+
+    def _reassemble_chunk(self, message):
+        data, buffers = _unpack_message(message)
+        pid = data["parent_request_id"]
+        buf = self._chunk_buffers.get(pid)
+        if buf is None:
+            buf = bytearray(data["total_size"])
+            self._chunk_buffers[pid] = buf
+        chunk = buffers[0]
+        offset = data["offset"]
+        buf[offset : offset + len(chunk)] = chunk
+        if data["chunk_id"] + 1 == data["n_chunks"]:
+            del self._chunk_buffers[pid]
+            return bytes(buf)
+        return None
+
+    def _dispatch(self, message):
+        if self._is_response(message):
+            self._on_message(message)
+        else:
+            self._executor.submit(self._on_message, message)
+
     async def _websocket_handler(self, websocket, path=""):
         if self._connection is not None:
             await websocket.close(4000, "Another session is already active")
@@ -107,13 +140,17 @@ class WebsocketLinkServer(WebsocketLinkBase):
             async for message in websocket:
                 # Handle responses inline to avoid deadlock: if all executor
                 # threads are blocked waiting for JS responses, queued response
-                # messages would never be processed.
-                if self._is_response(message):
-                    self._on_message(message)
+                # messages would never be processed. Chunks are reassembled
+                # inline (single-threaded, ordered) then dispatched.
+                if self._is_chunk(message):
+                    full = self._reassemble_chunk(message)
+                    if full is not None:
+                        self._dispatch(full)
                 else:
-                    self._executor.submit(self._on_message, message)
+                    self._dispatch(message)
         finally:
             self._connection = None
+            self._chunk_buffers.clear()
 
     def _connect(self):
         async def start_websocket():
