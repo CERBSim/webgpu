@@ -682,7 +682,6 @@ class LinkBaseAsync(LinkBase):
                     print("error in callback", type(e), str(e))
 
         try:
-            self._callback_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._callback_loop)
             self._callback_task = self._callback_loop.create_task(handle_callbacks())
             try:
