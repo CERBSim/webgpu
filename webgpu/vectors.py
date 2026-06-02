@@ -63,7 +63,13 @@ class VectorRenderer(BaseVectorRenderer):
         )
         self.size = size or 1 / 10 * np.linalg.norm(self.bounding_box[1] - self.bounding_box[0])
 
+    def create_vector_data(self):
+        pass
+
     def update(self, options):
+        if not self.needs_update:
+            return
+        self.create_vector_data()
         self._buffers = {
             "points": buffer_from_array(self.points),
             "vectors": buffer_from_array(self.vectors),
