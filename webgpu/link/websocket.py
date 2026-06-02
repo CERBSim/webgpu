@@ -35,7 +35,6 @@ class WebsocketLinkBase(LinkBaseAsync):
         self._event_is_connected = threading.Event()
         self._event_is_running = threading.Event()
         self._start_handling_messages = threading.Event()
-        self._send_loop = asyncio.new_event_loop()
 
         self._websocket_thread = threading.Thread(target=self._connect, daemon=True)
         self._websocket_thread.start()
