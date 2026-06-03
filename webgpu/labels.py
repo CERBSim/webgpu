@@ -53,9 +53,20 @@ class Labels(Renderer):
         self.buffer = None
         self._overlay_buf = None
         self.font = None
+        self._text_color = None  # (r,g,b) for the default (non-per-label) path
 
         if colors is not None:
             self.fragment_entry_point = "fragmentFontColor"
+
+    @property
+    def text_color(self):
+        return self._text_color
+
+    @text_color.setter
+    def text_color(self, value):
+        self._text_color = None if value is None else tuple(value[:3])
+        if self.font is not None and self._text_color is not None:
+            self.font.set_color(self._text_color)
 
     def update(self, options: RenderOptions):
         n_chars = sum(len(label) for label in self.labels)
@@ -93,6 +104,8 @@ class Labels(Renderer):
             self.font = Font(options.canvas, self.font_size)
         else:
             self.font.set_font_size(self.font_size)
+        if self._text_color is not None:
+            self.font.set_color(self._text_color)
 
         char_map = self.font.atlas.char_map
 

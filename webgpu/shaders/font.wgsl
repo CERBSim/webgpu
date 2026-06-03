@@ -10,6 +10,9 @@ struct FontUniforms {
   size_scaling: f32,
   advance: f32,
   font_size: f32,
+  color_r: f32,
+  color_g: f32,
+  color_b: f32,
 };
 
 @group(0) @binding(2) var<uniform> u_font : FontUniforms;
@@ -82,7 +85,8 @@ fn fragmentFont(@location(0) tex_coord: vec2<f32>) -> @location(0) vec4<f32> {
       discard;
     }
 
-    return vec4(0., 0., 0., alpha);
+    let color = vec3f(u_font.color_r, u_font.color_g, u_font.color_b);
+    return vec4(color * alpha, alpha);
 }
 
 fn fontCalc(char: u32, position: vec4<f32>, vertexId: u32) -> FontFragmentInput {

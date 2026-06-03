@@ -31,7 +31,7 @@ class FontUniforms(UniformBase):
         ("size_scaling", ct.c_float),
         ("advance", ct.c_float),
         ("font_size", ct.c_float),
-        ("padding", ct.c_float * 3),
+        ("color", ct.c_float * 3),
     ]
 
 
@@ -201,6 +201,11 @@ class Font:
             return
         self.uniforms.size = font_size
         self._update()
+
+    def set_color(self, color):
+        """Set the text color as an (r, g, b) tuple in [0, 1]."""
+        self.uniforms.color = tuple(color[:3])
+        self.uniforms.update_buffer()
 
     def update(self):
         self.uniforms.update_buffer()

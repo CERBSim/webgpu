@@ -58,7 +58,20 @@ class Background(Renderer):
         self._position = position
         self._width = width
         self._height = height
+        self._bg_color = (1.0, 1.0, 1.0)
         self.uniforms = None
+
+    @property
+    def bg_color(self):
+        return self._bg_color
+
+    @bg_color.setter
+    def bg_color(self, value):
+        self._bg_color = tuple(value[:3])
+        if self.uniforms is not None:
+            self.uniforms.bg_color = self._bg_color
+            self.uniforms.update_buffer()
+        self.set_needs_update()
 
     @property
     def position(self):
@@ -108,7 +121,7 @@ class Background(Renderer):
             self.uniforms.position = self.position
             self.uniforms.width = self.width
             self.uniforms.height = self.height
-            self.uniforms.bg_color = (1.0, 1.0, 1.0)
+            self.uniforms.bg_color = self._bg_color
         self.uniforms.update_buffer()
 
     def create_render_pipeline(self, options: RenderOptions) -> None:

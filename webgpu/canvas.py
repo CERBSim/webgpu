@@ -10,15 +10,14 @@ from functools import wraps
 
 _TARGET_FPS = 60
 
+_default_clear_color = None
 
-# @dataclass
-# class _DebounceData:
-#     t_last_frame: float = 0
-#     t_last_call: float = 0
-#     timer: threading.Timer | None = None
-#     lock: Lock = None
-#     running: bool = False
-#     pending: bool = False
+
+def set_default_clear_color(color):
+    """Set the clear color used by Canvas instances created afterwards."""
+    global _default_clear_color
+    _default_clear_color = color
+
 
 class _InstanceDebounce:
     """Descriptor that creates per-instance debounced methods.
@@ -291,8 +290,9 @@ class Canvas:
 
         self.dpr = 1.0  # updated in resize(); kept as attribute for camera uniforms
 
-        # Background clear color of the scene (opaque white by default).
-        self.clear_color = Color(1, 1, 1, 1)
+        self.clear_color = (
+            Color(1, 1, 1, 1) if _default_clear_color is None else _default_clear_color
+        )
 
         self.update_html_canvas(canvas)
 
