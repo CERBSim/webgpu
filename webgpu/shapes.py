@@ -486,17 +486,16 @@ class ShapeRenderer(Renderer):
         return read_shader_file("shapes.wgsl")
 
     def render(self, options: RenderOptions) -> None:
-        render_pass = options.begin_render_pass()
-        render_pass.setPipeline(self.pipeline)
-        render_pass.setBindGroup(0, self.group)
-        for i, vertex_buffer in enumerate(self.vertex_buffers):
-            render_pass.setVertexBuffer(i, vertex_buffer)
-        render_pass.setIndexBuffer(self.triangle_buffer, IndexFormat.uint32)
-        render_pass.drawIndexed(
-            self.n_vertices,
-            self.n_instances,
-        )
-        render_pass.end()
+        with options.render_pass_scope() as render_pass:
+            render_pass.setPipeline(self.pipeline)
+            render_pass.setBindGroup(0, self.group)
+            for i, vertex_buffer in enumerate(self.vertex_buffers):
+                render_pass.setVertexBuffer(i, vertex_buffer)
+            render_pass.setIndexBuffer(self.triangle_buffer, IndexFormat.uint32)
+            render_pass.drawIndexed(
+                self.n_vertices,
+                self.n_instances,
+            )
 
     def select(self, options: RenderOptions, x, y) -> None:
         render_pass = options.begin_select_pass(x, y)
