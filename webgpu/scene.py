@@ -310,6 +310,8 @@ class Scene:
 
     def get_position(self, x: int, y: int):
         """Return the 3D position under canvas pixel (x, y) using the selection buffer."""
+        if self.canvas is None or self.canvas.height == 0:
+            return None
         objects = self.render_objects
 
         with self._render_mutex:
@@ -352,7 +354,7 @@ class Scene:
         """Perform an object selection at (x, y) and dispatch callbacks on matching renderers."""
         if self._render_mutex is None:
             return
-        if self.canvas is None:
+        if self.canvas is None or self.canvas.height == 0:
             return
         objects = self.render_objects
 
@@ -409,7 +411,7 @@ class Scene:
     # @print_communications
     def _render_objects(self, to_canvas=True, update_pipelines=True):
         """Update pipelines and render all active objects, optionally copying to the canvas."""
-        if self.canvas is None:
+        if self.canvas is None or self.canvas.height == 0:
             return
         options = self.options
 

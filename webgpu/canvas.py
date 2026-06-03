@@ -235,11 +235,16 @@ class Canvas:
     device: Device
     depth_format: TextureFormat
     depth_texture: Texture = None
+    depth_texture_view = None
     multisample_texture: Texture = None
+    multisample_texture_view = None
     multisample: MultisampleState = None
     target_texture: Texture = None
+    target_texture_view = None
     select_depth_texture: Texture = None
+    select_depth_texture_view = None
     select_texture: Texture = None
+    select_texture_view = None
 
     width: int = 0
     height: int = 0
@@ -389,6 +394,11 @@ class Canvas:
             ]:
                 if tex is not None:
                     tex.destroy()
+            self.target_texture_view = None
+            self.multisample_texture_view = None
+            self.depth_texture_view = None
+            self.select_texture_view = None
+            self.select_depth_texture_view = None
 
     @debounce(5)
     def resize(self):
@@ -434,6 +444,9 @@ class Canvas:
                     usage=TextureUsage.RENDER_ATTACHMENT,
                     label="multisample",
                 )
+                self.multisample_texture_view = self.multisample_texture.createView()
+            else:
+                self.multisample_texture_view = None
 
             self.depth_texture = device.createTexture(
                 size=[width, height, 1],
@@ -442,6 +455,7 @@ class Canvas:
                 label="depth_texture",
                 sampleCount=self.multisample.count,
             )
+            self.depth_texture_view = self.depth_texture.createView()
 
             self.target_texture_view = self.target_texture.createView()
 
@@ -458,6 +472,7 @@ class Canvas:
                 label="select_depth",
             )
             self.select_texture_view = self.select_texture.createView()
+            self.select_depth_texture_view = self.select_depth_texture.createView()
 
             self.width = width
             self.height = height
@@ -470,7 +485,7 @@ class Canvas:
         return [
             RenderPassColorAttachment(
                 view=(
-                    self.multisample_texture.createView()
+                    self.multisample_texture_view
                     if have_multisample
                     else self.target_texture_view
                 ),
@@ -491,14 +506,14 @@ class Canvas:
 
     def select_depth_stencil_attachment(self, loadOp: LoadOp):
         return RenderPassDepthStencilAttachment(
-            self.select_depth_texture.createView(),
+            self.select_depth_texture_view,
             depthClearValue=1.0,
             depthLoadOp=loadOp,
         )
 
     def depth_stencil_attachment(self, loadOp: LoadOp):
         return RenderPassDepthStencilAttachment(
-            self.depth_texture.createView(),
+            self.depth_texture_view,
             depthClearValue=1.0,
             depthLoadOp=loadOp,
         )
