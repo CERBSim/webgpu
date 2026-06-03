@@ -425,12 +425,18 @@ class Scene:
                         print("warning: object still needs update after update was done:", obj)
 
         options.command_encoder = self.device.createCommandEncoder()
-        for obj in self.render_objects:
-            if obj.active:
-                obj.render_opaque(options)
-        for obj in self.render_objects:
-            if obj.active:
-                obj.render_transparent(options)
+        render_pass = options.begin_render_pass()
+        options.render_pass = render_pass
+        try:
+            for obj in self.render_objects:
+                if obj.active:
+                    obj.render_opaque(options)
+            for obj in self.render_objects:
+                if obj.active:
+                    obj.render_transparent(options)
+        finally:
+            render_pass.end()
+            options.render_pass = None
 
         if to_canvas:
                 target_texture = self.canvas.target_texture

@@ -1,3 +1,4 @@
+import contextlib
 import itertools
 from typing import Callable
 
@@ -73,12 +74,14 @@ class RenderOptions:
     command_encoder: CommandEncoder
     timestamp: float
     model_view_proj: object  # numpy array, updated by update_buffers
+    render_pass: object = None
 
     def __init__(self, camera: Camera, light: Light):
         self.light = light
         self.camera = camera
         self._camera_uniforms = None
         self.model_view_proj = None
+        self.render_pass = None
         self._extra_binding_providers = []
 
     def __getstate__(self):
@@ -89,6 +92,7 @@ class RenderOptions:
         self.light = state["light"]
         self._camera_uniforms = None
         self.model_view_proj = None
+        self.render_pass = None
         self._extra_binding_providers = []
 
     def add_bindings(self, provider):
@@ -137,6 +141,25 @@ class RenderOptions:
         # render_pass_encoder.setScissorRect(100, 100, 88, 99)
 
         return render_pass_encoder
+
+    @contextlib.contextmanager
+    def render_pass_scope(self):
+        """Yield the render pass a renderer should record into.
+
+        When the Scene has opened a shared frame pass (``self.render_pass`` is
+        set), reuse it and do NOT end it here — the Scene ends it once, after
+        all objects have been recorded, so the MSAA target is resolved a single
+        time per frame. When no shared pass is active (e.g. a renderer rendered
+        in isolation), open and close a private pass for backwards behaviour.
+        """
+        if self.render_pass is not None:
+            yield self.render_pass
+        else:
+            render_pass = self.begin_render_pass()
+            try:
+                yield render_pass
+            finally:
+                render_pass.end()
 
     def begin_select_pass(self, x, y, **kwargs):
         load_op = self.command_encoder.getLoadOp()
@@ -500,13 +523,12 @@ class Renderer(BaseRenderer):
         self._last_transparent = self.transparent
 
     def render(self, options: RenderOptions) -> None:
-        render_pass = options.begin_render_pass()
-        render_pass.setPipeline(self.pipeline)
-        render_pass.setBindGroup(0, self.group)
-        for i, vertex_buffer in enumerate(self.vertex_buffers):
-            render_pass.setVertexBuffer(i, vertex_buffer)
-        render_pass.draw(self.n_vertices, self.n_instances)
-        render_pass.end()
+        with options.render_pass_scope() as render_pass:
+            render_pass.setPipeline(self.pipeline)
+            render_pass.setBindGroup(0, self.group)
+            for i, vertex_buffer in enumerate(self.vertex_buffers):
+                render_pass.setVertexBuffer(i, vertex_buffer)
+            render_pass.draw(self.n_vertices, self.n_instances)
 
     def render_opaque(self, options: RenderOptions) -> None:
         self.render(options)
