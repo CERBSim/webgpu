@@ -286,6 +286,9 @@ class Canvas:
 
         self.dpr = 1.0  # updated in resize(); kept as attribute for camera uniforms
 
+        # Background clear color of the scene (opaque white by default).
+        self.clear_color = Color(1, 1, 1, 1)
+
         self.update_html_canvas(canvas)
 
     def __del__(self):
@@ -472,7 +475,7 @@ class Canvas:
                     else self.target_texture_view
                 ),
                 resolveTarget=self.target_texture_view if have_multisample else None,
-                clearValue=Color(1, 1, 1, 1),
+                clearValue=self.clear_color,
                 loadOp=loadOp,
             ),
         ]
