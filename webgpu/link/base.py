@@ -506,6 +506,7 @@ class LinkBaseAsync(LinkBase):
         self._callback_loop = asyncio.new_event_loop()
         self._callback_queue = asyncio.Queue()
         self._callback_task = None
+        self._flush_scheduled = False
         self._callback_thread = threading.Thread(target=self._start_callback_thread, daemon=True)
         self._callback_thread.start()
 
@@ -542,33 +543,61 @@ class LinkBaseAsync(LinkBase):
 
         coro = self._send_async(data)
         try:
-            asyncio.run_coroutine_threadsafe(coro, self._send_loop)
+            fut = asyncio.run_coroutine_threadsafe(coro, self._send_loop)
         except RuntimeError:
             coro.close()
             # Event loop is closed — connection is dead, clean up and bail.
             if event:
                 self._requests.pop(request_id, None)
             return None
+
         if event:
+            def _on_send_done(f, request_id=request_id):
+                try:
+                    exc = f.exception()
+                except Exception:  # cancelled or loop-closed — let the wait time out
+                    return
+                if exc is None:
+                    return
+                pending = self._requests.get(request_id)
+                if isinstance(pending, tuple):
+                    self._requests[request_id] = exc
+                    pending[0].set()
+
+            fut.add_done_callback(_on_send_done)
+
             if not event.wait(timeout=120):
                 self._requests.pop(request_id, None)
                 raise TimeoutError(f"Request {request_id} timed out after 120s")
-            return self._requests.pop(request_id)
+            result = self._requests.pop(request_id)
+            if isinstance(result, BaseException):
+                raise result
+            return result
 
     async def _send_async(self, message):
         raise NotImplementedError
 
     def _schedule_flush(self):
         """Schedule a fire-and-forget flush of the release queue via the send loop.
-        Uses a 50ms debounce to let concurrent threads finish their operations."""
+        Uses a 50ms debounce to let concurrent threads finish their operations.
+
+        At most one debounced flush is in flight at a time: further proxy
+        __del__s in the same window are absorbed by the already-queued flush
+        (the release queue is drained wholesale), so we never schedule a burst
+        of overlapping send coroutines on the send loop."""
+        if self._flush_scheduled:
+            return
+        self._flush_scheduled = True
         coro = self._debounced_flush()
         try:
             asyncio.run_coroutine_threadsafe(coro, self._send_loop)
         except RuntimeError:
+            self._flush_scheduled = False
             coro.close()
 
     async def _debounced_flush(self):
         await asyncio.sleep(0.05)  # 50ms coalescing window
+        self._flush_scheduled = False
         await self._async_flush()
 
     async def _async_flush(self):

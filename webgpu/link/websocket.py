@@ -35,6 +35,7 @@ class WebsocketLinkBase(LinkBaseAsync):
         self._event_is_connected = threading.Event()
         self._event_is_running = threading.Event()
         self._start_handling_messages = threading.Event()
+        self._send_lock = asyncio.Lock()
 
         self._websocket_thread = threading.Thread(target=self._connect, daemon=True)
         self._websocket_thread.start()
@@ -46,10 +47,10 @@ class WebsocketLinkBase(LinkBaseAsync):
         self._event_is_connected.wait()
 
     async def _send_async(self, message):
-        if self._connection:
-            await self._connection.send(message)
-        else:
+        if not self._connection:
             raise Exception("Websocket not connected")
+        async with self._send_lock:
+            await self._connection.send(message)
 
     def _connect(self):
         raise NotImplementedError
