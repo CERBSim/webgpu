@@ -276,7 +276,6 @@ class Scene:
             script = doc.createElement("script")
             script.textContent = engine_js
             doc.head.appendChild(script)
-            print("webgpu: injected JS RenderEngine (live rendering enabled)")
         except Exception as e:
             print(f"warning: could not inject engine_js: {e}")
             return False
