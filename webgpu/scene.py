@@ -1,6 +1,7 @@
 import time
 import os
 import pathlib
+import threading
 from base64 import b64decode
 
 from . import platform
@@ -71,6 +72,9 @@ class Scene:
         self._js_engine = None
         self._on_event_proxy = None
         self._on_camera_changed_proxy = None
+        self._select_lock = threading.Lock()
+        self._pending_select = None
+        self._select_running = False
         self._use_js_engine = (
             _default_use_js_engine if use_js_engine is None else bool(use_js_engine)
         )
@@ -101,6 +105,9 @@ class Scene:
         self._js_engine = None
         self._on_event_proxy = None
         self._on_camera_changed_proxy = None
+        self._select_lock = threading.Lock()
+        self._pending_select = None
+        self._select_running = False
         self._use_js_engine = state.get("use_js_engine", _default_use_js_engine)
         self._show_gui_controls = state.get("show_gui_controls", True)
 
@@ -434,8 +441,43 @@ class Scene:
                 return p
             return None
 
-    @debounce
     def select(self, x: int, y: int):
+        """Queue an object selection at (x, y).
+
+        A single worker processes only the most recent request, so a backlog
+        (e.g. hover moves piled up while Python was busy) collapses to the last
+        position instead of replaying every queued move. Never runs two selects
+        concurrently.
+        """
+        if self._render_mutex is None:
+            return
+        if self.canvas is None or self.canvas.height == 0:
+            return
+        # Pyodide: JS is only reachable from this thread — run synchronously.
+        if is_pyodide:
+            self._do_select(int(x), int(y))
+            return
+        with self._select_lock:
+            self._pending_select = (int(x), int(y))
+            if self._select_running:
+                return
+            self._select_running = True
+        threading.Thread(target=self._select_worker, daemon=True).start()
+
+    def _select_worker(self):
+        while True:
+            with self._select_lock:
+                pending = self._pending_select
+                self._pending_select = None
+                if pending is None:
+                    self._select_running = False
+                    return
+            try:
+                self._do_select(*pending)
+            except Exception as e:
+                print(f"warning: select failed: {e}")
+
+    def _do_select(self, x: int, y: int):
         """Perform an object selection at (x, y) and dispatch callbacks on matching renderers."""
         if self._render_mutex is None:
             return
