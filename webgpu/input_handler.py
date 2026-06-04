@@ -29,6 +29,10 @@ class InputHandler:
         self._callbacks = {}
         self._js_handlers = {}
         self._is_mousedown = False
+        self._is_moving = False
+        # When True, the JS engine owns the DOM listeners and forwards events
+        # via handle_engine_event(); we attach no DOM handlers ourselves.
+        self._engine_mode = False
 
         self.html_canvas = None
 
@@ -49,6 +53,27 @@ class InputHandler:
         self.html_canvas = html_canvas
         if self.html_canvas:
             self.register_callbacks()
+
+    def set_engine_mode(self, enabled: bool):
+        """Switch between JS-engine-owned input and the legacy DOM-handler path."""
+        self._engine_mode = enabled
+        if enabled:
+            self.unregister_callbacks()
+        elif self.html_canvas is not None:
+            self.register_callbacks()
+
+    def handle_engine_event(self, event):
+        """Dispatch an event forwarded from the JS engine to Python callbacks."""
+        try:
+            import pyodide.ffi
+
+            if isinstance(event, pyodide.ffi.JsProxy):
+                event = event.to_py()
+        except ImportError:
+            pass
+        etype = event.get("type")
+        if etype is not None:
+            self.emit(etype, event)
 
     def __on_mousedown(self, ev):
         self._is_mousedown = True
@@ -143,6 +168,8 @@ class InputHandler:
 
     def _handle_js_event(self, event_type):
         def wrapper(event):
+            if self._engine_mode:
+                return
             try:
                 import pyodide.ffi
 
@@ -399,6 +426,9 @@ class InputHandler:
         return ((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
 
     def register_callbacks(self):
+        if self._engine_mode:
+            return
+
         from .platform import create_event_handler
 
         # Prevent default touch actions (scrolling/zooming) on the canvas

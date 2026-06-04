@@ -14,6 +14,16 @@ class InputHandler {
     this.onRender = onRender;
     this.getPositionFn = getPositionFn;
 
+    // Live mode: sink for classified non-camera events forwarded to the host.
+    this._eventSink = null;
+    this.onGestureEnd = null;
+    this.rotateSensitivity = 0.5;
+
+    this._downButton = 0;
+    this._downX = 0;
+    this._downY = 0;
+    this._moved = false;
+
     this._isRotating = false;
     this._isPanning = false;
 
@@ -30,6 +40,7 @@ class InputHandler {
     this._onPointerDown = this._onPointerDown.bind(this);
     this._onPointerUp = this._onPointerUp.bind(this);
     this._onPointerMove = this._onPointerMove.bind(this);
+    this._onPointerLeave = this._onPointerLeave.bind(this);
     this._onWheel = this._onWheel.bind(this);
     this._onDblClick = this._onDblClick.bind(this);
     this._onContextMenu = (ev) => ev.preventDefault();
@@ -40,6 +51,7 @@ class InputHandler {
     canvas.addEventListener('pointerdown', this._onPointerDown);
     canvas.addEventListener('pointerup', this._onPointerUp);
     canvas.addEventListener('pointermove', this._onPointerMove);
+    canvas.addEventListener('pointerleave', this._onPointerLeave);
     canvas.addEventListener('wheel', this._onWheel, { passive: false });
     canvas.addEventListener('dblclick', this._onDblClick);
     canvas.addEventListener('contextmenu', this._onContextMenu);
@@ -49,21 +61,66 @@ class InputHandler {
     canvas.addEventListener('touchcancel', this._onTouchEnd);
   }
 
+  setEventSink(fn) {
+    this._eventSink = fn;
+  }
+
+  _forward(type, ev) {
+    if (!this._eventSink) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const payload = {
+      type,
+      button: ev.button == null ? 0 : ev.button,
+      buttons: ev.buttons == null ? 0 : ev.buttons,
+      x: ev.clientX,
+      y: ev.clientY,
+      canvasX: Math.round((ev.clientX - rect.left) * dpr),
+      canvasY: Math.round((ev.clientY - rect.top) * dpr),
+      movementX: ev.movementX || 0,
+      movementY: ev.movementY || 0,
+      deltaX: ev.deltaX || 0,
+      deltaY: ev.deltaY || 0,
+      ctrlKey: !!ev.ctrlKey,
+      shiftKey: !!ev.shiftKey,
+      altKey: !!ev.altKey,
+    };
+    try {
+      this._eventSink(payload);
+    } catch (e) {
+      console.warn('[input] event sink failed:', e && (e.message || e));
+    }
+  }
+
   // --- Pointer events (mouse & single touch fallback) ---
 
   _onPointerDown(ev) {
     ev.preventDefault();
-    if (ev.button === 0 && !ev.shiftKey && !ev.ctrlKey && !ev.altKey) {
+    this._downButton = ev.button;
+    this._downX = ev.clientX;
+    this._downY = ev.clientY;
+    this._moved = false;
+    // ctrl/alt are reserved for the host and never start a camera gesture.
+    const hostModified = ev.ctrlKey || ev.altKey;
+    if (!hostModified && ev.button === 0 && !ev.shiftKey) {
       this._isRotating = true;
-    } else if (ev.button === 1 || (ev.button === 0 && ev.shiftKey)) {
+    } else if (!hostModified && (ev.button === 1 || (ev.button === 0 && ev.shiftKey))) {
       this._isPanning = true;
     }
     this.canvas.setPointerCapture(ev.pointerId);
   }
 
   _onPointerUp(ev) {
+    const wasGesture = this._isRotating || this._isPanning;
     this._isRotating = false;
     this._isPanning = false;
+    // A press with no movement is a click; camera gestures set _moved.
+    if (this._eventSink && !this._moved && ev.button === this._downButton) {
+      this._forward('click', ev);
+    }
+    if (wasGesture && this._moved && this.onGestureEnd) {
+      try { this.onGestureEnd(); } catch (e) { /* ignore */ }
+    }
   }
 
   _onPointerMove(ev) {
@@ -78,18 +135,40 @@ class InputHandler {
     const dpr = window.devicePixelRatio || 1;
     const t = this.camera.transform;
     if (this._isRotating) {
-      t.rotate(0.3 * dpr * ev.movementY, 0.3 * dpr * ev.movementX);
+      this._moved = true;
+      const s = this.rotateSensitivity * dpr;
+      t.rotate(s * ev.movementY, s * ev.movementX);
       this.camera._notify();
       this.onRender();
-    } else if (this._isPanning) {
+      return;
+    }
+    if (this._isPanning) {
+      this._moved = true;
       t.translate(0.01 * dpr * ev.movementX, -0.01 * dpr * ev.movementY);
       this.camera._notify();
       this.onRender();
+      return;
     }
+    // Not a camera gesture — forward to the host (hover, or a modified drag).
+    if (!this._eventSink) return;
+    if (ev.buttons !== 0) {
+      this._moved = true;
+      this._forward('drag', ev);
+    } else {
+      this._forward('mousemove', ev);
+    }
+  }
+
+  _onPointerLeave(ev) {
+    if (this._eventSink) this._forward('mouseout', ev);
   }
 
   _onWheel(ev) {
     ev.preventDefault();
+    if (this._eventSink && (ev.ctrlKey || ev.altKey)) {
+      this._forward('wheel', ev);
+      return;
+    }
     const t = this.camera.transform;
     t.scale(1 - ev.deltaY / 1000, t._center);
     this.camera._notify();
@@ -97,6 +176,7 @@ class InputHandler {
   }
 
   _onDblClick(ev) {
+    if (this._eventSink) this._forward('dblclick', ev);
     if (!this.getPositionFn) return;
     const rect = this.canvas.getBoundingClientRect();
     const x = ev.clientX - rect.left;
@@ -219,6 +299,7 @@ class InputHandler {
     c.removeEventListener('pointerdown', this._onPointerDown);
     c.removeEventListener('pointerup', this._onPointerUp);
     c.removeEventListener('pointermove', this._onPointerMove);
+    c.removeEventListener('pointerleave', this._onPointerLeave);
     c.removeEventListener('wheel', this._onWheel);
     c.removeEventListener('dblclick', this._onDblClick);
     c.removeEventListener('contextmenu', this._onContextMenu);

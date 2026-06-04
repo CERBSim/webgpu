@@ -181,6 +181,12 @@ class RenderEngine {
       theme: descriptor.theme || {},
     };
 
+    // Live-mode host callbacks (optional).
+    this._onEvent = descriptor.on_event || null;
+    this._onCameraChanged = descriptor.on_camera_changed || null;
+    // Host clear color [r,g,b,a] overriding the built-in light/dark color.
+    this._clearColorOverride = descriptor.clear_color || null;
+
     this.buffers  = _toMap(descriptor.buffers);
     this.textures = _toMap(descriptor.textures);
     this.samplers = new Map();
@@ -260,22 +266,27 @@ class RenderEngine {
     this.renderPassObjects = [];
     await this._createRenderPipelines();
 
-    // --- Input ---
-    // Live mode: the host (Python) owns input handling and writes the camera
-    // uniform and calls notifyDirty() explicitly when buffers change.
-    if (this.mode !== 'live') {
-      this.camera.registerObserver(() => {
-        this._updateCameraBuffer();
-        // Only mark the camera buffer dirty — compute passes that actually
-        // depend on the camera (list it in their triggers) will re-run.
-        // Passes triggered by other buffers (e.g. clipping plane) are
-        // unaffected by camera movement.
-        if (this._cameraBufferId) {
-          this.computeDAG.markDirty(this._cameraBufferId);
-        }
-        this.render();
+    // --- Input + camera ---
+    // The JS engine owns the camera and input loop in both modes. In live mode
+    // it also forwards non-camera events to the host and syncs settled camera
+    // transforms back.
+    this.camera.registerObserver(() => {
+      this._updateCameraBuffer();
+      if (this._cameraBufferId) {
+        this.computeDAG.markDirty(this._cameraBufferId);
+      }
+      this.render();
+      this._notifyCameraChanged();
+    });
+    this.input = new InputHandler(canvas, this.camera, () => this.render());
+    if (this._onEvent) {
+      this.input.setEventSink((ev) => {
+        try { this._onEvent(ev); }
+        catch (e) { console.warn('[engine] on_event failed:', e && (e.message || e)); }
       });
-      this.input = new InputHandler(canvas, this.camera, () => this.render());
+    }
+    if (this._onCameraChanged) {
+      this.input.onGestureEnd = () => this._notifyCameraChanged(true);
     }
 
     // --- Interactions (lil-gui) ---
@@ -415,7 +426,54 @@ class RenderEngine {
     if (this.depthTexture) this.depthTexture.destroy();
     if (this.msaaTexture)  this.msaaTexture.destroy();
     this._createDepthAndMSAA();
+    // Refresh the camera uniform (aspect/width/height) for the new size.
+    this._updateCameraBuffer();
     this.render();
+  }
+
+  /** Live-mode hook: host sets the camera transform (reset/view/bookmark). */
+  setCameraTransform(matrix, center) {
+    if (!this.camera) return;
+    this._suppressCameraNotify = true;
+    try {
+      if (matrix) this.camera.transform._mat = Float64Array.from(matrix);
+      if (center) this.camera.transform._center = Array.from(center);
+      this._updateCameraBuffer();
+      if (this._cameraBufferId) this.computeDAG.markDirty(this._cameraBufferId);
+      this.render();
+    } finally {
+      this._suppressCameraNotify = false;
+    }
+  }
+
+  /** Live-mode hook: host sets the background clear color [r,g,b,a] (0..1). */
+  setClearColor(rgba) {
+    this._clearColorOverride = rgba || null;
+    this._applyTheme();
+    this.render();
+  }
+
+  /** Report the current camera transform to the host (debounced). */
+  _notifyCameraChanged(immediate = false) {
+    if (!this._onCameraChanged || this._suppressCameraNotify) return;
+    const send = () => {
+      this._camNotifyTimer = null;
+      try {
+        this._onCameraChanged({
+          matrix: Array.from(this.camera.transform._mat),
+          center: Array.from(this.camera.transform._center),
+        });
+      } catch (e) {
+        console.warn('[engine] on_camera_changed failed:', e && (e.message || e));
+      }
+    };
+    if (immediate) {
+      if (this._camNotifyTimer) { clearTimeout(this._camNotifyTimer); }
+      send();
+      return;
+    }
+    if (this._camNotifyTimer) return;  // trailing-edge debounce already scheduled
+    this._camNotifyTimer = setTimeout(send, 100);
   }
 
   /**
@@ -902,9 +960,14 @@ class RenderEngine {
 
   _applyTheme() {
     const dark = this._isDarkMode();
-    this.clearColor = dark ? DARK_CLEAR_COLOR : LIGHT_CLEAR_COLOR;
+    const ov = this._clearColorOverride;
+    this.clearColor = ov
+      ? { r: ov[0], g: ov[1], b: ov[2], a: ov.length > 3 ? ov[3] : 1.0 }
+      : (dark ? DARK_CLEAR_COLOR : LIGHT_CLEAR_COLOR);
     if (this.canvas && this.canvas.style) {
-      this.canvas.style.backgroundColor = dark ? DARK_CANVAS_BG : LIGHT_CANVAS_BG;
+      this.canvas.style.backgroundColor = ov
+        ? `rgb(${Math.round(ov[0] * 255)},${Math.round(ov[1] * 255)},${Math.round(ov[2] * 255)})`
+        : (dark ? DARK_CANVAS_BG : LIGHT_CANVAS_BG);
     }
     // Update colorbar background color to match theme
     if (this.scene && this.scene.theme && this.scene.theme.buffer_id) {
@@ -958,6 +1021,7 @@ class RenderEngine {
 
   dispose() {
     if (this._resizeObserver) this._resizeObserver.disconnect();
+    if (this._camNotifyTimer) { clearTimeout(this._camNotifyTimer); this._camNotifyTimer = null; }
     this._teardownThemeObserver();
     if (this.input) this.input.dispose();
     if (this.interactions) this.interactions.dispose();

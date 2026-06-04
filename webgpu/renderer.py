@@ -83,6 +83,9 @@ class RenderOptions:
         self.model_view_proj = None
         self.render_pass = None
         self._extra_binding_providers = []
+        # JS-engine mode owns the camera uniform; Python computes matrices but
+        # must not upload the camera buffer.
+        self.skip_camera_buffer_write = False
 
     def __getstate__(self):
         return {"camera": self.camera, "light": self.light}
@@ -91,6 +94,7 @@ class RenderOptions:
         self.camera = state["camera"]
         self.light = state["light"]
         self._camera_uniforms = None
+        self.skip_camera_buffer_write = False
         self.model_view_proj = None
         self.render_pass = None
         self._extra_binding_providers = []
@@ -112,7 +116,10 @@ class RenderOptions:
     def update_buffers(self):
         if self._camera_uniforms is None:
             return
-        mvp, _ = self._camera_uniforms.update(self.camera.transform, self.canvas)
+        mvp, _ = self._camera_uniforms.update(
+            self.camera.transform, self.canvas,
+            write_buffer=not self.skip_camera_buffer_write,
+        )
         if mvp is not None:
             self.model_view_proj = mvp
         self.light.update(self)

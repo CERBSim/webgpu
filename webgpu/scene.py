@@ -14,6 +14,16 @@ from .camera import Camera
 from .light import Light
 
 
+_default_use_js_engine = True
+
+
+def set_default_use_js_engine(value: bool):
+    """Set the default backend for scenes: True = JS engine, False = legacy
+    Python render/camera. Override per scene via ``Scene(use_js_engine=...)``."""
+    global _default_use_js_engine
+    _default_use_js_engine = bool(value)
+
+
 class Scene:
     """Container that ties render objects, camera, canvas, and input into a live WebGPU scene."""
     canvas: Canvas = None
@@ -28,8 +38,14 @@ class Scene:
         canvas: Canvas | None = None,
         camera: Camera | None = None,
         light: Light | None = None,
+        use_js_engine: bool | None = None,
+        show_gui_controls: bool = True,
     ):
-        """Create a scene from render objects and optional canvas/camera/light overrides."""
+        """Create a scene from render objects and optional canvas/camera/light overrides.
+
+        ``use_js_engine`` selects the backend (see :func:`set_default_use_js_engine`).
+        ``show_gui_controls`` toggles the JS engine's built-in lil-gui panel.
+        """
         if id is None:
             import uuid
 
@@ -53,6 +69,12 @@ class Scene:
 
         self.input_handler = InputHandler()
         self._js_engine = None
+        self._on_event_proxy = None
+        self._on_camera_changed_proxy = None
+        self._use_js_engine = (
+            _default_use_js_engine if use_js_engine is None else bool(use_js_engine)
+        )
+        self._show_gui_controls = bool(show_gui_controls)
 
     def __getstate__(self):
         """Return picklable state so scenes can be serialized between processes/notebooks."""
@@ -60,6 +82,8 @@ class Scene:
             "render_objects": self.render_objects,
             "id": self._id,
             "render_options": self.options,
+            "use_js_engine": self._use_js_engine,
+            "show_gui_controls": self._show_gui_controls,
         }
         return state
 
@@ -75,6 +99,10 @@ class Scene:
         self.input_handler = InputHandler()
         self._render_mutex = None
         self._js_engine = None
+        self._on_event_proxy = None
+        self._on_camera_changed_proxy = None
+        self._use_js_engine = state.get("use_js_engine", _default_use_js_engine)
+        self._show_gui_controls = state.get("show_gui_controls", True)
 
         if is_pyodide:
             _scenes_by_id[self._id] = self
@@ -163,7 +191,6 @@ class Scene:
 
             camera = self.options.camera
             self._js_render = platform.create_proxy(self._render_direct)
-            camera.register_callbacks(self.input_handler, self.get_position)
             camera.register_observer(self._on_camera_changed)
 
             self._select_buffer = self.device.createBuffer(
@@ -186,6 +213,8 @@ class Scene:
         if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
             self._install_live_engine()
 
+        self._wire_input(camera)
+
     def reconnect(self, canvas):
         """Re-attach a previously initialized scene to a (new) canvas.
 
@@ -205,7 +234,6 @@ class Scene:
             camera = self.options.camera
             if not hasattr(self, '_js_render') or self._js_render is None:
                 self._js_render = platform.create_proxy(self._render_direct)
-            camera.register_callbacks(self.input_handler, self.get_position)
             camera.register_observer(self._on_camera_changed)
 
             self._select_buffer_valid = False
@@ -218,17 +246,55 @@ class Scene:
         if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
             self._install_live_engine()
 
+        self._wire_input(camera)
+
+    def _wire_input(self, camera):
+        """Route input to the JS engine (camera owned in the browser, only
+        double-click-to-center kept in Python) or to the legacy Python path."""
+        if self._js_engine is not None:
+            camera.unregister_callbacks(self.input_handler)
+            self.input_handler.set_engine_mode(True)
+            camera.register_dblclick_center(self.input_handler, self.get_position)
+            self.options.skip_camera_buffer_write = True
+        else:
+            self.input_handler.set_engine_mode(False)
+            camera.register_callbacks(self.input_handler, self.get_position)
+            self.options.skip_camera_buffer_write = False
+
+    def _ensure_engine_js(self):
+        """Load the JS ``RenderEngine`` into the browser if not already present
+        (some hosts, e.g. the ngapp app, don't inject it). Returns True if
+        available afterwards."""
+        if not hasattr(platform, 'js') or platform.js is None:
+            return False
+        if getattr(platform.js, 'RenderEngine', None) is not None:
+            return True
+        try:
+            from .engine import engine_js
+
+            doc = platform.js.document
+            script = doc.createElement("script")
+            script.textContent = engine_js
+            doc.head.appendChild(script)
+            print("webgpu: injected JS RenderEngine (live rendering enabled)")
+        except Exception as e:
+            print(f"warning: could not inject engine_js: {e}")
+            return False
+        return getattr(platform.js, 'RenderEngine', None) is not None
+
     def _install_live_engine(self):
         """Build a live descriptor and hand it to RenderEngine.createLive.
 
         Idempotent: safe to call again after pipelines change (rebuilds via
         ``engine.update`` if an engine is already installed).
         """
+        if not self._use_js_engine:
+            return
         if not hasattr(platform, 'js') or platform.js is None:
             return
-        RenderEngine = getattr(platform.js, 'RenderEngine', None)
-        if RenderEngine is None:
+        if not self._ensure_engine_js():
             return
+        RenderEngine = platform.js.RenderEngine
 
         from .export.capture import capture_scene_live, build_live_resource_maps
         from dataclasses import asdict
@@ -237,6 +303,21 @@ class Scene:
             export, registry = capture_scene_live(self)
 
         buffers, textures, samplers, frame_buffers = build_live_resource_maps(registry)
+
+        # Empty interactions → JS engine builds no lil-gui panel.
+        interactions = (
+            [asdict(i) for i in export.interactions] if self._show_gui_controls else []
+        )
+
+        # Fire-and-forget host callbacks so the browser never blocks on Python.
+        if getattr(self, "_on_event_proxy", None) is None:
+            self._on_event_proxy = platform.create_proxy(
+                self.input_handler.handle_engine_event, ignore_return_value=True
+            )
+        if getattr(self, "_on_camera_changed_proxy", None) is None:
+            self._on_camera_changed_proxy = platform.create_proxy(
+                self._apply_camera_from_js, ignore_return_value=True
+            )
 
         descriptor = {
             "device": self.canvas.device.handle,
@@ -248,10 +329,13 @@ class Scene:
             "frame_buffers": frame_buffers,
             "render_passes":  [asdict(p) for p in export.render_passes],
             "compute_passes": [asdict(p) for p in export.compute_passes],
-            "interactions":   [asdict(i) for i in export.interactions],
+            "interactions":   interactions,
             "camera": export.camera,
             "light":  export.light,
             "theme": export.theme,
+            "on_event": self._on_event_proxy,
+            "on_camera_changed": self._on_camera_changed_proxy,
+            "clear_color": self._canvas_clear_color(),
         }
 
         js_descriptor = platform.toJS(descriptor)
@@ -300,6 +384,8 @@ class Scene:
             for obj in self.render_objects:
                 if hasattr(obj, '_js_compute'):
                     obj._js_compute = False
+            # Engine gone — fall back to Python input until _on_resize reinstalls it.
+            self.input_handler.set_engine_mode(False)
 
         if html_canvas is not None:
             self.input_handler.set_canvas(html_canvas)
@@ -461,6 +547,13 @@ class Scene:
         self.device.queue.submit([options.command_encoder.finish()])
         options.command_encoder = None
 
+    def _canvas_clear_color(self):
+        """Return the canvas clear color as [r, g, b, a] (or None)."""
+        cc = getattr(self.canvas, "clear_color", None) if self.canvas else None
+        if cc is None:
+            return None
+        return [float(cc.r), float(cc.g), float(cc.b), float(cc.a)]
+
     def _render_highlight(self):
         """Fast re-render for highlight-only uniform changes.
 
@@ -468,6 +561,14 @@ class Scene:
         Caller must already hold _render_mutex.
         """
         if self.canvas is None or self.canvas.height == 0:
+            return
+        # Live engine: uniforms already written; just redraw (a Python render
+        # here would fight the engine for the canvas).
+        if self._js_engine is not None:
+            try:
+                self._js_engine.render()
+            except Exception as e:
+                print(f"warning: js_engine.render() failed: {e}")
             return
         self._render_objects(to_canvas=False, update_pipelines=False)
         if not os.environ.get("WEBGPU_TESTING"):
@@ -517,6 +618,11 @@ class Scene:
                             obj._update_and_create_render_pipeline(self.options)
                     self._install_live_engine()  # idempotent → engine.update()
             try:
+                # Push the clear color when it changes (e.g. theme switch).
+                cc = self._canvas_clear_color()
+                if cc is not None and cc != getattr(self, "_pushed_clear_color", None):
+                    self._js_engine.setClearColor(platform.toJS(cc))
+                    self._pushed_clear_color = cc
                 if any_dirty:
                     self._js_engine.notifyDirty(None)
                 self._js_engine.render()
@@ -565,6 +671,14 @@ class Scene:
                 if hasattr(self, '_js_render'):
                     platform.destroy_proxy(self._js_render)
                     del self._js_render
+                for attr in ("_on_event_proxy", "_on_camera_changed_proxy"):
+                    proxy = getattr(self, attr, None)
+                    if proxy is not None:
+                        try:
+                            platform.destroy_proxy(proxy)
+                        except Exception:
+                            pass
+                        setattr(self, attr, None)
                 if self._on_resize in self.canvas._on_resize_callbacks:
                     self.canvas._on_resize_callbacks.remove(self._on_resize)
                 if self._on_visibility_changed in self.canvas._on_visibility_callbacks:
@@ -574,7 +688,8 @@ class Scene:
                 self.canvas = None
 
     def _on_camera_changed(self):
-        """Called by the camera when its transform changes. Update uniforms and re-render."""
+        """Python-initiated camera change (reset/view/bookmark): push to the JS
+        engine if live, else update the uniform and re-render (legacy)."""
         if self.canvas is None:
             return
         html_canvas = self.canvas.canvas
@@ -585,10 +700,49 @@ class Scene:
             self.options.camera.unregister_callbacks(self.input_handler)
             self.options.camera.unregister_observer(self._on_camera_changed)
             return
+
+        if self._js_engine is not None:
+            with self._render_mutex:
+                self._select_buffer_valid = False
+            t = self.options.camera.transform
+            center = t._center.tolist() if hasattr(t._center, "tolist") else list(t._center)
+            try:
+                self._js_engine.setCameraTransform(
+                    platform.toJS(t._mat.flatten().tolist()),
+                    platform.toJS(list(center)),
+                )
+            except Exception as e:
+                print(f"warning: js_engine.setCameraTransform() failed: {e}")
+            return
+
         with self._render_mutex:
             self._select_buffer_valid = False
             self.options.update_buffers()
         self.render()
+
+    def _apply_camera_from_js(self, payload):
+        """Mirror a JS-engine camera move back into the Python camera (for
+        bookmarks/screenshots/picking). Does not re-render or push back to JS."""
+        import numpy as np
+
+        try:
+            try:
+                import pyodide.ffi
+
+                if isinstance(payload, pyodide.ffi.JsProxy):
+                    payload = payload.to_py()
+            except ImportError:
+                pass
+            mat = list(payload["matrix"])
+            center = list(payload["center"])
+            t = self.options.camera.transform
+            t._mat = np.array(mat, dtype=float).reshape(4, 4)
+            t._center = np.array(center, dtype=float)
+            if self._render_mutex is not None:
+                with self._render_mutex:
+                    self._select_buffer_valid = False
+        except Exception as e:
+            print(f"warning: apply camera from js failed: {e}")
 
     def _on_resize(self):
         """Called on canvas resize. Update camera uniforms (aspect ratio) and re-render."""
@@ -601,18 +755,18 @@ class Scene:
             except Exception as e:
                 print(f'warning: js_engine.handleResize() failed: {e}')
         elif not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
-            # Engine was disposed (e.g. canvas element changed). Reinstall now
-            # that the canvas has valid dimensions.
+            # Engine was disposed (e.g. canvas changed). Reinstall and re-route input.
             if self.canvas is not None and self.canvas.width > 0 and self.canvas.height > 0:
                 self._install_live_engine()
+                self._wire_input(self.options.camera)
         self.render()
 
     def _on_visibility_changed(self, visible):
         """Called by canvas IntersectionObserver when visibility changes."""
         camera = self.options.camera
         if visible:
-            camera.register_callbacks(self.input_handler, self.get_position)
             camera.register_observer(self._on_camera_changed)
+            self._wire_input(camera)
             self.options.update_buffers()
             self.render()
         else:

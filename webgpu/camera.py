@@ -21,10 +21,13 @@ class CameraUniforms(UniformBase):
         ("dpr", ct.c_float),
     ]
 
-    def update(self, transform, canvas):
+    def update(self, transform, canvas, write_buffer=True):
         """Recompute projection/model-view matrices from transform and canvas dimensions.
 
         Returns (model_view_proj, model_view) matrices, or (None, None) if canvas is unavailable.
+
+        With ``write_buffer`` False the matrices are computed but the GPU buffer
+        is not uploaded (JS-engine mode, where the browser owns the camera).
         """
         if canvas is None or canvas.height == 0:
             return None, None
@@ -82,7 +85,8 @@ class CameraUniforms(UniformBase):
         self.width = canvas.width
         self.height = canvas.height
         self.dpr = float(getattr(canvas, 'dpr', 1.0))
-        self.update_buffer()
+        if write_buffer:
+            self.update_buffer()
 
         return model_view_proj, model_view
 
@@ -219,6 +223,7 @@ class Camera:
         self._is_moving = False
         self._is_rotating = False
         self._registered_handlers = {}
+        self._dblclick_handlers = {}
 
     def __setstate__(self, state):
         """Restore pickled camera state (only the transform)."""
@@ -228,6 +233,7 @@ class Camera:
         self._is_moving = False
         self._is_rotating = False
         self._registered_handlers = {}
+        self._dblclick_handlers = {}
 
     def __getstate__(self):
         """Return a minimal picklable representation of the camera."""
@@ -311,8 +317,30 @@ class Camera:
         input_handler.on_dblclick(handlers['dblclick'], ctrl=False, shift=False, alt=False)
         input_handler.on_wheel(handlers['wheel'], ctrl=False, shift=False, alt=False)
 
+    def register_dblclick_center(self, input_handler, get_position_fn):
+        """Register only the double-click-to-center handler (used in JS-engine
+        mode, where rotate/pan/zoom are handled in the browser)."""
+        self.unregister_dblclick_center(input_handler)
+
+        def on_dblclick(ev):
+            if get_position_fn:
+                p = get_position_fn(ev["canvasX"], ev["canvasY"])
+                if p is not None:
+                    self.transform.set_center(p)
+                    self._notify_observers()
+
+        self._dblclick_handlers[id(input_handler)] = on_dblclick
+        input_handler.on_dblclick(on_dblclick, ctrl=False, shift=False, alt=False)
+
+    def unregister_dblclick_center(self, input_handler):
+        """Remove a previously registered double-click-to-center handler."""
+        handler = self._dblclick_handlers.pop(id(input_handler), None)
+        if handler is not None:
+            input_handler.unregister("dblclick", handler)
+
     def unregister_callbacks(self, input_handler):
         """Remove previously registered handlers from the given input_handler."""
+        self.unregister_dblclick_center(input_handler)
         key = id(input_handler)
         handlers = self._registered_handlers.pop(key, None)
         if handlers is None:
