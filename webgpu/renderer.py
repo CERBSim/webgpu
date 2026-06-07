@@ -604,7 +604,7 @@ class Renderer(BaseRenderer):
             vertex_count=self.n_vertices,
             instance_count=self.n_instances,
             topology=self.topology,
-            depth_write=not self.transparent,
+            depth_write=True,
             depth_bias=self.depthBias,
             pass_type="transparent" if self.transparent else "opaque",
             vertex_entry_point=self.vertex_entry_point,
