@@ -330,7 +330,7 @@ class RenderEngine {
   captureNextFrame() {
     return new Promise((resolve) => {
       (this._frameCaptureRequests = this._frameCaptureRequests || []).push(resolve);
-      this.render();
+      this._renderNow();
     });
   }
 
@@ -345,7 +345,7 @@ class RenderEngine {
       (this._frameCaptureRequests = this._frameCaptureRequests || []).push(
         ({ data }) => resolve(data)
       );
-      this.render();
+      this._renderNow();
     });
   }
 
@@ -452,6 +452,15 @@ class RenderEngine {
     this._clearColorOverride = rgba || null;
     this._applyTheme();
     this.render();
+  }
+
+  /**
+   * Live-mode hook: the host acks that it finished processing the last input
+   * event, releasing the input handler's move backpressure so the next
+   * coalesced move can be sent.
+   */
+  ackInput() {
+    if (this.input && this.input._releaseMove) this.input._releaseMove();
   }
 
   /** Report the current camera transform to the host (debounced). */
@@ -804,7 +813,28 @@ class RenderEngine {
   // Render
   // =========================================================================
 
+  /**
+   * Coalesced render entry point. Many render requests within a single frame
+   * (e.g. dragging the clipping plane fires a mousemove + scene.render() per
+   * event, each marking the clipping compute pass dirty) collapse into one
+   * requestAnimationFrame, so the compute DAG + render pass run at most once
+   * per frame instead of once per event.
+   *
+   * Callers that need the actual frame to run (capture, readback) still work:
+   * a frame is guaranteed to be scheduled, and capture requests / readbacks are
+   * processed when it runs.
+   */
   render() {
+    if (this._renderScheduled) return;
+    if (typeof requestAnimationFrame === 'undefined') { this._renderNow(); return; }
+    this._renderScheduled = true;
+    requestAnimationFrame(() => {
+      this._renderScheduled = false;
+      this._renderNow();
+    });
+  }
+
+  _renderNow() {
     if (!this.device || !this.context) return;
     if (this.width === 0 || this.height === 0) return;
     if (this._updating) return;

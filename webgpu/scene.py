@@ -315,11 +315,17 @@ class Scene:
             [asdict(i) for i in export.interactions] if self._show_gui_controls else []
         )
 
-        # Fire-and-forget host callbacks so the browser never blocks on Python.
+        # Input events are backpressured: the JS input handler keeps at most one
+        # high-frequency move event in flight and waits for an explicit ack
+        # before sending the next, so a fast drag can't pile a backlog into the
+        # async callback queue that then replays slowly. The proxy itself is
+        # fire-and-forget (its return value is dropped at enqueue time on the
+        # websocket bridge), so we ack *after* the handler actually runs.
         if getattr(self, "_on_event_proxy", None) is None:
             self._on_event_proxy = platform.create_proxy(
-                self.input_handler.handle_engine_event, ignore_return_value=True
+                self._handle_input_event_and_ack, ignore_return_value=True
             )
+        # Camera-changed stays fire-and-forget so the browser never blocks on it.
         if getattr(self, "_on_camera_changed_proxy", None) is None:
             self._on_camera_changed_proxy = platform.create_proxy(
                 self._apply_camera_from_js, ignore_return_value=True
@@ -370,6 +376,25 @@ class Scene:
                 "samplers":       samplers,
                 "frame_buffers":  frame_buffers,
             }))
+
+    def _handle_input_event_and_ack(self, event):
+        """Process a forwarded input event, then ack the JS input handler so it
+        releases backpressure and sends the next (coalesced) move. Runs on the
+        link's callback thread; the ack is sent only after the handler (incl.
+        its render) has run, which is what actually bounds the event rate."""
+        try:
+            self.input_handler.handle_engine_event(event)
+        finally:
+            eng = self._js_engine
+            if eng is not None:
+                try:
+                    # Fire-and-forget so the callback thread isn't blocked on it.
+                    if hasattr(eng, "_call_method_ignore_return"):
+                        eng._call_method_ignore_return("ackInput", [])
+                    else:
+                        eng.ackInput()
+                except Exception:
+                    pass
 
     def __on_update_html_canvas(self, html_canvas):
         """Update event wiring when the underlying HTML canvas element changes."""

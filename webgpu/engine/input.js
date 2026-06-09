@@ -16,6 +16,15 @@ class InputHandler {
 
     // Live mode: sink for classified non-camera events forwarded to the host.
     this._eventSink = null;
+    // High-frequency move events (drag/hover) use true backpressure: at most one
+    // is in flight to the host (Python) at a time. While one is being processed,
+    // further moves are coalesced into a single pending event (deltas summed so
+    // the rotation/pan total is preserved); when the host acks, the latest
+    // pending move is sent. This caps the event rate to the host's actual
+    // processing rate, so a fast drag can't pile up a backlog that replays slowly.
+    this._pendingMove = null;
+    this._moveInFlight = false;
+    this._moveWatchdog = null;
     this.onGestureEnd = null;
     this.rotateSensitivity = 0.5;
 
@@ -65,11 +74,10 @@ class InputHandler {
     this._eventSink = fn;
   }
 
-  _forward(type, ev) {
-    if (!this._eventSink) return;
+  _buildPayload(type, ev) {
     const rect = this.canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const payload = {
+    return {
       type,
       button: ev.button == null ? 0 : ev.button,
       buttons: ev.buttons == null ? 0 : ev.buttons,
@@ -85,10 +93,68 @@ class InputHandler {
       shiftKey: !!ev.shiftKey,
       altKey: !!ev.altKey,
     };
+  }
+
+  _send(payload) {
     try {
       this._eventSink(payload);
     } catch (e) {
       console.warn('[input] event sink failed:', e && (e.message || e));
+    }
+  }
+
+  // Discrete events (click, dblclick, wheel, mouseout): flush any pending
+  // coalesced move first so ordering is preserved, then send immediately.
+  _forward(type, ev) {
+    if (!this._eventSink) return;
+    this._flushMove();
+    this._send(this._buildPayload(type, ev));
+  }
+
+  // High-frequency move events (drag/hover): backpressured. Accumulate deltas
+  // into a single pending event while one is in flight; send it once the host
+  // acks the previous one.
+  _forwardMove(type, ev) {
+    if (!this._eventSink) return;
+    const payload = this._buildPayload(type, ev);
+    const prev = this._pendingMove;
+    if (prev && prev.type === type) {
+      payload.movementX += prev.movementX;
+      payload.movementY += prev.movementY;
+    }
+    this._pendingMove = payload;
+    this._flushMove();
+  }
+
+  _flushMove() {
+    if (this._moveInFlight) return;          // wait for the host's ack
+    const p = this._pendingMove;
+    if (!p) return;
+    this._pendingMove = null;
+    this._moveInFlight = true;
+    this._send(p);
+    // Watchdog: the host acks via ackInput() once it has processed the event.
+    // If that ack is ever lost, don't stall input forever.
+    if (typeof setTimeout !== 'undefined') {
+      this._moveWatchdog = setTimeout(() => this._releaseMove(), 1000);
+    }
+  }
+
+  // Called (via engine.ackInput) once the host finished the in-flight move.
+  _releaseMove() {
+    if (!this._moveInFlight) return;
+    this._moveInFlight = false;
+    if (this._moveWatchdog != null) {
+      clearTimeout(this._moveWatchdog);
+      this._moveWatchdog = null;
+    }
+    if (!this._pendingMove) return;
+    // Defer so we never recurse synchronously when the host (Pyodide) acks
+    // inline within the same call stack.
+    if (typeof Promise !== 'undefined') {
+      Promise.resolve().then(() => this._flushMove());
+    } else {
+      this._flushMove();
     }
   }
 
@@ -114,6 +180,9 @@ class InputHandler {
     const wasGesture = this._isRotating || this._isPanning;
     this._isRotating = false;
     this._isPanning = false;
+    // Apply any pending coalesced drag before the gesture ends, so the final
+    // pointer position isn't dropped.
+    this._flushMove();
     // A press with no movement is a click; camera gestures set _moved.
     if (this._eventSink && !this._moved && ev.button === this._downButton) {
       this._forward('click', ev);
@@ -150,12 +219,13 @@ class InputHandler {
       return;
     }
     // Not a camera gesture — forward to the host (hover, or a modified drag).
+    // Coalesced to one event per frame so a fast drag doesn't pile up a backlog.
     if (!this._eventSink) return;
     if (ev.buttons !== 0) {
       this._moved = true;
-      this._forward('drag', ev);
+      this._forwardMove('drag', ev);
     } else {
-      this._forward('mousemove', ev);
+      this._forwardMove('mousemove', ev);
     }
   }
 
@@ -295,6 +365,9 @@ class InputHandler {
   // --- Cleanup ---
 
   dispose() {
+    this._pendingMove = null;
+    this._moveInFlight = false;
+    if (this._moveWatchdog != null) { clearTimeout(this._moveWatchdog); this._moveWatchdog = null; }
     const c = this.canvas;
     c.removeEventListener('pointerdown', this._onPointerDown);
     c.removeEventListener('pointerup', this._onPointerUp);
