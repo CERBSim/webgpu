@@ -110,7 +110,8 @@ class RenderEngine {
 
     // --- WebGPU device ---
     if (!navigator.gpu) throw new Error('WebGPU not supported');
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    const powerPreference = (typeof window !== 'undefined' && window.__webgpuPowerPreference) || 'high-performance';
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference });
     if (!adapter) throw new Error('No WebGPU adapter found');
     this.device = await adapter.requestDevice({
       requiredLimits: {
