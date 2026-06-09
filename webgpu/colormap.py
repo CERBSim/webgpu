@@ -139,7 +139,11 @@ class Colormap(BaseRenderer):
         for callback in self._callbacks:
             callback()
 
-        self._needs_new_texture = True
+        if self.texture is not None:
+            self._create_texture()
+            self._needs_new_texture = False
+        else:
+            self._needs_new_texture = True
 
     def set_n_colors(self, n_colors):
         self.n_instances = 2 * n_colors
