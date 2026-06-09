@@ -146,6 +146,7 @@ class Colormap(BaseRenderer):
         self.n_colors = n_colors
         if self.uniforms is not None:
             self.uniforms.n_colors = n_colors
+            self.uniforms.update_buffer()
             self.set_needs_update()
         for callback in self._callbacks:
             callback()
@@ -185,6 +186,7 @@ class Colormap(BaseRenderer):
         if self.uniforms is not None:
             self.uniforms.min = minval
             self.uniforms.max = maxval
+            self.uniforms.update_buffer()
             self.set_needs_update()
         for callback in self._callbacks:
             callback()
@@ -194,6 +196,7 @@ class Colormap(BaseRenderer):
         self.autoscale = False
         if self.uniforms is not None:
             self.uniforms.min = minval
+            self.uniforms.update_buffer()
             self.set_needs_update()
         for callback in self._callbacks:
             callback()
@@ -203,6 +206,7 @@ class Colormap(BaseRenderer):
         self.autoscale = False
         if self.uniforms is not None:
             self.uniforms.max = maxval
+            self.uniforms.update_buffer()
             self.set_needs_update()
         for callback in self._callbacks:
             callback()
@@ -211,6 +215,7 @@ class Colormap(BaseRenderer):
         self.discrete = 1 if discrete else 0
         if self.uniforms is not None:
             self.uniforms.discrete = self.discrete
+            self.uniforms.update_buffer()
             self.set_needs_update()
         for callback in self._callbacks:
             callback()
