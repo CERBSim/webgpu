@@ -668,29 +668,29 @@ class Scene:
         if self.canvas is None or self.canvas.height == 0:
             return
 
-        # Live JS engine path: it owns the rAF loop; we only ensure
-        # buffer contents are up-to-date and renderers that explicitly need
-        # rebuild are re-captured into the engine.
         if self._js_engine is not None:
             with self._render_mutex:
                 self.options.update_buffers()
                 any_dirty = any(
                     obj.needs_update for obj in self.render_objects if obj.active
                 )
-                if any_dirty:
-                    self.options.timestamp = time.time()
+                active_ids = frozenset(
+                    id(obj) for obj in self.render_objects if obj.active
+                )
+                if any_dirty or active_ids != getattr(self, "_installed_active_set", None):
+                    if any_dirty:
+                        self.options.timestamp = time.time()
                     for obj in self.render_objects:
                         if obj.active:
                             obj._update_and_create_render_pipeline(self.options)
                     self._install_live_engine()  # idempotent → engine.update()
+                    self._installed_active_set = active_ids
             try:
-                # Push the clear color when it changes (e.g. theme switch).
                 cc = self._canvas_clear_color()
                 if cc is not None and cc != getattr(self, "_pushed_clear_color", None):
                     self._js_engine.setClearColor(platform.toJS(cc))
                     self._pushed_clear_color = cc
-                if any_dirty:
-                    self._js_engine.notifyDirty(None)
+                self._js_engine.notifyDirty(None)
                 self._js_engine.render()
             except Exception as e:
                 print(f'warning: js_engine.render() failed: {e}')
