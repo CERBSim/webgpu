@@ -16,6 +16,14 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
+class ReleasedObjectError(KeyError):
+    """Raised when a message targets an object that has already been released.
+
+    Subclasses KeyError so existing ``except KeyError`` handlers keep working,
+    but lets _on_message recognise the benign teardown race (a stray in-flight
+    event arriving after its proxy was destroyed) and drop it quietly."""
+
+
 def _pack_message(data: dict) -> tuple[dict, bytes | str]:
     buffer = data.pop("buffer", None)
     if buffer is None:
@@ -381,7 +389,9 @@ class LinkBase:
         if id_ is not None:
             obj = self._objects.get(id_)
             if obj is None:
-                raise KeyError(f"Object with id {id_} not found (already released?)")
+                raise ReleasedObjectError(
+                    f"Object with id {id_} not found (already released?)"
+                )
         if prop is not None:
             obj = obj.__getattribute__(prop)
         if key is not None:
@@ -440,6 +450,17 @@ class LinkBase:
 
             if request_id is not None:
                 self._send_response(request_id, response)
+        except ReleasedObjectError as e:
+            if request_id is not None:
+                try:
+                    self._send_response(request_id, {
+                        "__is_crosslink_type__": True,
+                        "type": "error",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    })
+                except Exception:
+                    pass
         except Exception as e:
             print("error in on_message", data, type(e), str(e))
             import traceback
