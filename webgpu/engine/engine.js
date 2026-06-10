@@ -229,39 +229,86 @@ class RenderEngine {
     await this._finishInit();
   }
 
+  /** Translate a serialized compute pass (snake_case) into ComputeDAG.addPass args. */
+  _translateComputePass(cp) {
+    const indirectSetup = cp.indirect_setup ? {
+      counterId: cp.indirect_setup.counter_id,
+      indirectId: cp.indirect_setup.indirect_id,
+      vertexCount: cp.indirect_setup.vertex_count,
+    } : null;
+    const countThenFill = cp.count_then_fill ? {
+      counterId: cp.count_then_fill.counter_id,
+      outputId: cp.count_then_fill.output_id,
+      elementSize: cp.count_then_fill.element_size,
+      indirectId: cp.count_then_fill.indirect_id || null,
+      vertexCount: cp.count_then_fill.vertex_count || 0,
+      // indexed: indirect buffer is the 5-u32 drawIndexedIndirect layout
+      // (indexCount, instanceCount, firstIndex, baseVertex, firstInstance)
+      // instead of the 4-u32 drawIndirect layout.
+      indexed: !!cp.count_then_fill.indexed,
+      // siblings: extra output buffers resized in lockstep with the primary
+      // from the same counter (e.g. a vector's positions/directions/values
+      // arrays). Each: { id, elementSize }. The primary (outputId) still
+      // drives the instanceCount cap.
+      siblings: (cp.count_then_fill.siblings || []).map(s => ({
+        id: s.id,
+        elementSize: s.element_size,
+      })),
+    } : null;
+    return {
+      shader: cp.shader,
+      bindings: this._intKeyBindings(cp.bindings),
+      workgroups: cp.workgroups,
+      triggers: cp.triggers,
+      resetBuffers: cp.reset_buffers,
+      entryPoint: cp.entry_point || 'main',
+      indirectSetup,
+      countThenFill,
+    };
+  }
+
+  /** Build the compute DAG from scratch (first install). */
+  async _buildComputeDAG() {
+    this.computeDAG = new ComputeDAG();
+    for (const cp of this.scene.compute_passes) {
+      this.computeDAG.addPass(cp.id, this._translateComputePass(cp));
+    }
+    await this.computeDAG.initPipelines(this.device, this.buffers);
+    for (const cp of this.scene.compute_passes) {
+      for (const t of cp.triggers) this.computeDAG.markDirty(t);
+    }
+  }
+
+  /**
+   * Incrementally reconcile the compute DAG with this.scene.compute_passes
+   * (called from update() when a renderer with a compute pass is toggled).
+   * Adds newly-present passes and removes vanished ones, leaving UNCHANGED
+   * passes — and their already-converged JS-owned buffers and in-flight
+   * readbacks — completely untouched. A wholesale rebuild here instead would
+   * discard those buffers and invalidate references the host/bridge still
+   * holds (observed as "mapAsync: external Instance reference no longer exists").
+   */
+  async _syncComputeDAG() {
+    if (!this.computeDAG) { await this._buildComputeDAG(); return; }
+    const want = new Map(this.scene.compute_passes.map(cp => [cp.id, cp]));
+    // Remove passes that are gone.
+    for (const id of [...this.computeDAG.passes.keys()]) {
+      if (!want.has(id)) this.computeDAG.removePass(id);
+    }
+    // Add passes that are new; init + trigger only those.
+    for (const [id, cp] of want) {
+      if (this.computeDAG.passes.has(id)) continue;
+      this.computeDAG.addPass(id, this._translateComputePass(cp));
+      await this.computeDAG._initPass(this.device, this.buffers, id);
+      for (const t of cp.triggers) this.computeDAG.markDirty(t);
+    }
+  }
+
   async _finishInit() {
     const canvas = this.canvas;
 
     // --- Compute ---
-    this.computeDAG = new ComputeDAG();
-    for (const cp of this.scene.compute_passes) {
-      const indirectSetup = cp.indirect_setup ? {
-        counterId: cp.indirect_setup.counter_id,
-        indirectId: cp.indirect_setup.indirect_id,
-        vertexCount: cp.indirect_setup.vertex_count,
-      } : null;
-      const countThenFill = cp.count_then_fill ? {
-        counterId: cp.count_then_fill.counter_id,
-        outputId: cp.count_then_fill.output_id,
-        elementSize: cp.count_then_fill.element_size,
-        indirectId: cp.count_then_fill.indirect_id || null,
-        vertexCount: cp.count_then_fill.vertex_count || 0,
-      } : null;
-      this.computeDAG.addPass(cp.id, {
-        shader: cp.shader,
-        bindings: this._intKeyBindings(cp.bindings),
-        workgroups: cp.workgroups,
-        triggers: cp.triggers,
-        resetBuffers: cp.reset_buffers,
-        indirectSetup,
-        countThenFill,
-      });
-    }
-    await this.computeDAG.initPipelines(this.device, this.buffers);
-    // Mark all compute triggers dirty for first frame
-    for (const cp of this.scene.compute_passes) {
-      for (const t of cp.triggers) this.computeDAG.markDirty(t);
-    }
+    await this._buildComputeDAG();
 
     // --- Render pipelines ---
     this.renderPassObjects = [];
@@ -353,10 +400,19 @@ class RenderEngine {
    * Push updated render/compute pass descriptors and rebuild pipelines.
    * Used by the host (Python) when the renderer set or its options change.
    */
-  async update({ render_passes, compute_passes, interactions, buffers, textures, samplers, frame_buffers } = {}) {
+  async update({ render_passes, compute_passes, interactions, buffers, textures, samplers, frame_buffers, camera } = {}) {
     if (render_passes)  this.scene.render_passes  = render_passes;
     if (compute_passes) this.scene.compute_passes = compute_passes;
     if (interactions)   this.scene.interactions   = interactions;
+    if (camera) {
+      // The buffer registry can reassign the camera's string id when the
+      // render-object set changes, so a cached _cameraBufferId would point at
+      // whatever buffer now holds that id (e.g. the 4-byte "subdivision"
+      // uniform). Refresh the camera and force _updateCameraBuffer to
+      // re-resolve the id from the new descriptor.
+      this.scene.camera = camera;
+      this._cameraBufferId = (camera && camera.buffer_id) || null;
+    }
     // Update live buffer/texture/sampler maps when the host recreates GPU resources.
     // Preserve buffers that the JS engine has resized via countThenFill —
     // Python doesn't know about JS-side resizes, so its references are stale
@@ -397,6 +453,26 @@ class RenderEngine {
         console.warn('[engine] interactions setup in update() failed:', e.message || e);
       }
     }
+    // Reconcile the compute DAG with the new pass set (a renderer with a
+    // compute pass was toggled on/off, e.g. clip vectors). Without this, a
+    // newly-added pass lives in scene.compute_passes but is never built into
+    // the DAG and never runs. Done incrementally so unchanged passes keep their
+    // converged buffers and in-flight readbacks.
+    if (compute_passes) {
+      const have = this.computeDAG ? this.computeDAG.passes : new Map();
+      const want = this.scene.compute_passes.map(p => p.id);
+      const changed = have.size !== want.length || want.some(id => !have.has(id));
+      if (changed) {
+        this._updating = true;
+        try {
+          await this._syncComputeDAG();
+        } catch (e) {
+          console.error('[engine] _syncComputeDAG failed in update():', e.message || e);
+        }
+        this._updating = false;
+      }
+    }
+
     // Rebuild render pipelines from scratch — cheap relative to a full reload.
     this._updating = true;
     this.renderPassObjects = [];
@@ -406,10 +482,17 @@ class RenderEngine {
       console.error('[engine] _createRenderPipelines failed in update():', e.message || e);
     }
     this._updating = false;
-    // Do NOT render here — the caller (Python scene.render) will call
-    // notifyDirty() + render() next.  Rendering here would produce a stale
-    // frame because the compute DAG hasn't been triggered yet (the clipping
-    // uniform has new data but compute hasn't re-run).
+    // The host dispatches this async update() WITHOUT awaiting it and then
+    // immediately calls notifyDirty()+render(); those ran while _updating was
+    // still true (pipelines mid-rebuild) and were dropped by _renderNow's guard.
+    // Now that pipelines are ready, trigger the post-update frame ourselves.
+    // notifyDirty() first so compute passes re-run — their output feeds the
+    // render pass within the same command encoder, so the frame isn't stale.
+    // (Previously this was masked whenever another renderer's compute kept a
+    // continuous render loop alive; with a compute-only renderer like clip
+    // vectors as the sole content, nothing else re-triggered a frame.)
+    this.notifyDirty();
+    this.render();
   }
 
   /**
@@ -875,7 +958,11 @@ class RenderEngine {
       if (pass.indexBuffer) {
         renderPass.setIndexBuffer(pass.indexBuffer, pass.indexFormat);
       }
-      if (pass.drawIndirect) {
+      if (pass.drawIndirect && pass.indexBuffer) {
+        // Indexed geometry (e.g. arrow glyphs) with a GPU-computed instance
+        // count: 5-u32 indirect buffer filled by the countThenFill pass.
+        renderPass.drawIndexedIndirect(pass.indirectBuffer, 0);
+      } else if (pass.drawIndirect) {
         renderPass.drawIndirect(pass.indirectBuffer, 0);
       } else if (pass.indexBuffer) {
         renderPass.drawIndexed(pass.vertexCount, pass.instanceCount);

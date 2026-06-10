@@ -25,13 +25,21 @@ def capture_scene(scene, live: bool = False) -> ExportScene:
 
 def capture_scene_live(scene):
     """Capture a Scene in live mode and return (ExportScene, BufferRegistry)."""
-    return _capture(scene, live=True)
+    from .format import StableResourceIds
+    # Persist the id allocator on the scene so resource ids stay stable across
+    # the repeated live captures (a fresh registry per capture would otherwise
+    # renumber buffers whenever the render-object set changes).
+    alloc = getattr(scene, "_live_id_allocator", None)
+    if alloc is None:
+        alloc = StableResourceIds()
+        scene._live_id_allocator = alloc
+    return _capture(scene, live=True, id_allocator=alloc)
 
 
-def _capture(scene, live: bool):
+def _capture(scene, live: bool, id_allocator=None):
     from ..renderer import Renderer, MultipleRenderer
 
-    registry = BufferRegistry(live=live)
+    registry = BufferRegistry(live=live, id_allocator=id_allocator)
     render_passes = []
     compute_passes = []
 

@@ -375,6 +375,11 @@ class Scene:
                 "textures":       textures,
                 "samplers":       samplers,
                 "frame_buffers":  frame_buffers,
+                # The buffer registry reassigns string ids each capture, so the
+                # camera's id can change when the render-object set changes. Send
+                # the fresh camera so the engine re-resolves _cameraBufferId
+                # instead of writing camera data to a stale (wrong-sized) buffer.
+                "camera":         descriptor["camera"],
             }))
 
     def _handle_input_event_and_ack(self, event):

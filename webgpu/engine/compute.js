@@ -52,9 +52,11 @@ function buildLayoutEntries(bindings, visibility, shader) {
 }
 
 // Built-in shader: cap the indirect instanceCount at the output buffer capacity.
+// instanceCount lives at index 1 of both the 4-u32 drawIndirect layout and the
+// 5-u32 drawIndexedIndirect layout, so a runtime-sized array handles both.
 const CAP_INDIRECT_SHADER = `
 @group(0) @binding(0) var<storage, read_write> counter: atomic<u32>;
-@group(0) @binding(1) var<storage, read_write> indirect: array<u32, 4>;
+@group(0) @binding(1) var<storage, read_write> indirect: array<u32>;
 @group(0) @binding(2) var<uniform> max_instances: u32;
 
 @compute @workgroup_size(1)
@@ -79,8 +81,8 @@ class ComputeDAG {
     this._resizedBufferIds = new Set(); // buffer IDs that JS resized (Python refs are stale)
   }
 
-  addPass(id, { shader, bindings, workgroups, triggers, resetBuffers, indirectSetup, countThenFill }) {
-    this.passes.set(id, { shader, bindings, workgroups, triggers: triggers || [], resetBuffers: resetBuffers || [], indirectSetup: indirectSetup || null, countThenFill: countThenFill || null });
+  addPass(id, { shader, bindings, workgroups, triggers, resetBuffers, indirectSetup, countThenFill, entryPoint }) {
+    this.passes.set(id, { shader, bindings, workgroups, triggers: triggers || [], resetBuffers: resetBuffers || [], indirectSetup: indirectSetup || null, countThenFill: countThenFill || null, entryPoint: entryPoint || 'main' });
     this._checkCycles();
   }
 
@@ -116,6 +118,7 @@ class ComputeDAG {
       const pass = this.passes.get(id);
       const pipeline = this.pipelines.get(id);
       const bindGroup = this.bindGroups.get(id);
+      if (!pipeline || !bindGroup) continue;  // pass skipped (pipeline build failed)
 
       // Bump generation — this pass has re-executed
       this._executeGen.set(id, (this._executeGen.get(id) || 0) + 1);
@@ -214,70 +217,115 @@ class ComputeDAG {
     }
 
     for (const [id, pass] of this.passes) {
-      const module = device.createShaderModule({ code: pass.shader });
+      await this._initPass(device, buffers, id);
+    }
+  }
 
-      // Build explicit layout — parse shader for read_write bindings
-      const vis = GPUShaderStage.COMPUTE;
-      const layoutEntries = buildLayoutEntries(pass.bindings, vis, pass.shader);
-      const bindGroupLayout = device.createBindGroupLayout({ entries: layoutEntries });
-      const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  /**
+   * Build the pipeline, owned buffers, bind group, staging + cap state for a
+   * single pass. Used by initPipelines() and by incremental sync (addPass of a
+   * newly-toggled renderer) so a new pass can start running without tearing
+   * down and rebuilding the whole DAG (which would discard other passes'
+   * already-converged owned buffers and invalidate in-flight references).
+   */
+  async _initPass(device, buffers, id) {
+    const pass = this.passes.get(id);
+    if (!pass) return;
+    const module = device.createShaderModule({ code: pass.shader });
 
-      const pipeline = await device.createComputePipelineAsync({
+    // Build explicit layout — parse shader for read_write bindings
+    const vis = GPUShaderStage.COMPUTE;
+    const layoutEntries = buildLayoutEntries(pass.bindings, vis, pass.shader);
+    const bindGroupLayout = device.createBindGroupLayout({ entries: layoutEntries });
+    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+    let pipeline;
+    try {
+      pipeline = await device.createComputePipelineAsync({
         layout: pipelineLayout,
-        compute: { module, entryPoint: "main" },
+        compute: { module, entryPoint: pass.entryPoint || "main" },
       });
-      this.pipelines.set(id, pipeline);
+    } catch (e) {
+      console.error(`[ComputeDAG] compute pipeline '${id}' (entry=${pass.entryPoint || 'main'}) failed:`, e.message || e);
+      return;
+    }
+    this.pipelines.set(id, pipeline);
 
-      // For countThenFill passes, the JS engine owns the output buffer.
-      // Create it at minimal size BEFORE building the bind group so the
-      // bind group references the JS-owned buffer (not Python's placeholder).
-      if (pass.countThenFill) {
-        const ctf = pass.countThenFill;
-        const minSize = ctf.elementSize || 64;
-        const ownedBuf = device.createBuffer({
-          size: minSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-          label: ctf.outputId,
+    // For countThenFill passes, the JS engine owns the output buffer.
+    // Create it at minimal size BEFORE building the bind group so the
+    // bind group references the JS-owned buffer (not Python's placeholder).
+    if (pass.countThenFill) {
+      const ctf = pass.countThenFill;
+      // Output buffers may be consumed by a render pass as STORAGE (e.g.
+      // clipping SubTrigs) or as VERTEX buffers (e.g. arrow instance arrays),
+      // so include both usages — extra flags are harmless.
+      const outUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX
+        | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
+      const makeOwned = (bid, size) => {
+        const buf = device.createBuffer({ size: Math.max(size, 4), usage: outUsage, label: bid });
+        buffers.set(bid, buf);
+        this._resizedBufferIds.add(bid);
+      };
+      // Primary output (drives the instance-count cap).
+      makeOwned(ctf.outputId, ctf.elementSize || 64);
+      // Sibling outputs, resized in lockstep with the primary.
+      for (const s of ctf.siblings || []) makeOwned(s.id, s.elementSize);
+
+      // Also create the indirect buffer (JS-owned). Indexed draws use the
+      // 5-u32 drawIndexedIndirect layout (20 bytes); non-indexed use 4 (16).
+      if (ctf.indirectId) {
+        const indirectBuf = device.createBuffer({
+          size: ctf.indexed ? 20 : 16,
+          usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+          label: ctf.indirectId,
         });
-        buffers.set(ctf.outputId, ownedBuf);
-        this._resizedBufferIds.add(ctf.outputId);
-
-        // Also create the indirect buffer (JS-owned for drawIndirect).
-        if (ctf.indirectId) {
-          const indirectBuf = device.createBuffer({
-            size: 16,
-            usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            label: ctf.indirectId,
-          });
-          buffers.set(ctf.indirectId, indirectBuf);
-          this._resizedBufferIds.add(ctf.indirectId);
-        }
-      }
-
-      const entries = Object.entries(pass.bindings).map(([binding, bufId]) => ({
-        binding: parseInt(binding),
-        resource: { buffer: buffers.get(bufId) },
-      }));
-      const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
-        entries,
-      });
-      this.bindGroups.set(id, bindGroup);
-
-      if (pass.countThenFill) {
-        const ctf = pass.countThenFill;
-        const staging = device.createBuffer({
-          size: 4,
-          usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-          label: `${id}_staging`,
-        });
-        this.stagingBuffers.set(id, staging);
-        this._buildCapBindGroup(device, buffers, id, '_ctf', ctf);
-      }
-      if (pass.indirectSetup) {
-        this._buildCapBindGroup(device, buffers, id, '_indirect', pass.indirectSetup);
+        buffers.set(ctf.indirectId, indirectBuf);
+        this._resizedBufferIds.add(ctf.indirectId);
       }
     }
+
+    const entries = Object.entries(pass.bindings).map(([binding, bufId]) => ({
+      binding: parseInt(binding),
+      resource: { buffer: buffers.get(bufId) },
+    }));
+    const bindGroup = device.createBindGroup({
+      layout: bindGroupLayout,
+      entries,
+    });
+    this.bindGroups.set(id, bindGroup);
+
+    if (pass.countThenFill) {
+      const ctf = pass.countThenFill;
+      const staging = device.createBuffer({
+        size: 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+        label: `${id}_staging`,
+      });
+      this.stagingBuffers.set(id, staging);
+      this._buildCapBindGroup(device, buffers, id, '_ctf', ctf);
+    }
+    if (pass.indirectSetup) {
+      this._buildCapBindGroup(device, buffers, id, '_indirect', pass.indirectSetup);
+    }
+  }
+
+  /**
+   * Tear down a single pass (a renderer was toggled off). Leaves other passes
+   * and the shared buffers map untouched. Does NOT destroy the pass's owned
+   * GPU buffers — the host may still hold references during the same update —
+   * and drops any queued readback so processReadbacks() won't touch its staging.
+   */
+  removePass(id) {
+    this.passes.delete(id);
+    this.pipelines.delete(id);
+    this.bindGroups.delete(id);
+    this.stagingBuffers.delete(id);
+    this._capPipelines.delete(id + '_ctf');
+    this._capPipelines.delete(id + '_indirect');
+    this._executeGen.delete(id);
+    this._stagingGen.delete(id);
+    this._pendingReadbacks = this._pendingReadbacks.filter((p) => p !== id);
+    this.dirty.delete(id);
   }
 
   _buildCapBindGroup(device, buffers, passId, suffix, setup) {
@@ -337,20 +385,29 @@ class ComputeDAG {
         const currentBuf = buffers.get(ctf.outputId);
 
         if (neededSize > currentBuf.size || neededSize < currentBuf.size / 4) {
-          // Overallocate 2x when growing to provide headroom for rapid changes
-          // (e.g. dragging clipping slider). Shrink uses exact size.
-          const allocSize = neededSize > currentBuf.size ? neededSize * 2 : neededSize;
-          const newBuf = device.createBuffer({
-            size: allocSize,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-            label: ctf.outputId,
-          });
-          buffers.set(ctf.outputId, newBuf);
-          // Track that JS resized this buffer — Python's reference is now stale
-          // and engine.update() must not overwrite it.
-          this._resizedBufferIds.add(ctf.outputId);
-          this._rebuildBindGroups(device, buffers, ctf.outputId);
-          // Rebuild cap bind group with updated max_instances
+          // Resize the primary and every sibling to the SAME element capacity,
+          // so the shader's arrayLength(&primary) write-gate also bounds writes
+          // into the siblings. Overallocate 2x when growing to provide headroom
+          // for rapid changes (e.g. dragging the clipping slider); shrink to the
+          // exact size. Capacity is in ELEMENTS (not bytes) so a 12-byte vec3
+          // buffer and a 4-byte scalar buffer end up with matching element counts.
+          const grow = neededSize > currentBuf.size;
+          const cap = Math.max(16, grow ? count * 2 : count);
+          const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX
+            | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
+          const resizeOne = (bufId, elemSize) => {
+            const newBuf = device.createBuffer({
+              size: Math.max(cap * elemSize, 4), usage, label: bufId,
+            });
+            buffers.set(bufId, newBuf);
+            // Track that JS resized this buffer — Python's reference is now stale
+            // and engine.update() must not overwrite it.
+            this._resizedBufferIds.add(bufId);
+            this._rebuildBindGroups(device, buffers, bufId);
+          };
+          resizeOne(ctf.outputId, ctf.elementSize);
+          for (const s of ctf.siblings || []) resizeOne(s.id, s.elementSize);
+          // Rebuild cap bind group with updated max_instances (primary capacity)
           this._buildCapBindGroup(device, buffers, id, '_ctf', ctf);
           needsRerender = true;
         }
@@ -364,7 +421,12 @@ class ComputeDAG {
           const curGen = this._executeGen.get(id) || 0;
           if (staleGen >= curGen) {
             const indirectBuf = buffers.get(ctf.indirectId);
-            device.queue.writeBuffer(indirectBuf, 0, new Uint32Array([ctf.vertexCount, count, 0, 0]));
+            // Indexed: [indexCount, instanceCount, firstIndex, baseVertex, firstInstance]
+            // Non-indexed: [vertexCount, instanceCount, firstVertex, firstInstance]
+            const args = ctf.indexed
+              ? [ctf.vertexCount, count, 0, 0, 0]
+              : [ctf.vertexCount, count, 0, 0];
+            device.queue.writeBuffer(indirectBuf, 0, new Uint32Array(args));
           }
         }
       }
