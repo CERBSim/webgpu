@@ -328,6 +328,35 @@ class ComputeDAG {
     this.dirty.delete(id);
   }
 
+  /**
+   * Full teardown for a discarded scene: destroy every GPU buffer this DAG
+   * created. The countThenFill output/indirect buffers it resized live in the
+   * shared `buffers` map (the engine's id→GPUBuffer map, passed in) and are
+   * tracked in _resizedBufferIds; the staging and cap-uniform buffers are owned
+   * here. Unlike removePass(), this DOES destroy them — the scene is going away,
+   * so the host no longer holds live references.
+   */
+  dispose(buffers) {
+    for (const buf of this.stagingBuffers.values()) {
+      try { buf.destroy(); } catch (e) {}
+    }
+    for (const cap of this._capPipelines.values()) {
+      if (cap && cap.maxBuf) { try { cap.maxBuf.destroy(); } catch (e) {} }
+    }
+    if (buffers) {
+      for (const id of this._resizedBufferIds) {
+        const buf = buffers.get(id);
+        if (buf) { try { buf.destroy(); } catch (e) {} }
+      }
+    }
+    this.stagingBuffers.clear();
+    this._capPipelines.clear();
+    this._resizedBufferIds.clear();
+    this.passes.clear();
+    this.pipelines.clear();
+    this.bindGroups.clear();
+  }
+
   _buildCapBindGroup(device, buffers, passId, suffix, setup) {
     const { counterId, indirectId, outputId, elementSize } = setup;
     const counterBuf = buffers.get(counterId);

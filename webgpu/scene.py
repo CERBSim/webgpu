@@ -1,5 +1,6 @@
 import time
 import os
+import json
 import pathlib
 import threading
 from base64 import b64decode
@@ -350,6 +351,38 @@ class Scene:
             "clear_color": self._canvas_clear_color(),
         }
 
+        # Signature of everything engine.update() actually rebuilds: the pass
+        # descriptors, interactions, and the *set* of resource ids (not their
+        # contents). A transient sim redraws every timestep with new field DATA
+        # but an unchanged structure — and the data is already written to the
+        # GPU in place (device.queue.writeBuffer, called from each renderer's
+        # update() in _update_and_create_render_pipeline) before we get here.
+        # So re-shipping the descriptor and rebuilding all JS pipelines is pure
+        # overhead, and the blocking update() round-trip is what eventually
+        # trips the 120s link timeout. Skip it when nothing structural changed;
+        # render() still issues notifyDirty()+render() to show the new data.
+        # A buffer that grows gets a fresh id (the registry keys by object
+        # identity), which changes the id set here and forces a real update.
+        cam = descriptor["camera"]
+        structural_sig = json.dumps(
+            {
+                "render_passes":    descriptor["render_passes"],
+                "compute_passes":   descriptor["compute_passes"],
+                "interactions":     descriptor["interactions"],
+                "camera_buffer_id": cam.get("buffer_id") if isinstance(cam, dict) else None,
+                "buffer_ids":       sorted(buffers.keys()),
+                "texture_ids":      sorted(textures.keys()),
+                "sampler_ids":      sorted(samplers.keys()),
+                "frame_buffer_ids": sorted(frame_buffers.keys()),
+            },
+            sort_keys=True,
+            default=str,
+        )
+        if self._js_engine is not None and structural_sig == getattr(
+            self, "_installed_descriptor_sig", None
+        ):
+            return
+
         js_descriptor = platform.toJS(descriptor)
 
         # Mark renderers that have JS-side compute so they skip Python dispatch
@@ -381,6 +414,13 @@ class Scene:
                 # instead of writing camera data to a stale (wrong-sized) buffer.
                 "camera":         descriptor["camera"],
             }))
+        self._installed_descriptor_sig = structural_sig
+
+        # The engine has just rebuilt (and pruned) this.buffers to the current
+        # set, so any resource whose Python wrapper was GC'd is no longer
+        # referenced by a frame — safe to free now. Runs under the render mutex
+        # held by our caller (render()/init).
+        flush_pending_destroys()
 
     def _handle_input_event_and_ack(self, event):
         """Process a forwarded input event, then ack the JS input handler so it
@@ -618,6 +658,14 @@ class Scene:
         self.device.queue.submit([options.command_encoder.finish()])
         options.command_encoder = None
 
+        # Render-safe flush point for the direct/legacy path: this frame was
+        # drawn from the current render objects, so any resource whose Python
+        # wrapper was GC'd is no longer referenced and can be freed. Only after
+        # a full render (update_pipelines); the highlight fast-path passes
+        # update_pipelines=False and must not free engine-referenced buffers.
+        if update_pipelines:
+            flush_pending_destroys()
+
     def _canvas_clear_color(self):
         """Return the canvas clear color as [r, g, b, a] (or None)."""
         cc = getattr(self.canvas, "clear_color", None) if self.canvas else None
@@ -676,6 +724,7 @@ class Scene:
         if self._js_engine is not None:
             with self._render_mutex:
                 self.options.update_buffers()
+                self._select_buffer_valid = False
                 any_dirty = any(
                     obj.needs_update for obj in self.render_objects if obj.active
                 )

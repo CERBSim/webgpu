@@ -420,11 +420,21 @@ class RenderEngine {
     if (buffers) {
       const incoming = _toMap(buffers);
       const resized = this.computeDAG ? this.computeDAG._resizedBufferIds : new Set();
-      for (const [id, buf] of incoming) {
-        if (!resized.has(id)) {
-          this.buffers.set(id, buf);
-        }
+      // Rebuild this.buffers to exactly (engine-resized ∪ incoming host set).
+      // Any id previously held that is neither is dropped, so the engine stops
+      // referencing host buffers whose Python wrappers were freed — the host
+      // then destroys them at its render-safe flush. Without this prune the map
+      // grows forever and freed buffers would still be bound in a frame. We do
+      // NOT destroy host buffers here (the host owns them); engine-owned
+      // (resized) buffers are kept and freed in dispose().
+      const next = new Map();
+      for (const [id, buf] of this.buffers) {
+        if (resized.has(id)) next.set(id, buf);
       }
+      for (const [id, buf] of incoming) {
+        if (!resized.has(id)) next.set(id, buf);
+      }
+      this.buffers = next;
     }
     if (textures) {
       this.textures = _toMap(textures);
@@ -1150,6 +1160,13 @@ class RenderEngine {
       for (const buf of this.buffers.values()) buf.destroy();
       for (const tex of this.textures.values()) tex.destroy();
       if (this.device) this.device.destroy();
+    } else if (this.computeDAG) {
+      // Live mode: the host owns the buffers/textures it supplied and frees
+      // them itself (Python GC -> deferred flush_pending_destroys). But buffers
+      // the ENGINE created — countThenFill compute outputs it resized, plus
+      // indirect/staging/cap scratch — have no Python wrapper, so free them
+      // here or they leak each time a live scene is discarded.
+      this.computeDAG.dispose(this.buffers);
     }
   }
 }

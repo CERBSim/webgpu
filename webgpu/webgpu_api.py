@@ -9,6 +9,42 @@ from .platform import JsPromise, JsProxy, create_proxy, is_pyodide, toJS
 
 DEBUG_LABELS = False
 
+# Deferred GPU-resource destruction.
+#
+# In live mode the JS render engine references buffers/textures independently of
+# their Python wrappers, so destroying a resource the instant its wrapper is
+# garbage-collected could pull it out from under an in-flight or upcoming frame.
+# Instead ``__del__`` ENQUEUES the JS handle here, and the scene's render path
+# drains the queue via ``flush_pending_destroys()`` at a render-safe point —
+# holding the render mutex, right after the engine has pruned its buffer set.
+# GC thus drives ownership (the cache/renderers that hold a wrapper keep the
+# resource alive; the last drop frees it), while destruction stays ordered
+# after the engine has let go. deque append/popleft are atomic under the GIL.
+import collections as _collections
+
+_pending_destroys = _collections.deque()
+
+
+def _enqueue_destroy(handle):
+    """Queue a JS GPU handle for destruction at the next render-safe flush."""
+    if handle is not None:
+        _pending_destroys.append(handle)
+
+
+def flush_pending_destroys():
+    """Destroy all queued GPU handles. Call ONLY at a render-safe point: holding
+    the render mutex and after the live engine has pruned its buffer set, so no
+    frame still references them."""
+    while True:
+        try:
+            handle = _pending_destroys.popleft()
+        except IndexError:
+            return
+        try:
+            handle.destroy()
+        except Exception:
+            pass
+
 # decorator to print number of JS calls
 def print_communications(func):
     import functools
@@ -1197,11 +1233,19 @@ class Buffer(BaseWebGPUHandle):
         self.handle.destroy()
 
     def __del__(self):
-        # Do NOT auto-destroy: in live JS engine mode, the engine may still
-        # reference this buffer after the Python wrapper is GC'd.
-        # Buffers are destroyed explicitly via create_buffer(reuse=old) when
-        # a larger allocation is needed.
-        pass
+        # Python GC owns lifetime: when the last wrapper is collected the buffer
+        # is no longer needed. We don't destroy here (GC timing could race a live
+        # engine frame, and taking the render lock in __del__ risks deadlock);
+        # instead queue the handle for a render-safe flush. Guard against
+        # interpreter shutdown, where platform/JS is already gone.
+        if sys is None or getattr(sys, "meta_path", None) is None:
+            return
+        handle = self.__dict__.get("handle")
+        if handle is not None:
+            try:
+                _enqueue_destroy(handle)
+            except Exception:
+                pass
 
 
 class CommandEncoder(BaseWebGPUHandle):
@@ -1862,5 +1906,12 @@ class Texture(BaseWebGPUHandle):
         return handle.destroy()
 
     def __del__(self):
-        # Do NOT auto-destroy: the JS engine may still reference this texture.
-        pass
+        # Defer to a render-safe flush; see Buffer.__del__.
+        if sys is None or getattr(sys, "meta_path", None) is None:
+            return
+        handle = self.__dict__.get("handle")
+        if handle is not None:
+            try:
+                _enqueue_destroy(handle)
+            except Exception:
+                pass
