@@ -940,6 +940,34 @@ class RenderEngine {
 
     const canvasTexture = this.context.getCurrentTexture();
 
+    // Reconcile our MSAA/depth attachments to the ACTUAL swapchain size. The
+    // canvas backing store (which getCurrentTexture() follows) is also resized by
+    // the host (Python Canvas.resize) on layout changes, independently of our
+    // handleResize(). Between those two events a frame would mix a fresh
+    // swapchain with a stale-size MSAA target — WebGPU rejects the whole command
+    // buffer ("resolve target size does not match the other attachments" + a
+    // flood of "[Invalid CommandBuffer]"). Recreating on mismatch here makes the
+    // render pass self-consistent every frame, whoever triggered the resize.
+    if (!this.msaaTexture
+        || this.msaaTexture.width !== canvasTexture.width
+        || this.msaaTexture.height !== canvasTexture.height) {
+      const w = canvasTexture.width, h = canvasTexture.height;
+      if (this.depthTexture) this.depthTexture.destroy();
+      if (this.msaaTexture) this.msaaTexture.destroy();
+      this.depthTexture = device.createTexture({
+        size: [w, h], format: DEPTH_FORMAT,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT, sampleCount: SAMPLE_COUNT,
+        label: 'depth',
+      });
+      this.msaaTexture = device.createTexture({
+        size: [w, h], format: this.canvasFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT, sampleCount: SAMPLE_COUNT,
+        label: 'msaa',
+      });
+      this.width = w; this.height = h;
+      this._updateCameraBuffer();   // refresh aspect/width/height for the new size
+    }
+
     const renderPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.msaaTexture.createView(),

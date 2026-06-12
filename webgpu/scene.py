@@ -479,6 +479,8 @@ class Scene:
         with self._render_mutex:
             select_texture = self.canvas.select_texture
             bytes_per_row = (select_texture.width * 16 + 255) // 256 * 256
+            x = min(max(int(x), 0), int(select_texture.width) - 1)
+            y = min(max(int(y), 0), int(select_texture.height) - 1)
 
             options = self.options
             options.update_buffers()
@@ -567,6 +569,8 @@ class Scene:
         with self._render_mutex:
             select_texture = self.canvas.select_texture
             bytes_per_row = (select_texture.width * 16 + 255) // 256 * 256
+            x = min(max(int(x), 0), int(select_texture.width) - 1)
+            y = min(max(int(y), 0), int(select_texture.height) - 1)
 
             options = self.options
             options.update_buffers()
