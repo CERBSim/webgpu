@@ -92,6 +92,19 @@ function isPrimitiveDict(obj) {
   return true;
 }
 
+function hasFunctionValue(obj) {
+  for (let key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      try {
+        if (typeof obj[key] === 'function') return true;
+      } catch (e) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function createProxy(link, id, parent_id, ignore_return = false) {
   const target = ignore_return
     ? function (...args) {
@@ -308,7 +321,7 @@ class CrossLink {
       return data;
     }
 
-    if (data.constructor === Object) {
+    if (data.constructor === Object && !hasFunctionValue(data)) {
       const result = {};
       await Promise.all(
         Object.keys(data).map(async (key) => {
@@ -318,7 +331,7 @@ class CrossLink {
       return result;
     }
 
-    // complex type - store it in objects only send its id
+    // complex type (or a plain object carrying methods) - store it and send its id
     const id = this.counter++;
     this.objects[id] = data;
     return {
