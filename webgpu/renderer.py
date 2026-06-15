@@ -344,7 +344,8 @@ class MultipleRenderer(BaseRenderer):
             # since check_timestamp won't be called on them directly.
             if hasattr(r, "_timestamp") and hasattr(options, "timestamp"):
                 r._timestamp = options.timestamp
-            r.create_render_pipeline(options)
+            if r.active:
+                r.create_render_pipeline(options)
 
     def render(self, options: RenderOptions) -> None:
         self.render_opaque(options)
