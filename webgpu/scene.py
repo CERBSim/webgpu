@@ -303,6 +303,10 @@ class Scene:
             return
         RenderEngine = platform.js.RenderEngine
 
+        canvas = self.canvas
+        if canvas is None:
+            return
+
         from .export.capture import capture_scene_live, build_live_resource_maps
         from dataclasses import asdict
 
@@ -333,9 +337,9 @@ class Scene:
             )
 
         descriptor = {
-            "device": self.canvas.device.handle,
-            "context": self.canvas.context,
-            "canvasFormat": self.canvas.format,
+            "device": canvas.device.handle,
+            "context": canvas.context,
+            "canvasFormat": canvas.format,
             "buffers": buffers,
             "textures": textures,
             "samplers": samplers,
@@ -392,7 +396,7 @@ class Scene:
                     obj._js_compute = True
 
         if self._js_engine is None:
-            promise = RenderEngine.createLive(self.canvas.canvas, js_descriptor)
+            promise = RenderEngine.createLive(canvas.canvas, js_descriptor)
             # In Pyodide we get a JsPromise; in websocket mode the call is sync.
             try:
                 self._js_engine = promise.syncify() if hasattr(promise, 'syncify') else promise
