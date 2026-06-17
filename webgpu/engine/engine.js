@@ -396,6 +396,30 @@ class RenderEngine {
     });
   }
 
+  _ensureCaptureTexture() {
+    const w = this.width, h = this.height;
+    if (!this._captureTex || this._captureTex.width !== w || this._captureTex.height !== h) {
+      if (this._captureTex) this._captureTex.destroy();
+      this._captureTex = this.device.createTexture({
+        size: [w, h],
+        format: this.canvasFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+        label: 'capture-target',
+      });
+    }
+    return this._captureTex;
+  }
+
+  enableHeadlessCapture() {
+    this._headless = true;
+    this._ensureCaptureTexture();
+    return this._captureTex;
+  }
+
+  captureTexture() {
+    return this._ensureCaptureTexture();
+  }
+
   /**
    * Push updated render/compute pass descriptors and rebuild pipelines.
    * Used by the host (Python) when the renderer set or its options change.
@@ -918,6 +942,7 @@ class RenderEngine {
    * processed when it runs.
    */
   render() {
+    if (this._headless) { this._renderNow(); return; }
     if (this._renderScheduled) return;
     if (typeof requestAnimationFrame === 'undefined') { this._renderNow(); return; }
     this._renderScheduled = true;
@@ -927,7 +952,7 @@ class RenderEngine {
     });
   }
 
-  _renderNow() {
+  _renderNow(captureTarget = null) {
     if (!this.device || !this.context) return;
     if (this.width === 0 || this.height === 0) return;
     if (this._updating) return;
@@ -938,7 +963,8 @@ class RenderEngine {
     // Run compute passes
     this.computeDAG.execute(device, encoder, this.buffers);
 
-    const canvasTexture = this.context.getCurrentTexture();
+    const target = captureTarget || (this._headless ? this._ensureCaptureTexture() : null);
+    const canvasTexture = target || this.context.getCurrentTexture();
 
     // Reconcile our MSAA/depth attachments to the ACTUAL swapchain size. The
     // canvas backing store (which getCurrentTexture() follows) is also resized by
@@ -971,7 +997,7 @@ class RenderEngine {
     const renderPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.msaaTexture.createView(),
-        resolveTarget: canvasTexture.createView(),
+        resolveTarget: (target || canvasTexture).createView(),
         loadOp: 'clear',
         storeOp: 'store',
         clearValue: this.clearColor || LIGHT_CLEAR_COLOR,

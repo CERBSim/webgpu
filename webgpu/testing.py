@@ -251,11 +251,28 @@ class WebGPUTestEnv:
         from webgpu import platform
 
         engine = getattr(scene, '_js_engine', None)
+        if engine is None and getattr(scene, '_use_js_engine', False):
+            try:
+                scene._install_live_engine()
+                engine = getattr(scene, '_js_engine', None)
+            except Exception as e:
+                print(f"warning: JS engine install failed, using Python path: {e}")
+                engine = None
+
         if engine is not None:
-            engine.render()
+            engine.enableHeadlessCapture()
             w, h = scene.canvas.width, scene.canvas.height
             fmt = str(scene.canvas.format)
-            tex = scene.canvas.context.getCurrentTexture()
+            # count-then-fill renderers (e.g. clipping) size their output buffer
+            # reactively: a render's async counter readback resizes the buffer and
+            # the next render fills it. That readback only progresses when the GPU
+            # queue is ticked, so a plain wait isn't enough over the bridge — pump a
+            # tiny readback after each render to drive it to convergence before we
+            # capture (matches the interactive path, where the lag is not noticeable).
+            for _ in range(5):
+                engine.render()
+                platform.js._doReadback(scene.device.handle, engine.captureTexture(), 8, 8)
+            tex = engine.captureTexture()
         else:
             # Ensure target_texture reflects current scene state.
             # The debounced scene.render() from _draw_scene may not have
