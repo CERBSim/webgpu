@@ -477,7 +477,10 @@ class Scene:
         objects = self.render_objects
 
         with self._render_mutex:
-            select_texture = self.canvas.select_texture
+            canvas = self.canvas
+            select_texture = canvas.select_texture if canvas is not None else None
+            if select_texture is None:
+                return None
             bytes_per_row = (select_texture.width * 16 + 255) // 256 * 256
             x = min(max(int(x), 0), int(select_texture.width) - 1)
             y = min(max(int(y), 0), int(select_texture.height) - 1)
@@ -567,7 +570,10 @@ class Scene:
             return
 
         with self._render_mutex:
-            select_texture = self.canvas.select_texture
+            canvas = self.canvas
+            select_texture = canvas.select_texture if canvas is not None else None
+            if select_texture is None:
+                return None
             bytes_per_row = (select_texture.width * 16 + 255) // 256 * 256
             x = min(max(int(x), 0), int(select_texture.width) - 1)
             y = min(max(int(y), 0), int(select_texture.height) - 1)
@@ -687,9 +693,10 @@ class Scene:
             return
         # Live engine: uniforms already written; just redraw (a Python render
         # here would fight the engine for the canvas).
-        if self._js_engine is not None:
+        engine = self._js_engine
+        if engine is not None:
             try:
-                self._js_engine.render()
+                engine.render()
             except Exception as e:
                 print(f"warning: js_engine.render() failed: {e}")
             return
@@ -743,13 +750,16 @@ class Scene:
                             obj._update_and_create_render_pipeline(self.options)
                     self._install_live_engine()  # idempotent → engine.update()
                     self._installed_active_set = active_ids
+            engine = self._js_engine
+            if engine is None:
+                return
             try:
                 cc = self._canvas_clear_color()
                 if cc is not None and cc != getattr(self, "_pushed_clear_color", None):
-                    self._js_engine.setClearColor(platform.toJS(cc))
+                    engine.setClearColor(platform.toJS(cc))
                     self._pushed_clear_color = cc
-                self._js_engine.notifyDirty(None)
-                self._js_engine.render()
+                engine.notifyDirty(None)
+                engine.render()
             except Exception as e:
                 print(f'warning: js_engine.render() failed: {e}')
             return
