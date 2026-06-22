@@ -571,9 +571,27 @@ def uniform_from_array(array, label="", reuse: Buffer | None = None) -> Buffer:
     )
 
 
+_host_dirty_buffers: dict = {}
+
+
+def mark_buffer_dirty(buffer):
+    """Record a host-written GPU buffer so its dependent compute passes re-run."""
+    if buffer is not None:
+        _host_dirty_buffers[id(buffer)] = buffer
+
+
+def take_dirty_buffers():
+    """Return and clear the buffers host-written since the last call."""
+    global _host_dirty_buffers
+    dirty = list(_host_dirty_buffers.values())
+    _host_dirty_buffers = {}
+    return dirty
+
+
 def write_array_to_buffer(buffer: Buffer, array):
     device = get_device()
     device.queue.writeBuffer(buffer, 0, array.tobytes())
+    mark_buffer_dirty(buffer)
 
 
 class ReadBuffer:

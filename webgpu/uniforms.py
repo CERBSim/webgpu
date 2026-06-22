@@ -10,7 +10,7 @@ CAUTION:
 
 import ctypes as ct
 
-from .utils import BaseBinding, UniformBinding, get_device
+from .utils import BaseBinding, UniformBinding, get_device, mark_buffer_dirty
 from .webgpu_api import BufferUsage, Device
 
 
@@ -81,6 +81,7 @@ class UniformBase(ct.Structure):
             return
         get_device().queue.writeBuffer(self._buffer, 0, data)
         self._last_update_values = data
+        mark_buffer_dirty(self._buffer)
 
     def get_bindings(self) -> list[BaseBinding]:
         self._ensure_buffer()

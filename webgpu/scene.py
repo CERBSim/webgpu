@@ -9,7 +9,7 @@ from . import platform
 from .canvas import Canvas, debounce
 from .input_handler import InputHandler
 from .renderer import BaseRenderer, RenderOptions, SelectEvent
-from .utils import max_bounding_box, read_buffer, read_texture, Lock, print_communications
+from .utils import max_bounding_box, read_buffer, read_texture, Lock, print_communications, take_dirty_buffers
 from .platform import is_pyodide, is_pyodide_main_thread
 from .webgpu_api import *
 from .camera import Camera
@@ -80,6 +80,9 @@ class Scene:
             _default_use_js_engine if use_js_engine is None else bool(use_js_engine)
         )
         self._show_gui_controls = bool(show_gui_controls)
+        # Latest live buffer registry (set on each capture). render() uses it to
+        # map host-written buffers to engine ids for targeted compute re-triggers.
+        self._registry = None
 
     def __getstate__(self):
         """Return picklable state so scenes can be serialized between processes/notebooks."""
@@ -111,6 +114,7 @@ class Scene:
         self._select_running = False
         self._use_js_engine = state.get("use_js_engine", _default_use_js_engine)
         self._show_gui_controls = state.get("show_gui_controls", True)
+        self._registry = None
 
         if is_pyodide:
             _scenes_by_id[self._id] = self
@@ -312,6 +316,10 @@ class Scene:
 
         with self._render_mutex:
             export, registry = capture_scene_live(self)
+
+        # Keep the registry so render() can resolve host-written buffers (clip
+        # plane, grid size, …) to engine ids for targeted compute re-triggers.
+        self._registry = registry
 
         buffers, textures, samplers, frame_buffers = build_live_resource_maps(registry)
 
@@ -762,8 +770,18 @@ class Scene:
                 if cc is not None and cc != getattr(self, "_pushed_clear_color", None):
                     engine.setClearColor(platform.toJS(cc))
                     self._pushed_clear_color = cc
+                dirty_bufs = take_dirty_buffers()
                 if any_dirty:
                     engine.notifyDirty(None)
+                elif dirty_bufs and self._registry is not None:
+                    ids = []
+                    for buf in dirty_bufs:
+                        try:
+                            ids.append(self._registry.get_id(buf))
+                        except KeyError:
+                            pass  # buffer not in the engine (e.g. CPU-only) — skip
+                    if ids:
+                        engine.notifyDirty(ids)
                 engine.render()
             except Exception as e:
                 print(f'warning: js_engine.render() failed: {e}')
