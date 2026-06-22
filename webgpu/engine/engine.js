@@ -246,6 +246,7 @@ class RenderEngine {
       // (indexCount, instanceCount, firstIndex, baseVertex, firstInstance)
       // instead of the 4-u32 drawIndirect layout.
       indexed: !!cp.count_then_fill.indexed,
+      initialCount: cp.count_then_fill.initial_count || 0,
       // siblings: extra output buffers resized in lockstep with the primary
       // from the same counter (e.g. a vector's positions/directions/values
       // arrays). Each: { id, elementSize }. The primary (outputId) still

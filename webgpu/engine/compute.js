@@ -266,10 +266,16 @@ class ComputeDAG {
         buffers.set(bid, buf);
         this._resizedBufferIds.add(bid);
       };
+      // Pre-size to the producer's known element count when supplied, so a
+      // static count-then-fill (e.g. surface arrows, toggled once) fills every
+      // element on the first frame rather than relying on the async-readback
+      // resize to converge over several frames. Defaults to the 1-element
+      // bootstrap when no hint is given (the readback resize then grows it).
+      const initElems = (ctf.initialCount && ctf.initialCount > 0) ? ctf.initialCount : 1;
       // Primary output (drives the instance-count cap).
-      makeOwned(ctf.outputId, ctf.elementSize || 64);
+      makeOwned(ctf.outputId, (ctf.elementSize || 64) * initElems);
       // Sibling outputs, resized in lockstep with the primary.
-      for (const s of ctf.siblings || []) makeOwned(s.id, s.elementSize);
+      for (const s of ctf.siblings || []) makeOwned(s.id, s.elementSize * initElems);
 
       // Also create the indirect buffer (JS-owned). Indexed draws use the
       // 5-u32 drawIndexedIndirect layout (20 bytes); non-indexed use 4 (16).

@@ -762,7 +762,8 @@ class Scene:
                 if cc is not None and cc != getattr(self, "_pushed_clear_color", None):
                     engine.setClearColor(platform.toJS(cc))
                     self._pushed_clear_color = cc
-                engine.notifyDirty(None)
+                if any_dirty:
+                    engine.notifyDirty(None)
                 engine.render()
             except Exception as e:
                 print(f'warning: js_engine.render() failed: {e}')
