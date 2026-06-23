@@ -189,6 +189,10 @@ class Scene:
 
         self._render_mutex = Lock(True) if is_pyodide else canvas._update_mutex
 
+        js_mode = self._use_js_engine and not os.environ.get("WEBGPU_TESTING")
+        for obj in self.render_objects:
+            obj._render_via_js = js_mode
+
         with self._render_mutex:
             self.options.timestamp = time.time()
             self.options.update_buffers()
@@ -755,6 +759,11 @@ class Scene:
                     id(obj) for obj in self.render_objects if obj.active
                 )
                 if any_dirty or active_ids != getattr(self, "_installed_active_set", None):
+                    # Live engine here → renderers may run their compute GPU-side;
+                    # set the flag before any (re)compute so a toggled-on renderer
+                    # skips its blocking Python bootstrap.
+                    for obj in self.render_objects:
+                        obj._render_via_js = True
                     if any_dirty:
                         self.options.timestamp = time.time()
                     for obj in self.render_objects:

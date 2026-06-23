@@ -394,7 +394,15 @@ class ShapeRenderer(Renderer):
             self.total_height_buffer,
         ]
 
-        direction_stride = 0 if self.directions_buffer._used_size // 4 == 3 else 12
+        # A renderer with per-instance directions (e.g. vectors using
+        # count-then-fill) must stride 12 even when the buffer is momentarily a
+        # single element (the count-then-fill bootstrap), otherwise stride 0
+        # broadcasts directions[0] to every instance → all arrows point the same
+        # way. Only the genuine "one constant direction for all" case uses 0.
+        per_instance = getattr(self, "_directions_per_instance", False)
+        direction_stride = 12 if per_instance else (
+            0 if self.directions_buffer._used_size // 4 == 3 else 12
+        )
         direction_imag_stride = 0 if self.directions_imag_buffer._used_size // 4 <= 3 else 12
 
         self.vertex_buffer_layouts = [
