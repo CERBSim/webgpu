@@ -132,43 +132,62 @@ class Scene:
             Path(path).write_bytes(blob)
         return blob
 
-    def save_screenshot(self, filename: str):
+    def save_screenshot(self, filename: str, width=None, height=None, scale=None):
         """Save a screenshot of the current rendered frame to *filename*.
 
-        Supports both the live JS engine path and the legacy Python render
-        path.  The file format is inferred from the extension (e.g. ".png").
+        By default the frame is captured at the on-screen canvas resolution.
+        Pass *width*/*height* to render at a custom resolution, or *scale* as a
+        convenience supersample factor relative to the canvas size (e.g.
+        ``scale=2`` for a 2x image). The file format is inferred from the
+        extension (e.g. ".png").
+
+        Custom resolutions require the JS engine (the default backend); the
+        legacy Python render path only supports the canvas resolution.
         """
         import numpy as np
 
         if self.canvas is None or self.canvas.width == 0 or self.canvas.height == 0:
             raise RuntimeError("Cannot save screenshot: no canvas or canvas has zero size")
 
+        cw, ch = self.canvas.width, self.canvas.height
+        if scale is not None and width is None and height is None:
+            width, height = round(cw * scale), round(ch * scale)
+        out_w, out_h = width or cw, height or ch
+        custom = (out_w, out_h) != (cw, ch)
+
         if self._js_engine is not None:
-            # JS engine renders directly to the canvas texture.
-            # Use captureFrameBuffer() which renders a frame, does GPU readback
-            # on the JS side, and returns the raw pixel ArrayBuffer.
-            data_bytes = self._js_engine.captureFrameBuffer()
-            width = self.canvas.width
-            height = self.canvas.height
+            # JS engine renders a frame, does GPU readback on the JS side, and
+            # returns the raw pixel ArrayBuffer. captureFrameBufferAt() renders
+            # to an offscreen target at the requested resolution.
+            if custom:
+                data_bytes = self._js_engine.captureFrameBufferAt(out_w, out_h)
+            else:
+                data_bytes = self._js_engine.captureFrameBuffer()
             fmt = str(self.canvas.format)
-            data = np.frombuffer(data_bytes, dtype=np.uint8).reshape((height, width, 4))
+            data = np.frombuffer(data_bytes, dtype=np.uint8).reshape((out_h, out_w, 4))
             if fmt == "bgra8unorm":
                 data = data[:, :, [2, 1, 0, 3]]
         else:
+            if custom:
+                raise NotImplementedError(
+                    "Custom-resolution screenshots require the JS engine; the "
+                    "legacy Python render path only supports the canvas resolution."
+                )
             # Legacy Python render path: render to target_texture, then readback.
             with self._render_mutex:
                 self._render_objects(to_canvas=False)
             data = read_texture(self.canvas.target_texture)
+            out_h, out_w = data.shape[:2]
 
         path = pathlib.Path(filename)
         fmt_ext = path.suffix[1:]  # e.g. "png"
 
         canvas_el = platform.js.document.createElement("canvas")
-        canvas_el.width = self.canvas.width
-        canvas_el.height = self.canvas.height
+        canvas_el.width = out_w
+        canvas_el.height = out_h
         ctx = canvas_el.getContext("2d")
         u8 = platform.js.Uint8ClampedArray._new(data.tobytes())
-        image_data = platform.js.ImageData._new(u8, self.canvas.width, self.canvas.height)
+        image_data = platform.js.ImageData._new(u8, out_w, out_h)
         ctx.putImageData(image_data, 0, 0)
         canvas_el.remove()
         path.write_bytes(b64decode(canvas_el.toDataURL(fmt_ext).split(",")[1]))
