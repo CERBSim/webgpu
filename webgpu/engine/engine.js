@@ -388,7 +388,32 @@ class RenderEngine {
    * (not nested in an object) so it transfers correctly through the bridge.
    * Width/height/format should be read from the canvas separately.
    */
-  captureFrameBuffer() {
+  /**
+   * Drive count-then-fill passes to convergence. Each pass starts with a tiny
+   * output buffer and grows it from a GPU-read atomic counter over several
+   * frames; in the live GUI that happens across animation frames, but a one-shot
+   * capture (screenshot, headless test) has no such loop — so we render and
+   * await processReadbacks() in a loop here until no pass resizes any more. This
+   * is what makes count-then-fill fields (e.g. clipping/surface vectors) appear
+   * in screenshots and headless renders instead of coming out blank.
+   */
+  async settle(maxIterations = 32) {
+    if (!this.computeDAG) return 0;
+    // Force the count-then-fill passes to (re)run so they can converge.
+    this.notifyDirty(null);
+    let i = 0;
+    for (; i < maxIterations; i++) {
+      this._renderNow(null, /*autoReadback=*/false);
+      const resized = await this.computeDAG.processReadbacks(
+        this.device, this.buffers, () => this._rebuildRenderBindGroups()
+      );
+      if (!resized) break;
+    }
+    return i;
+  }
+
+  async captureFrameBuffer() {
+    await this.settle();
     return new Promise((resolve) => {
       (this._frameCaptureRequests = this._frameCaptureRequests || []).push(
         ({ data }) => resolve(data)
@@ -953,7 +978,7 @@ class RenderEngine {
     });
   }
 
-  _renderNow(captureTarget = null) {
+  _renderNow(captureTarget = null, autoReadback = true) {
     if (!this.device || !this.context) return;
     if (this.width === 0 || this.height === 0) return;
     if (this._updating) return;
@@ -1084,11 +1109,14 @@ class RenderEngine {
       });
     }
 
-    // Async readback for count-then-fill passes
-    this.computeDAG.processReadbacks(this.device, this.buffers, () => {
-      this._rebuildRenderBindGroups();
-      this.render();
-    });
+    // Async readback for count-then-fill passes. Skipped when a caller drives
+    // the readbacks itself (settle()) to converge synchronously.
+    if (autoReadback) {
+      this.computeDAG.processReadbacks(this.device, this.buffers, () => {
+        this._rebuildRenderBindGroups();
+        this.render();
+      });
+    }
   }
 
   // =========================================================================

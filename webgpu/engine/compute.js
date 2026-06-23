@@ -397,8 +397,8 @@ class ComputeDAG {
   }
 
   async processReadbacks(device, buffers, onRerender) {
-    if (this._pendingReadbacks.length === 0) return;
-    if (this._readbackInFlight) return;
+    if (this._pendingReadbacks.length === 0) return false;
+    if (this._readbackInFlight) return false;
 
     const passIds = [...this._pendingReadbacks];
     this._pendingReadbacks = [];
@@ -456,11 +456,19 @@ class ComputeDAG {
           const curGen = this._executeGen.get(id) || 0;
           if (staleGen >= curGen) {
             const indirectBuf = buffers.get(ctf.indirectId);
+            // If we just resized, the output buffer is freshly allocated and
+            // EMPTY — the fill runs on the next frame (onRerender re-marks the
+            // trigger). Drawing `count` instances now would read uninitialized
+            // slots → garbage positions/directions (the random-vectors / jump
+            // bug). Draw 0 until the refill; the next execute's cap shader sets
+            // the real count. When no resize happened the buffer already holds
+            // `count` filled instances, so write it.
+            const instanceCount = needsRerender ? 0 : count;
             // Indexed: [indexCount, instanceCount, firstIndex, baseVertex, firstInstance]
             // Non-indexed: [vertexCount, instanceCount, firstVertex, firstInstance]
             const args = ctf.indexed
-              ? [ctf.vertexCount, count, 0, 0, 0]
-              : [ctf.vertexCount, count, 0, 0];
+              ? [ctf.vertexCount, instanceCount, 0, 0, 0]
+              : [ctf.vertexCount, instanceCount, 0, 0];
             device.queue.writeBuffer(indirectBuf, 0, new Uint32Array(args));
           }
         }
@@ -481,6 +489,9 @@ class ComputeDAG {
       }
       onRerender();
     }
+    // Report whether a resize happened so a synchronous driver (settle()) knows
+    // the count-then-fill hasn't converged yet and must render again.
+    return needsRerender;
   }
 
   _rebuildBindGroups(device, buffers, changedBufferId) {
