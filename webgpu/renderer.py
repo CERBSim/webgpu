@@ -298,8 +298,6 @@ class BaseRenderer:
 
     @active.setter
     def active(self, value):
-        if value != self._active:
-            self.set_needs_update()
         self._active = value
 
     def set_needs_update(self) -> None:

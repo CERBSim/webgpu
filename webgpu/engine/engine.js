@@ -425,6 +425,58 @@ class RenderEngine {
     });
   }
 
+  /**
+   * Like captureFrameBuffer(), but renders at an arbitrary width×height
+   * (e.g. for high-resolution screenshots) instead of the on-screen canvas
+   * size. We render into a throwaway offscreen target with matching MSAA/depth
+   * attachments and a camera aspect for width×height, then restore engine state
+   * in finally(). The visible canvas (swapchain) is never touched, so the
+   * on-screen view is unaffected.
+   */
+  async captureFrameBufferAt(width, height) {
+    // Settle at the current size — count-then-fill is resolution-independent.
+    await this.settle();
+
+    const prevW = this.width, prevH = this.height;
+    const prevDepth = this.depthTexture, prevMsaa = this.msaaTexture;
+
+    const captureTex = this.device.createTexture({
+      size: [width, height], format: this.canvasFormat,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+      label: 'capture-custom',
+    });
+    // Size MSAA/depth + camera to width×height so the render pass is
+    // self-consistent and _renderNow's reconciliation branch is a no-op
+    // (its attachments already match the target size).
+    this.width = width; this.height = height;
+    this.depthTexture = this.device.createTexture({
+      size: [width, height], format: DEPTH_FORMAT,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT, sampleCount: SAMPLE_COUNT,
+      label: 'depth-capture',
+    });
+    this.msaaTexture = this.device.createTexture({
+      size: [width, height], format: this.canvasFormat,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT, sampleCount: SAMPLE_COUNT,
+      label: 'msaa-capture',
+    });
+    this._updateCameraBuffer(width, height);
+
+    try {
+      return await new Promise((resolve) => {
+        (this._frameCaptureRequests = this._frameCaptureRequests || []).push(
+          ({ data }) => resolve(data)
+        );
+        this._renderNow(captureTex);            // render to offscreen width×height target
+      });
+    } finally {
+      captureTex.destroy();
+      this.depthTexture.destroy(); this.msaaTexture.destroy();
+      this.depthTexture = prevDepth; this.msaaTexture = prevMsaa;
+      this.width = prevW; this.height = prevH;
+      this._updateCameraBuffer();               // restore on-screen camera aspect
+    }
+  }
+
   _ensureCaptureTexture() {
     const w = this.width, h = this.height;
     if (!this._captureTex || this._captureTex.width !== w || this._captureTex.height !== h) {
@@ -915,9 +967,9 @@ class RenderEngine {
   // Camera
   // =========================================================================
 
-  _updateCameraBuffer() {
+  _updateCameraBuffer(w, h) {
     const buf = this.camera.updateUniforms(
-      this.canvas.width || 1, this.canvas.height || 1
+      w || this.canvas.width || 1, h || this.canvas.height || 1
     );
     if (!buf) return;
 
