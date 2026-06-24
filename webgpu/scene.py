@@ -266,7 +266,9 @@ class Scene:
         if self._js_engine is not None:
             camera.unregister_callbacks(self.input_handler)
             self.input_handler.set_engine_mode(True)
-            camera.register_dblclick_center(self.input_handler, self.get_position)
+            camera.register_dblclick_center(
+                self.input_handler, self.get_position, on_center=self._center_camera_on
+            )
             self.options.skip_camera_buffer_write = True
         else:
             self.input_handler.set_engine_mode(False)
@@ -482,6 +484,31 @@ class Scene:
         else:
             self.input_handler.set_canvas(None)
 
+    def _center_camera_on(self, p):
+        """Double-click recenter on world point *p*."""
+        eng = self._js_engine
+        if eng is None:
+            self.options.camera.transform.set_center(p)
+            self.options.camera._notify_observers()
+            return
+        try:
+            eng.setCenter(platform.toJS([float(c) for c in p]))
+        except Exception as e:
+            print(f"warning: js_engine.setCenter() failed: {e}")
+
+    def _render_select_via_engine(self, canvas):
+        """Have the live JS engine render the object-id/pick buffer into our
+        select textures so picking reuses the engine's real (compute-filled)
+        buffers. The host still reads the texture back (caller). Best-effort:
+        on failure the select buffer is simply left cleared."""
+        try:
+            self._js_engine.renderSelectInto(
+                platform.toJS(canvas.select_texture),
+                platform.toJS(canvas.select_depth_texture),
+            )
+        except Exception as e:
+            print(f"warning: js_engine.renderSelectInto() failed: {e}")
+
     def get_position(self, x: int, y: int):
         """Return the 3D position under canvas pixel (x, y) using the selection buffer."""
         if self.canvas is None or self.canvas.height == 0:
@@ -502,13 +529,16 @@ class Scene:
             options.command_encoder = self.device.createCommandEncoder()
 
             if not self._select_buffer_valid:
-                for obj in objects:
-                    if obj.active:
-                        obj._update_and_create_render_pipeline(options)
+                if self._js_engine is not None:
+                    self._render_select_via_engine(canvas)
+                else:
+                    for obj in objects:
+                        if obj.active:
+                            obj._update_and_create_render_pipeline(options)
 
-                for obj in objects:
-                    if obj.active:
-                        obj.select(options, x, y)
+                    for obj in objects:
+                        if obj.active:
+                            obj.select(options, x, y)
 
                 self._select_buffer_valid = True
 
@@ -595,13 +625,16 @@ class Scene:
             options.command_encoder = self.device.createCommandEncoder()
 
             if not self._select_buffer_valid:
-                for obj in objects:
-                    if obj.active:
-                        obj._update_and_create_render_pipeline(options)
+                if self._js_engine is not None:
+                    self._render_select_via_engine(canvas)
+                else:
+                    for obj in objects:
+                        if obj.active:
+                            obj._update_and_create_render_pipeline(options)
 
-                for obj in objects:
-                    if obj.active:
-                        obj.select(options, x, y)
+                    for obj in objects:
+                        if obj.active:
+                            obj.select(options, x, y)
 
                 self._select_buffer_valid = True
 

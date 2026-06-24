@@ -69,6 +69,8 @@ class ExportRenderPass:
     vertex_buffers: list = field(default_factory=list)
     index_buffer_id: str | None = None
     index_format: str = "uint32"
+    select_shader: str | None = None
+    select_entry_point: str | None = None
 
 
 @dataclass

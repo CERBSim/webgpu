@@ -9,6 +9,9 @@ const DARK_CLEAR_COLOR  = Object.freeze({ r: 0.8078, g: 0.8392, b: 0.8667, a: 1.
 const LIGHT_CANVAS_BG = '#ffffff';
 const DARK_CANVAS_BG  = '#ced6dd';
 const DEPTH_FORMAT = 'depth24plus';
+// Object-id / pick texture format. Matches Python canvas.select_format. The
+// select pass renders into a host-owned texture of this format (non-MSAA).
+const SELECT_FORMAT = 'rgba32uint';
 
 const TRANSPARENT_BLEND = {
   color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
@@ -590,6 +593,26 @@ class RenderEngine {
     }
   }
 
+  /**
+   * Live-mode hook: recenter the camera on a world-space point (double-click).
+   *
+   * Applied to the engine's OWN (authoritative) camera using its current
+   * matrix, so the view-translate and the rotation pivot (_center) update
+   * together and can't desync. Doing this host-side instead — pushing a
+   * Python-computed matrix+center via setCameraTransform — risks the pivot and
+   * the matrix disagreeing, which makes the next rotate orbit the old center
+   * and visibly snap the view back. The move is notified to the host so its
+   * camera mirror (used for picking/bookmarks) stays in sync.
+   */
+  setCenter(point) {
+    if (!this.camera || !point) return;
+    this.camera.transform.setCenter(Array.from(point));
+    this._updateCameraBuffer();
+    if (this._cameraBufferId) this.computeDAG.markDirty(this._cameraBufferId);
+    this.render();
+    this._notifyCameraChanged(true);
+  }
+
   /** Live-mode hook: host sets the background clear color [r,g,b,a] (0..1). */
   setClearColor(rgba) {
     this._clearColorOverride = rgba || null;
@@ -835,6 +858,11 @@ class RenderEngine {
       enabled: true,
       pipeline,
       bindGroup,
+      // Kept so the select pipeline can reuse the exact same explicit layout
+      // (→ the same bind group is valid for both render and select pipelines)
+      // and so _rebuildRenderBindGroups rebuilds against a stable layout.
+      bindGroupLayout,
+      vertexBufferLayouts,
       vertexCount: rp.vertex_count,
       instanceCount: rp.instance_count,
       drawIndirect: !!rp.draw_indirect,
@@ -842,6 +870,14 @@ class RenderEngine {
       vertexBufferRefs,
       indexBuffer,
       indexFormat,
+      // Select (object-id/pick) pass metadata; pipeline built lazily in
+      // _ensureSelectPipelines(). null shader → this pass is not pickable.
+      selectShader: rp.select_shader || null,
+      selectEntryPoint: rp.select_entry_point || null,
+      vertexEntryPoint: rp.vertex_entry_point || 'vertex_main',
+      topology: rp.topology || 'triangle-list',
+      depthBias: rp.depth_bias || 0,
+      selectPipeline: null,
     };
   }
 
@@ -935,7 +971,10 @@ class RenderEngine {
       const rp = this.scene.render_passes[i];
       const bindings = this._intKeyBindings(rp.bindings);
       const entries = this._buildBindGroupEntries(bindings);
-      const layout = this.renderPassObjects[i].pipeline.getBindGroupLayout(0);
+      // Use the explicit layout the render pipeline was built with — the select
+      // pipeline shares it, so the rebuilt bind group stays valid for both.
+      const layout = this.renderPassObjects[i].bindGroupLayout
+        || this.renderPassObjects[i].pipeline.getBindGroupLayout(0);
       this.renderPassObjects[i].bindGroup = this.device.createBindGroup({
         layout, entries, label: rp.id,
       });
@@ -950,6 +989,122 @@ class RenderEngine {
         this.renderPassObjects[i].indexBuffer = this.buffers.get(rp.index_buffer_id);
       }
     }
+  }
+
+  // =========================================================================
+  // Select (object-id / pick) pass
+  // =========================================================================
+
+  /**
+   * Lazily build a "select" render pipeline for every pass that declared a
+   * select shader. It reuses the pass's explicit bind-group layout (so the
+   * pass's existing bind group is valid as-is) and renders the SELECT_PIPELINE
+   * shader variant into an rgba32uint object-id target with a non-MSAA depth
+   * buffer. Rebuilt automatically after update()/_createRenderPipelines, which
+   * replace renderPassObjects (selectPipeline resets to null).
+   */
+  _ensureSelectPipelines() {
+    if (!this.renderPassObjects) return;
+    const device = this.device;
+    for (const po of this.renderPassObjects) {
+      if (po.selectPipeline === 'failed') continue;  // don't retry a bad pass every select
+      if (po.selectPipeline || !po.selectShader || !po.selectEntryPoint) continue;
+      try {
+        const module = device.createShaderModule({ code: po.selectShader, label: po.id + '-select' });
+        const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [po.bindGroupLayout] });
+        po.selectPipeline = device.createRenderPipeline({
+          layout: pipelineLayout,
+          vertex: { module, entryPoint: po.vertexEntryPoint, buffers: po.vertexBufferLayouts },
+          // Integer (uint) targets cannot blend.
+          fragment: { module, entryPoint: po.selectEntryPoint, targets: [{ format: SELECT_FORMAT }] },
+          primitive: { topology: po.topology },
+          // Always write/test depth so the front-most object wins per pixel,
+          // even for passes that are transparent in the visible render.
+          depthStencil: {
+            format: DEPTH_FORMAT,
+            depthWriteEnabled: true,
+            depthCompare: 'less',
+            depthBias: po.depthBias || 0,
+          },
+          multisample: { count: 1 },
+          label: po.id + '-select',
+        });
+      } catch (e) {
+        console.warn('[engine] select pipeline build failed for', po.id, e && (e.message || e));
+        po.selectPipeline = 'failed';
+      }
+    }
+  }
+
+  /**
+   * Live-mode hook: render the object-id / pick buffer into host-owned textures.
+   *
+   * The host (Python Scene._do_select / get_position) owns the select color +
+   * depth textures and reads a pixel back itself; we just populate them. Unlike
+   * the host's own Python select path, this reuses every pass's real GPU
+   * buffers — including the ones the compute DAG filled (clip cross-section
+   * cut_trigs + its indirect draw count, surface/clip vectors, …) — so the pick
+   * buffer matches exactly what is drawn on screen. colorTexture must be
+   * SELECT_FORMAT; depthTexture must be DEPTH_FORMAT; both non-MSAA and the same
+   * size as the canvas.
+   */
+  renderSelectInto(colorTexture, depthTexture) {
+    if (!this.device || !this.computeDAG) return;
+    if (!colorTexture || !depthTexture) return;
+    this._ensureSelectPipelines();
+
+    const device = this.device;
+    const encoder = device.createCommandEncoder();
+
+    // Do NOT run the compute DAG here. The on-screen render loop owns the
+    // execute()→processReadbacks() convergence cycle for count-then-fill passes
+    // (clip cross-section, surface/clip vectors); running execute() out-of-band
+    // from this hover-triggered path consumes the dirty set, bumps generation
+    // counters and schedules readbacks at the wrong time, breaking that
+    // convergence (vectors stop drawing, stale geometry appears mid-gesture).
+    // The select pass only reads the already-filled buffers, so reuse them
+    // as-is — the latest on-screen frame has populated them.
+
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: colorTexture.createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
+      }],
+      depthStencilAttachment: {
+        view: depthTexture.createView(),
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+        depthClearValue: 1.0,
+      },
+    });
+
+    for (const po of this.renderPassObjects) {
+      if (po.enabled === false || !po.selectPipeline || po.selectPipeline === 'failed') continue;
+      pass.setPipeline(po.selectPipeline);
+      pass.setBindGroup(0, po.bindGroup);
+      if (po.vertexBufferRefs) {
+        for (let i = 0; i < po.vertexBufferRefs.length; i++) {
+          pass.setVertexBuffer(i, po.vertexBufferRefs[i]);
+        }
+      }
+      if (po.indexBuffer) {
+        pass.setIndexBuffer(po.indexBuffer, po.indexFormat);
+      }
+      if (po.drawIndirect && po.indexBuffer) {
+        pass.drawIndexedIndirect(po.indirectBuffer, 0);
+      } else if (po.drawIndirect) {
+        pass.drawIndirect(po.indirectBuffer, 0);
+      } else if (po.indexBuffer) {
+        pass.drawIndexed(po.vertexCount, po.instanceCount);
+      } else {
+        pass.draw(po.vertexCount, po.instanceCount);
+      }
+    }
+
+    pass.end();
+    device.queue.submit([encoder.finish()]);
   }
 
   // =========================================================================

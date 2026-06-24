@@ -598,6 +598,12 @@ class Renderer(BaseRenderer):
             else:
                 buf_id = buffer_registry._buffers[key][0]
             index_buffer_id = buf_id
+        select_shader = None
+        select_entry_point = None
+        if self.select_entry_point:
+            select_shader = self._get_preprocessed_shader_code({"SELECT_PIPELINE": "1"})
+            select_entry_point = self.select_entry_point
+
         return ExportRenderPass(
             id=f"render_{self._id}",
             shader=self._get_preprocessed_shader_code(),
@@ -613,6 +619,8 @@ class Renderer(BaseRenderer):
             vertex_buffers=vb_descriptors,
             index_buffer_id=index_buffer_id,
             index_format=index_format,
+            select_shader=select_shader,
+            select_entry_point=select_entry_point,
         )
 
     def get_export_compute_passes(self, options, buffer_registry):

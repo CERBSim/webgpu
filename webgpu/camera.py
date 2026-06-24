@@ -317,17 +317,26 @@ class Camera:
         input_handler.on_dblclick(handlers['dblclick'], ctrl=False, shift=False, alt=False)
         input_handler.on_wheel(handlers['wheel'], ctrl=False, shift=False, alt=False)
 
-    def register_dblclick_center(self, input_handler, get_position_fn):
+    def register_dblclick_center(self, input_handler, get_position_fn, on_center=None):
         """Register only the double-click-to-center handler (used in JS-engine
-        mode, where rotate/pan/zoom are handled in the browser)."""
+        mode, where rotate/pan/zoom are handled in the browser).
+
+        ``on_center(p)`` overrides how the picked world point is applied. In
+        JS-engine mode this routes the recenter to the engine's authoritative
+        camera (so the view-translate and rotation pivot stay consistent);
+        without it the centering is applied to this Python camera directly.
+        """
         self.unregister_dblclick_center(input_handler)
 
         def on_dblclick(ev):
             if get_position_fn:
                 p = get_position_fn(ev["canvasX"], ev["canvasY"])
                 if p is not None:
-                    self.transform.set_center(p)
-                    self._notify_observers()
+                    if on_center is not None:
+                        on_center(p)
+                    else:
+                        self.transform.set_center(p)
+                        self._notify_observers()
 
         self._dblclick_handlers[id(input_handler)] = on_dblclick
         input_handler.on_dblclick(on_dblclick, ctrl=False, shift=False, alt=False)
