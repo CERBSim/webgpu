@@ -119,6 +119,7 @@ class RenderOptions:
         mvp, _ = self._camera_uniforms.update(
             self.camera.transform, self.canvas,
             write_buffer=not self.skip_camera_buffer_write,
+            orthographic=self.camera.orthographic,
         )
         if mvp is not None:
             self.model_view_proj = mvp

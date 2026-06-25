@@ -193,6 +193,7 @@ class Transform {
 class Camera {
   constructor() {
     this.transform = new Transform();
+    this.orthographic = false;
     this._observers = [];
   }
 
@@ -234,29 +235,42 @@ class Camera {
   updateUniforms(width, height) {
     if (height === 0) return null;
 
-    // --- Projection (matches Python exactly) ---
-    const near = 0.1, far = 10, fov = 45;
+    // --- Projection (matches Python camera.py exactly) ---
+    const near = 0.1, far = 10, fov = 45, focal = 3;
     const aspect = width / height;
     const zoom = 1.0;
-    const top = near * Math.tan(fov * DEG2RAD / 2) * zoom;
-    const h = 2 * top;
-    const w = aspect * h;
-    const left = -0.5 * w;
-    const right = left + w;
-    const bottom = top - h;
-
-    const px = 2 * near / (right - left);
-    const py = 2 * near / (top - bottom);
-    const a = (right + left) / (right - left);
-    const b = (top + bottom) / (top - bottom);
-    const c = -far / (far - near);
-    const d = (-far * near) / (far - near);
 
     const proj = new Float64Array(16);
-    proj[0] = px; proj[2] = a;
-    proj[5] = py; proj[6] = b;
-    proj[10] = c; proj[11] = d;
-    proj[14] = -1;
+    if (this.orthographic) {
+      // Parallel projection: half-height matches perspective at the focal plane.
+      const top = focal * Math.tan(fov * DEG2RAD / 2) * zoom;
+      const h = 2 * top;
+      const w = aspect * h;
+      proj[0] = 2 / w;
+      proj[5] = 2 / h;
+      proj[10] = -1 / (far - near);
+      proj[11] = -near / (far - near);
+      proj[15] = 1;
+    } else {
+      const top = near * Math.tan(fov * DEG2RAD / 2) * zoom;
+      const h = 2 * top;
+      const w = aspect * h;
+      const left = -0.5 * w;
+      const right = left + w;
+      const bottom = top - h;
+
+      const px = 2 * near / (right - left);
+      const py = 2 * near / (top - bottom);
+      const a = (right + left) / (right - left);
+      const b = (top + bottom) / (top - bottom);
+      const c = -far / (far - near);
+      const d = (-far * near) / (far - near);
+
+      proj[0] = px; proj[2] = a;
+      proj[5] = py; proj[6] = b;
+      proj[10] = c; proj[11] = d;
+      proj[14] = -1;
+    }
 
     // --- View matrix: identity with z-translation = -3 ---
     const view = mat4Identity();

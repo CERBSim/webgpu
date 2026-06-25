@@ -665,6 +665,15 @@ class RenderEngine {
     this._notifyCameraChanged(true);
   }
 
+  /** Live-mode hook: host switches between orthographic and perspective. */
+  setProjection(orthographic) {
+    if (!this.camera) return;
+    this.camera.orthographic = !!orthographic;
+    this._updateCameraBuffer();
+    if (this._cameraBufferId) this.computeDAG.markDirty(this._cameraBufferId);
+    this.render();
+  }
+
   /** Live-mode hook: host sets the background clear color [r,g,b,a] (0..1). */
   setClearColor(rgba) {
     this._clearColorOverride = rgba || null;
@@ -1157,6 +1166,16 @@ class RenderEngine {
 
     pass.end();
     device.queue.submit([encoder.finish()]);
+
+    // Return the exact camera transform the depth was rendered with, so the
+    // host reconstructs pick positions with a matching model_view_projection.
+    // (Browser-side zoom/pan reach the host's camera mirror only via the
+    // debounced on_camera_changed, so without this the host's matrix can lag
+    // the rendered depth and pick coordinates come out mis-scaled.)
+    return {
+      matrix: Array.from(this.camera.transform._mat),
+      center: Array.from(this.camera.transform._center),
+    };
   }
 
   // =========================================================================

@@ -521,10 +521,13 @@ class Scene:
         buffers. The host still reads the texture back (caller). Best-effort:
         on failure the select buffer is simply left cleared."""
         try:
-            self._js_engine.renderSelectInto(
+            cam = self._js_engine.renderSelectInto(
                 platform.toJS(canvas.select_texture),
                 platform.toJS(canvas.select_depth_texture),
             )
+            # Sync the Python camera mirror to the transform the engine used for picking
+            if self._set_camera_transform_from_payload(cam):
+                self.options.update_buffers()
         except Exception as e:
             print(f"warning: js_engine.renderSelectInto() failed: {e}")
 
@@ -920,6 +923,7 @@ class Scene:
                     platform.toJS(t._mat.flatten().tolist()),
                     platform.toJS(list(center)),
                 )
+                self._js_engine.setProjection(self.options.camera.orthographic)
             except Exception as e:
                 print(f"warning: js_engine.setCameraTransform() failed: {e}")
             return
@@ -929,27 +933,33 @@ class Scene:
             self.options.update_buffers()
         self.render()
 
-    def _apply_camera_from_js(self, payload):
-        """Mirror a JS-engine camera move back into the Python camera (for
-        bookmarks/screenshots/picking). Does not re-render or push back to JS."""
+    def _set_camera_transform_from_payload(self, payload):
+        """Apply an engine camera payload ({matrix, center}) to the Python
+        camera mirror. Returns True on success."""
         import numpy as np
 
         try:
-            try:
-                import pyodide.ffi
+            import pyodide.ffi
 
-                if isinstance(payload, pyodide.ffi.JsProxy):
-                    payload = payload.to_py()
-            except ImportError:
-                pass
-            mat = list(payload["matrix"])
-            center = list(payload["center"])
-            t = self.options.camera.transform
-            t._mat = np.array(mat, dtype=float).reshape(4, 4)
-            t._center = np.array(center, dtype=float)
-            if self._render_mutex is not None:
-                with self._render_mutex:
-                    self._select_buffer_valid = False
+            if isinstance(payload, pyodide.ffi.JsProxy):
+                payload = payload.to_py()
+        except ImportError:
+            pass
+        if not payload:
+            return False
+        t = self.options.camera.transform
+        t._mat = np.array(list(payload["matrix"]), dtype=float).reshape(4, 4)
+        t._center = np.array(list(payload["center"]), dtype=float)
+        return True
+
+    def _apply_camera_from_js(self, payload):
+        """Mirror a JS-engine camera move back into the Python camera (for
+        bookmarks/screenshots/picking). Does not re-render or push back to JS."""
+        try:
+            if self._set_camera_transform_from_payload(payload):
+                if self._render_mutex is not None:
+                    with self._render_mutex:
+                        self._select_buffer_valid = False
         except Exception as e:
             print(f"warning: apply camera from js failed: {e}")
 

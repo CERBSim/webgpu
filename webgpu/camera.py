@@ -3,6 +3,67 @@ import numpy as np
 from .uniforms import BaseBinding, Binding, UniformBase, ct
 from .utils import read_shader_file, Lock
 
+# Shared frustum constants. The camera sits at distance FOCAL from the world
+# origin (the view matrix translates z by -FOCAL); content is scaled to ~unit
+# size by the transform, so NEAR/FAR comfortably bracket it.
+NEAR = 0.1
+FAR = 10
+FOV = 45
+FOCAL = 3
+
+
+def _projection_matrix(aspect, orthographic=False, zoom=1.0):
+    """Build the 4x4 projection matrix for the current aspect ratio.
+
+    Perspective and orthographic share the same vertical field of view: the
+    orthographic half-height is the perspective half-height measured at the
+    focal plane (distance FOCAL from the camera), so both projections render the
+    centered content at the same on-screen size.
+    """
+    if orthographic:
+        top = FOCAL * np.tan(np.radians(FOV) / 2) * zoom
+        height = 2 * top
+        width = aspect * height
+
+        x = 2 / width
+        y = 2 / height
+        c = -1 / (FAR - NEAR)
+        d = -NEAR / (FAR - NEAR)
+
+        return np.array(
+            [
+                [x, 0, 0, 0],
+                [0, y, 0, 0],
+                [0, 0, c, d],
+                [0, 0, 0, 1],
+            ]
+        )
+
+    top = NEAR * (np.tan(np.radians(FOV) / 2)) * zoom
+    height = 2 * top
+    width = aspect * height
+    left = -0.5 * width
+    right = left + width
+    bottom = top - height
+
+    x = 2 * NEAR / (right - left)
+    y = 2 * NEAR / (top - bottom)
+
+    a = (right + left) / (right - left)
+    b = (top + bottom) / (top - bottom)
+
+    c = -FAR / (FAR - NEAR)
+    d = (-FAR * NEAR) / (FAR - NEAR)
+
+    return np.array(
+        [
+            [x, 0, a, 0],
+            [0, y, b, 0],
+            [0, 0, c, d],
+            [0, 0, -1, 0],
+        ]
+    )
+
 
 class CameraUniforms(UniformBase):
     """Uniforms class, derived from ctypes.Structure to ensure correct memory layout"""
@@ -21,49 +82,24 @@ class CameraUniforms(UniformBase):
         ("dpr", ct.c_float),
     ]
 
-    def update(self, transform, canvas, write_buffer=True):
+    def update(self, transform, canvas, write_buffer=True, orthographic=False):
         """Recompute projection/model-view matrices from transform and canvas dimensions.
 
         Returns (model_view_proj, model_view) matrices, or (None, None) if canvas is unavailable.
 
         With ``write_buffer`` False the matrices are computed but the GPU buffer
         is not uploaded (JS-engine mode, where the browser owns the camera).
+
+        With ``orthographic`` True a parallel projection is used instead of the
+        perspective default.
         """
         if canvas is None or canvas.height == 0:
             return None, None
 
-        near = 0.1
-        far = 10
-        fov = 45
         aspect = canvas.width / canvas.height
+        proj_mat = _projection_matrix(aspect, orthographic)
 
-        zoom = 1.0
-        top = near * (np.tan(np.radians(fov) / 2)) * zoom
-        height = 2 * top
-        width = aspect * height
-        left = -0.5 * width
-        right = left + width
-        bottom = top - height
-
-        x = 2 * near / (right - left)
-        y = 2 * near / (top - bottom)
-
-        a = (right + left) / (right - left)
-        b = (top + bottom) / (top - bottom)
-
-        c = -far / (far - near)
-        d = (-far * near) / (far - near)
-
-        proj_mat = np.array(
-            [
-                [x, 0, a, 0],
-                [0, y, b, 0],
-                [0, 0, c, d],
-                [0, 0, -1, 0],
-            ]
-        )
-
-        view_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, -3], [0, 0, 0, 1]])
+        view_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, -FOCAL], [0, 0, 0, 1]])
         model_view = view_mat @ transform.mat
         model_view_proj = proj_mat @ model_view
         normal_mat = np.linalg.inv(model_view)
@@ -218,6 +254,7 @@ class Camera:
 
     def __init__(self):
         self.transform = Transform()
+        self.orthographic = False
         self._observers = []
         self._observers_lock = Lock()
         self._is_moving = False
@@ -226,8 +263,9 @@ class Camera:
         self._dblclick_handlers = {}
 
     def __setstate__(self, state):
-        """Restore pickled camera state (only the transform)."""
+        """Restore pickled camera state (transform and projection mode)."""
         self.transform = state["transform"]
+        self.orthographic = state.get("orthographic", False)
         self._observers = []
         self._observers_lock = Lock()
         self._is_moving = False
@@ -237,7 +275,18 @@ class Camera:
 
     def __getstate__(self):
         """Return a minimal picklable representation of the camera."""
-        return {"transform": self.transform}
+        return {"transform": self.transform, "orthographic": self.orthographic}
+
+    def set_orthographic(self, value: bool):
+        """Switch between orthographic and perspective projection.
+
+        Notifies observers (which pushes the change to the JS engine in
+        JS-engine mode) only when the mode actually changes.
+        """
+        value = bool(value)
+        if value != self.orthographic:
+            self.orthographic = value
+            self._notify_observers()
 
     def register_observer(self, callback):
         """Register a callback to be called when the camera transform changes.
