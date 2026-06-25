@@ -158,7 +158,7 @@ class ShapeUniforms(UniformBase):
 
 class ShapeComplexUniform(UniformBase):
     _binding = 11
-    _fields_ = [("phase", ct.c_float), ("is_complex", ct.c_uint32), ("color_override", ct.c_uint32), ("padding", ct.c_float)]
+    _fields_ = [("phase", ct.c_float), ("is_complex", ct.c_uint32), ("color_override", ct.c_uint32), ("mode", ct.c_uint32)]
 
 
 class ShapeRenderer(Renderer):
@@ -403,7 +403,14 @@ class ShapeRenderer(Renderer):
         direction_stride = 12 if per_instance else (
             0 if self.directions_buffer._used_size // 4 == 3 else 12
         )
-        direction_imag_stride = 0 if self.directions_imag_buffer._used_size // 4 <= 3 else 12
+        imag_per_instance = (
+            per_instance
+            and self._complex_uniforms is not None
+            and self._complex_uniforms.is_complex == 1
+        )
+        direction_imag_stride = 12 if imag_per_instance else (
+            0 if self.directions_imag_buffer._used_size // 4 <= 3 else 12
+        )
 
         self.vertex_buffer_layouts = [
             VertexBufferLayout(

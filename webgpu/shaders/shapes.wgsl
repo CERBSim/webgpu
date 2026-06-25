@@ -35,7 +35,9 @@ struct ShapeComplexUniform {
     phase: f32,
     is_complex: u32,
     color_override: u32,
-    padding: f32,
+    // 0 = phase-rotate (real/imag/animation), 1 = abs, 2 = arg. Matches
+    // ngsolve_webgpu ComplexSettings so the UI's complex mode applies to arrows.
+    mode: u32,
 };
 @group(0) @binding(11) var<uniform> u_shape_complex: ShapeComplexUniform;
 
@@ -47,12 +49,23 @@ struct ShapeComplexUniform {
     let i0 = 2 * instance_index * 3;
     let pstart = vert.instance_position;
 
-    // Combine real and imag directions based on complex phase
     var v: vec3f;
     if u_shape_complex.is_complex == 1u {
-        let c = cos(u_shape_complex.phase);
-        let s = sin(u_shape_complex.phase);
-        v = vert.instance_direction * c - vert.instance_direction_imag * s;
+        let re = vert.instance_direction;
+        let im = vert.instance_direction_imag;
+        switch u_shape_complex.mode {
+            case 1u: { // abs: per-component magnitude
+                v = sqrt(re * re + im * im);
+            }
+            case 2u: { // arg: per-component phase angle
+                v = atan2(im, re);
+            }
+            default: { // phase-rotate (real/imag/animation)
+                let c = cos(u_shape_complex.phase);
+                let s = sin(u_shape_complex.phase);
+                v = re * c - im * s;
+            }
+        }
     } else {
         v = vert.instance_direction;
     }
