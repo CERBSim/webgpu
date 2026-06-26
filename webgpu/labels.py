@@ -68,6 +68,33 @@ class Labels(Renderer):
         if self.font is not None and self._text_color is not None:
             self.font.set_color(self._text_color)
 
+    def get_theme_label_target(self, registry):
+        """Expose the font color uniform for theme-dependent defaulting.
+
+        When the app left the label color at the default (neither per-label
+        ``colors`` nor ``text_color`` were set), the engine should pick a color
+        based on the canvas background so the text stays legible: black on a
+        light background, off-white on a dark one. Returns the buffer id and
+        byte offset of the color field, or ``None`` when a color was set
+        explicitly (in which case the app's choice is respected).
+        """
+        if self.colors is not None or self._text_color is not None:
+            return None
+        if self.font is None or self.font.uniforms is None:
+            return None
+        buf = self.font.uniforms._buffer
+        if buf is None:
+            return None
+        key = id(buf)
+        if key not in registry._buffers:
+            return None
+        from .font import FontUniforms
+
+        return {
+            "buffer_id": registry._buffers[key][0],
+            "offset": FontUniforms.color.offset,
+        }
+
     def update(self, options: RenderOptions):
         n_chars = sum(len(label) for label in self.labels)
         n_labels = len(self.labels)

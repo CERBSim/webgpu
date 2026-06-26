@@ -8,6 +8,8 @@ const LIGHT_CLEAR_COLOR = Object.freeze({ r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
 const DARK_CLEAR_COLOR  = Object.freeze({ r: 0.8078, g: 0.8392, b: 0.8667, a: 1.0 });
 const LIGHT_CANVAS_BG = '#ffffff';
 const DARK_CANVAS_BG  = '#ced6dd';
+const LIGHT_LABEL_COLOR = Object.freeze([0.0, 0.0, 0.0]);
+const DARK_LABEL_COLOR  = Object.freeze([0.9, 0.9, 0.9]);
 const DEPTH_FORMAT = 'depth24plus';
 // Object-id / pick texture format. Matches Python canvas.select_format. The
 // select pass renders into a host-owned texture of this format (non-MSAA).
@@ -1412,6 +1414,16 @@ class RenderEngine {
       if (buf) {
         const c = this.clearColor;
         this.device.queue.writeBuffer(buf, 16, new Float32Array([c.r, c.g, c.b]));
+      }
+    }
+    if (this.scene && this.scene.theme && Array.isArray(this.scene.theme.label_buffers)) {
+      const c = this.clearColor;
+      const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+      const labelColor = Float32Array.from(lum < 0.5 ? DARK_LABEL_COLOR : LIGHT_LABEL_COLOR);
+      for (const lb of this.scene.theme.label_buffers) {
+        if (!lb || !lb.buffer_id) continue;
+        const buf = this.buffers && this.buffers.get(lb.buffer_id);
+        if (buf) this.device.queue.writeBuffer(buf, lb.offset | 0, labelColor);
       }
     }
   }

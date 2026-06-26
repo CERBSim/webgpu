@@ -116,13 +116,27 @@ def _capture_renderer(obj, options, registry, render_passes, compute_passes):
 
 
 def _export_theme(scene, registry) -> dict:
-    """Find any renderer's buffer for theme color updates."""
-    from ..renderer import Renderer
+    """Find renderer buffers that the engine should update on theme changes.
+
+    ``buffer_id`` is the (optional) colorbar background buffer. ``label_buffers``
+    lists font-color targets for labels that left their color at the default, so
+    the engine can pick a theme-appropriate text color (black on a light canvas,
+    off-white on a dark one).
+    """
+    theme = {}
     for obj in scene.render_objects:
         buf_id = _find_theme_buffer(obj, registry)
         if buf_id:
-            return {"buffer_id": buf_id}
-    return {}
+            theme["buffer_id"] = buf_id
+            break
+
+    label_targets = []
+    seen = set()
+    for obj in scene.render_objects:
+        _collect_theme_label_targets(obj, registry, label_targets, seen)
+    if label_targets:
+        theme["label_buffers"] = label_targets
+    return theme
 
 
 def _find_theme_buffer(obj, registry) -> str | None:
@@ -135,6 +149,24 @@ def _find_theme_buffer(obj, registry) -> str | None:
             if buf_id:
                 return buf_id
     return None
+
+
+def _collect_theme_label_targets(obj, registry, out, seen):
+    """Recursively gather font-color targets for theme-defaulted labels."""
+    if obj is None or id(obj) in seen:
+        return
+    seen.add(id(obj))
+    if hasattr(obj, 'get_theme_label_target'):
+        target = obj.get_theme_label_target(registry)
+        if target and target["buffer_id"] not in {t["buffer_id"] for t in out}:
+            out.append(target)
+    if hasattr(obj, 'render_objects'):
+        for child in obj.render_objects:
+            _collect_theme_label_targets(child, registry, out, seen)
+    if hasattr(obj, 'gpu_objects'):
+        for child in obj.gpu_objects:
+            if child is not obj:
+                _collect_theme_label_targets(child, registry, out, seen)
 
 
 def _export_camera(camera, options, registry) -> dict:
