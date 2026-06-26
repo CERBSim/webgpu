@@ -73,6 +73,7 @@ class Scene:
         self._js_engine = None
         self._on_event_proxy = None
         self._on_camera_changed_proxy = None
+        self._camera_change_from_js = False
         self._select_lock = threading.Lock()
         self._pending_select = None
         self._select_running = False
@@ -109,6 +110,7 @@ class Scene:
         self._js_engine = None
         self._on_event_proxy = None
         self._on_camera_changed_proxy = None
+        self._camera_change_from_js = False
         self._select_lock = threading.Lock()
         self._pending_select = None
         self._select_running = False
@@ -904,6 +906,10 @@ class Scene:
         engine if live, else update the uniform and re-render (legacy)."""
         if self.canvas is None:
             return
+        # When the change originated in the JS engine (a drag), the engine's
+        # camera is already correct
+        if self._camera_change_from_js:
+            return
         html_canvas = self.canvas.canvas
         if html_canvas is None:
             return
@@ -953,13 +959,23 @@ class Scene:
         return True
 
     def _apply_camera_from_js(self, payload):
-        """Mirror a JS-engine camera move back into the Python camera (for
-        bookmarks/screenshots/picking). Does not re-render or push back to JS."""
+        """Mirror a JS-engine camera move back into the Python camera and fire the
+        camera observers so camera-dependent renderers re-dispatch."""
         try:
-            if self._set_camera_transform_from_payload(payload):
-                if self._render_mutex is not None:
-                    with self._render_mutex:
-                        self._select_buffer_valid = False
+            if not self._set_camera_transform_from_payload(payload):
+                return
+            if self._render_mutex is not None:
+                with self._render_mutex:
+                    self._select_buffer_valid = False
+            # Outside the render mutex: the observers (and the render below)
+            # re-acquire it. The flag makes _on_camera_changed skip the redundant
+            # push-back to the engine for this JS-originated change.
+            self._camera_change_from_js = True
+            try:
+                self.options.camera._notify_observers()
+            finally:
+                self._camera_change_from_js = False
+            self.render()
         except Exception as e:
             print(f"warning: apply camera from js failed: {e}")
 
