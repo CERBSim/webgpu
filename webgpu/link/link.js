@@ -524,9 +524,16 @@ class CrossLink {
         let self = null;
         if (data.prop) {
           self = this.objects[data.id];
+          if (self === undefined || self === null) {
+            break;
+          }
           obj = self[data.prop];
         } else {
           self = this.objects[data.parent_id];
+        }
+
+        if (obj === undefined || obj === null) {
+          break;
         }
 
         if (data.type === 'call') {
@@ -537,9 +544,11 @@ class CrossLink {
         }
         break;
       case 'get_keys':
+        if (data.id && (obj === undefined || obj === null)) break;
         response = Object.keys(obj);
         break;
       case 'get':
+        if (data.id && (obj === undefined || obj === null)) break;
         if (data.prop) response = obj[data.prop];
         else if (data.key) response = obj[data.key];
         else response = obj;
@@ -549,6 +558,7 @@ class CrossLink {
         }
         break;
       case 'set':
+        if (data.id && (obj === undefined || obj === null)) break;
         const value = this._loadData(data.value, buffer);
         if (data.prop) obj[data.prop] = value;
         if (data.key) obj[data.key] = value;
