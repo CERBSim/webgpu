@@ -18,6 +18,9 @@ from .light import Light
 
 _default_use_js_engine = True
 
+# Trailing-edge delay (seconds) before a settled JS-engine camera move
+_CAMERA_SETTLE_DELAY = 1.0
+
 
 def set_default_use_js_engine(value: bool):
     """Set the default backend for scenes: True = JS engine, False = legacy
@@ -74,6 +77,7 @@ class Scene:
         self._on_event_proxy = None
         self._on_camera_changed_proxy = None
         self._camera_change_from_js = False
+        self._camera_settle_timer = None
         self._select_lock = threading.Lock()
         self._pending_select = None
         self._select_running = False
@@ -111,6 +115,7 @@ class Scene:
         self._on_event_proxy = None
         self._on_camera_changed_proxy = None
         self._camera_change_from_js = False
+        self._camera_settle_timer = None
         self._select_lock = threading.Lock()
         self._pending_select = None
         self._select_running = False
@@ -868,6 +873,9 @@ class Scene:
 
     def cleanup(self):
         """Detach the scene from its canvas, unregister callbacks, and release JS proxies."""
+        if self._camera_settle_timer is not None:
+            self._camera_settle_timer.cancel()
+            self._camera_settle_timer = None
         if self._js_engine is not None:
             try:
                 self._js_engine.dispose()
@@ -959,25 +967,49 @@ class Scene:
         return True
 
     def _apply_camera_from_js(self, payload):
-        """Mirror a JS-engine camera move back into the Python camera and fire the
-        camera observers so camera-dependent renderers re-dispatch."""
+        """Mirror a JS-engine camera move back into the Python camera, then arm a
+        trailing-edge timer that re-dispatches camera-dependent renderers once the
+        camera settles.
         try:
             if not self._set_camera_transform_from_payload(payload):
                 return
             if self._render_mutex is not None:
                 with self._render_mutex:
                     self._select_buffer_valid = False
-            # Outside the render mutex: the observers (and the render below)
-            # re-acquire it. The flag makes _on_camera_changed skip the redundant
-            # push-back to the engine for this JS-originated change.
-            self._camera_change_from_js = True
-            try:
-                self.options.camera._notify_observers()
-            finally:
-                self._camera_change_from_js = False
-            self.render()
+            self._schedule_camera_settle()
         except Exception as e:
             print(f"warning: apply camera from js failed: {e}")
+
+    def _schedule_camera_settle(self):
+        """(Re)arm the trailing-edge timer for _on_camera_settled. Cancelling and
+        restarting on every camera move makes it fire only once the camera has
+        been still for _CAMERA_SETTLE_DELAY. In pyodide (where canvas.debounce is
+        a no-op and reliable timer threads aren't available) fire immediately."""
+        if is_pyodide:
+            self._on_camera_settled()
+            return
+        timer = self._camera_settle_timer
+        if timer is not None:
+            timer.cancel()
+        timer = threading.Timer(_CAMERA_SETTLE_DELAY, self._on_camera_settled)
+        timer.daemon = True
+        self._camera_settle_timer = timer
+        timer.start()
+
+    def _on_camera_settled(self):
+        """Trailing edge: the camera has settled. Fire the camera observers (so
+        camera-dependent renderers mark themselves dirty) and render once, which
+        re-dispatches them. Runs on a timer thread; the flag makes
+        _on_camera_changed skip the redundant push-back to the engine."""
+        self._camera_settle_timer = None
+        if self.canvas is None:
+            return
+        self._camera_change_from_js = True
+        try:
+            self.options.camera._notify_observers()
+        finally:
+            self._camera_change_from_js = False
+        self.render()
 
     def _on_resize(self):
         """Called on canvas resize. Update camera uniforms (aspect ratio) and re-render."""
