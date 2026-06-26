@@ -24,6 +24,7 @@ import os
 import shutil
 import tempfile
 import threading
+from contextlib import contextmanager
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -137,6 +138,64 @@ class _QuietHTTPHandler(SimpleHTTPRequestHandler):
         pass
 
 
+def readback_scene(scene):
+    """Read back a scene's current rendered frame as an HxWx4 RGBA array.
+
+    Uses the JS render engine (the default backend): it renders into an
+    offscreen capture target and the texture is read back on the JS side via
+    ``window._doReadback`` (which the test page must provide — see
+    :data:`_READBACK_JS`).  Falls back to the legacy Python render path
+    (render to ``target_texture`` + read it back) when no engine is active.
+
+    Reusable outside this module (e.g. by ngapp's e2e helpers) so the readback
+    lives in one place.
+    """
+    import numpy as np
+
+    from webgpu import platform
+
+    engine = getattr(scene, "_js_engine", None)
+    if engine is None and getattr(scene, "_use_js_engine", False):
+        try:
+            scene._install_live_engine()
+            engine = getattr(scene, "_js_engine", None)
+        except Exception as e:
+            print(f"warning: JS engine install failed, using Python path: {e}")
+            engine = None
+
+    if engine is not None:
+        engine.enableHeadlessCapture()
+        w, h = scene.canvas.width, scene.canvas.height
+        fmt = str(scene.canvas.format)
+        # count-then-fill renderers (e.g. clipping) size their output buffer
+        # reactively: a render's async counter readback resizes the buffer and
+        # the next render fills it. That readback only progresses when the GPU
+        # queue is ticked, so a plain wait isn't enough over the bridge — pump a
+        # tiny readback after each render to drive it to convergence before we
+        # capture (matches the interactive path, where the lag is not noticeable).
+        for _ in range(5):
+            engine.render()
+            platform.js._doReadback(scene.device.handle, engine.captureTexture(), 8, 8)
+        tex = engine.captureTexture()
+    else:
+        # Ensure target_texture reflects current scene state.
+        with scene._render_mutex:
+            scene._render_objects(to_canvas=False)
+        tex = scene.canvas.target_texture
+        w, h = tex.width, tex.height
+        fmt = str(tex.format)
+
+    bytes_per_row = (w * 4 + 255) // 256 * 256
+    b64_data = platform.js._doReadback(scene.device.handle, tex, w, h)
+
+    raw = base64.b64decode(b64_data)
+    data = np.frombuffer(raw, dtype=np.uint8).reshape((h, bytes_per_row // 4, 4))
+    data = data[:, :w, :]
+    if fmt == "bgra8unorm":
+        data = data[:, :, [2, 1, 0, 3]]
+    return data
+
+
 # ---------------------------------------------------------------------------
 # WebGPUTestEnv – helpers available via the webgpu_env fixture
 # ---------------------------------------------------------------------------
@@ -245,58 +304,11 @@ class WebGPUTestEnv:
             )
 
     def readback_texture(self, scene, path):
-        """Read back the rendered frame via JS-side readback."""
-        import numpy as np
+        """Read back the rendered frame and save it as a PNG at *path*."""
         from PIL import Image
-        from webgpu import platform
 
-        engine = getattr(scene, '_js_engine', None)
-        if engine is None and getattr(scene, '_use_js_engine', False):
-            try:
-                scene._install_live_engine()
-                engine = getattr(scene, '_js_engine', None)
-            except Exception as e:
-                print(f"warning: JS engine install failed, using Python path: {e}")
-                engine = None
-
-        if engine is not None:
-            engine.enableHeadlessCapture()
-            w, h = scene.canvas.width, scene.canvas.height
-            fmt = str(scene.canvas.format)
-            # count-then-fill renderers (e.g. clipping) size their output buffer
-            # reactively: a render's async counter readback resizes the buffer and
-            # the next render fills it. That readback only progresses when the GPU
-            # queue is ticked, so a plain wait isn't enough over the bridge — pump a
-            # tiny readback after each render to drive it to convergence before we
-            # capture (matches the interactive path, where the lag is not noticeable).
-            for _ in range(5):
-                engine.render()
-                platform.js._doReadback(scene.device.handle, engine.captureTexture(), 8, 8)
-            tex = engine.captureTexture()
-        else:
-            # Ensure target_texture reflects current scene state.
-            # The debounced scene.render() from _draw_scene may not have
-            # re-run after state changes (e.g. toggling renderer.active).
-            with scene._render_mutex:
-                scene._render_objects(to_canvas=False)
-            tex = scene.canvas.target_texture
-            w, h = tex.width, tex.height
-            fmt = str(tex.format)
-
-        bytes_per_row = (w * 4 + 255) // 256 * 256
-        b64_data = platform.js._doReadback(scene.device.handle, tex, w, h)
-
-        raw = base64.b64decode(b64_data)
-        data = np.frombuffer(raw, dtype=np.uint8).reshape(
-            (h, bytes_per_row // 4, 4)
-        )
-        data = data[:, :w, :]
-
-        if fmt == "bgra8unorm":
-            data = data[:, :, [2, 1, 0, 3]]
-
-        img = Image.fromarray(data[:, :, :3])
-        img.save(str(path))
+        data = readback_scene(scene)
+        Image.fromarray(data[:, :, :3]).save(str(path))
         return path
 
     def assert_min_fps(self, scene, min_fps=60, *, frames=20, warmup=5, label=None):
@@ -400,11 +412,7 @@ def _playwright():
 
 @pytest.fixture(scope="session")
 def browser(_playwright):
-    b = _playwright.chromium.launch(
-        channel="chrome",
-        headless=False,
-        args=["--headless=new"] + CHROMIUM_WEBGPU_ARGS,
-    )
+    b = launch_webgpu_browser(_playwright)
     yield b
     b.close()
 
@@ -417,9 +425,18 @@ def page(browser):
     p.close()
 
 
-@pytest.fixture(scope="session")
-def webgpu_env(browser):
-    """Full webgpu environment: platform + device + browser page with canvas.
+def launch_webgpu_browser(playwright):
+    """Launch a headless Chromium configured for WebGPU (Vulkan/Dawn)."""
+    return playwright.chromium.launch(
+        channel="chrome",
+        headless=False,
+        args=["--headless=new"] + CHROMIUM_WEBGPU_ARGS,
+    )
+
+
+@contextmanager
+def _open_env(browser):
+    """Bring up the WS bridge + device on an existing browser, yield the env.
 
     Threading choreography::
 
@@ -484,7 +501,7 @@ def webgpu_env(browser):
 
     # Navigate browser -> triggers WS connection -> unblocks platform.init
     test_page = browser.new_page()
-    # Forward browser console to pytest output for debugging.
+    # Forward browser console for debugging.
     test_page.on("console", lambda msg: print(f"[browser:{msg.type}] {msg.text}"))
     test_page.on("pageerror", lambda exc: print(f"[browser:pageerror] {exc}"))
     test_page.goto(f"http://127.0.0.1:{http_port}/index.html")
@@ -497,7 +514,7 @@ def webgpu_env(browser):
 
     init_device_sync()
 
-    # Flush any init intermediates so tests start with a clean release queue
+    # Flush any init intermediates so we start with a clean release queue
     import gc
     gc.collect()
     gc.collect()
@@ -505,8 +522,42 @@ def webgpu_env(browser):
     import time
     time.sleep(0.1)
 
-    yield WebGPUTestEnv(page=test_page, wj=wj, platform=platform)
+    try:
+        yield WebGPUTestEnv(page=test_page, wj=wj, platform=platform)
+    finally:
+        test_page.close()
+        http_server.shutdown()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
-    test_page.close()
-    http_server.shutdown()
-    shutil.rmtree(tmpdir, ignore_errors=True)
+
+@contextmanager
+def headless_session(width=600, height=600):
+    """Standalone headless WebGPU environment, usable **without pytest**.
+
+    Launches its own Playwright + Chromium, brings up the WS bridge and device,
+    and yields a :class:`WebGPUTestEnv` with a canvas ready. Lets render scripts
+    live anywhere (not just under the package's test tree)::
+
+        from webgpu.testing import headless_session
+        from ngsolve_webgpu.jupyter import Draw
+
+        with headless_session(1500, 1100) as env:
+            scene = Draw(geo, width=1500, height=1100)
+            env.readback_texture(scene, "out.png")
+    """
+    with sync_playwright() as pw:
+        browser = launch_webgpu_browser(pw)
+        try:
+            with _open_env(browser) as env:
+                if width and height:
+                    env.ensure_canvas(width, height)
+                yield env
+        finally:
+            browser.close()
+
+
+@pytest.fixture(scope="session")
+def webgpu_env(browser):
+    """Full webgpu environment: platform + device + browser page with canvas."""
+    with _open_env(browser) as env:
+        yield env
