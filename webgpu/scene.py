@@ -969,7 +969,7 @@ class Scene:
     def _apply_camera_from_js(self, payload):
         """Mirror a JS-engine camera move back into the Python camera, then arm a
         trailing-edge timer that re-dispatches camera-dependent renderers once the
-        camera settles.
+        camera settles."""
         try:
             if not self._set_camera_transform_from_payload(payload):
                 return
