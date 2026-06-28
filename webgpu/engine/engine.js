@@ -134,6 +134,53 @@ async function probeDeviceByDrawingTriangle(device, context, format) {
   return err ? (err instanceof Error ? err : new Error(err.message || String(err))) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Power-preference persistence
+//
+// The preferred GPU adapter ('high-performance' vs 'low-power') is remembered
+// across page loads in the browser's localStorage. Users can change it from the
+// JS console via the global webgpuSetLowPower() / webgpuSetHighPerformance()
+// helpers (exposed at the bottom of this file).
+// ---------------------------------------------------------------------------
+
+const WEBGPU_POWER_PREF_KEY = 'webgpuPowerPreference';
+
+// Resolve the GPU power preference to request. An explicit choice persisted in
+// localStorage wins; otherwise fall back to the value injected by the host
+// (window.__webgpuPowerPreference), then to 'high-performance'.
+function resolvePowerPreference() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem(WEBGPU_POWER_PREF_KEY);
+      if (stored === 'low-power' || stored === 'high-performance') return stored;
+    }
+  } catch (e) {
+    // localStorage can throw (private mode, disabled cookies) — ignore.
+  }
+  if (typeof window !== 'undefined' && window.__webgpuPowerPreference) {
+    return window.__webgpuPowerPreference;
+  }
+  return 'high-performance';
+}
+
+// Persist a power preference. Takes effect on the next page reload.
+function setPowerPreference(pref) {
+  if (pref !== 'low-power' && pref !== 'high-performance') {
+    throw new Error(`Invalid power preference "${pref}"`);
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(WEBGPU_POWER_PREF_KEY, pref);
+    }
+  } catch (e) {
+    console.warn('[engine] could not persist power preference:', e);
+  }
+  console.info(`[engine] WebGPU power preference set to "${pref}". Reload the page to apply.`);
+}
+
+function webgpuSetLowPower() { setPowerPreference('low-power'); }
+function webgpuSetHighPerformance() { setPowerPreference('high-performance'); }
+
 // Acquire a working GPU device + configured canvas context, trying each power
 // preference in order and validating it by actually drawing a triangle.
 // Returns { device, context, canvasFormat, powerPreference }.
@@ -239,7 +286,7 @@ class RenderEngine {
     // Validate each adapter by really drawing a triangle to the canvas; the
     // preferred power preference is tried first, then the other one as a
     // fallback (a broken "high-performance" adapter often works on "low-power").
-    const preferred = (typeof window !== 'undefined' && window.__webgpuPowerPreference) || 'high-performance';
+    const preferred = resolvePowerPreference();
     const order = preferred === 'low-power'
       ? ['low-power', 'high-performance']
       : ['high-performance', 'low-power'];
@@ -1642,4 +1689,11 @@ function _bytesPerPixel(format) {
   return map[format] || 4;
 }
 
-export { RenderEngine };
+// Expose the power-preference console helpers as globals so they can be called
+// directly from the browser's JS console once the library is loaded.
+if (typeof globalThis !== 'undefined') {
+  globalThis.webgpuSetLowPower = webgpuSetLowPower;
+  globalThis.webgpuSetHighPerformance = webgpuSetHighPerformance;
+}
+
+export { RenderEngine, webgpuSetLowPower, webgpuSetHighPerformance };
