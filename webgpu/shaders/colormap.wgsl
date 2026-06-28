@@ -14,6 +14,7 @@ struct ColorbarUniforms {
   position: vec2f,
   width: f32,
   height: f32,
+  vertical: u32,
 };
 
 
@@ -54,20 +55,31 @@ struct VertexOutput {
 @vertex
 fn colormap_vertex(@builtin(vertex_index) vertId: u32,
                @builtin(instance_index) trigId: u32) -> VertexOutput {
-  var posx = trigId / 2u;
+  // index along the gradient (color) axis, 0 .. n_colors
+  var grad = trigId / 2u;
   if(vertId == 2u || (trigId % 2u == 1u && vertId == 1u))
     {
-      posx = posx + 1u;
+      grad = grad + 1u;
     }
-  var posy = u_cbar_uniforms.position.y;
+  // position across the bar thickness, 0 (near edge) or 1 (far edge)
+  var cross = 0.0;
   if(vertId == 0u || (trigId % 2u == 1u && vertId == 1u))
     {
-      posy = posy + u_cbar_uniforms.height;
+      cross = 1.0;
     }
-  let position = vec4<f32>(u_cbar_uniforms.position.x +
-                           f32(posx) * u_cbar_uniforms.width / f32(u_cmap_uniforms.n_colors),
-                           posy, 0.0, 1.0);
-  return VertexOutput(position, f32(posx));
+
+  let g = f32(grad) / f32(u_cmap_uniforms.n_colors);
+  var pos: vec2<f32>;
+  if (u_cbar_uniforms.vertical == 1u) {
+    // gradient runs bottom (min) to top (max) along height, thickness along width
+    pos = vec2<f32>(u_cbar_uniforms.position.x + cross * u_cbar_uniforms.width,
+                    u_cbar_uniforms.position.y + g * u_cbar_uniforms.height);
+  } else {
+    // gradient runs left (min) to right (max) along width, thickness along height
+    pos = vec2<f32>(u_cbar_uniforms.position.x + g * u_cbar_uniforms.width,
+                    u_cbar_uniforms.position.y + cross * u_cbar_uniforms.height);
+  }
+  return VertexOutput(vec4<f32>(pos, 0.0, 1.0), f32(grad));
 }
 
 @fragment

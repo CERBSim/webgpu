@@ -36,6 +36,8 @@ class ColorbarUniforms(UniformBase):
         ("position", ct.c_float * 2),
         ("width", ct.c_float),
         ("height", ct.c_float),
+        ("vertical", ct.c_uint32),
+        ("_pad", ct.c_float * 3),
     ]
 
 
@@ -306,6 +308,7 @@ class Colorbar(MultipleRenderer):
         width=1,
         height=0.05,
         number_format=None,
+        vertical=False,
     ):
         self.colormap = colormap or Colormap()
         self.number_format = number_format
@@ -314,8 +317,10 @@ class Colorbar(MultipleRenderer):
         self._position = position
         self._width = width
         self._height = height
+        self._vertical = vertical
 
         self._bg = Background(position=position, width=width, height=height)
+        self._bg.vertical = vertical
         self._strip = ColorbarStrip(lambda: self._get_all_bindings())
         self._labels = Labels([], [], font_size=14, h_align="center", v_align="top")
 
@@ -358,6 +363,18 @@ class Colorbar(MultipleRenderer):
         self._bg.height = value
         self.set_needs_update()
 
+    @property
+    def vertical(self):
+        return self._vertical
+
+    @vertical.setter
+    def vertical(self, value):
+        self._vertical = value
+        if self.uniforms is not None:
+            self.uniforms.vertical = 1 if value else 0
+        self._bg.vertical = value
+        self.set_needs_update()
+
     def _get_all_bindings(self):
         return (
             self.colormap.get_bindings() + self._labels.get_bindings() + self.uniforms.get_bindings()
@@ -369,27 +386,45 @@ class Colorbar(MultipleRenderer):
             self.uniforms.position = self.position
             self.uniforms.width = self.width
             self.uniforms.height = self.height
+        self.uniforms.vertical = 1 if self._vertical else 0
 
         self.uniforms.update_buffer()
         self.colormap.update(options)
 
         self._strip.n_instances = 2 * self.colormap.n_colors
 
+        n_ticks = 5
         self._labels.labels = [
-            format_number(v, self.number_format)
-            for v in [
-                self.colormap.minval + i / 4 * (self.colormap.maxval - self.colormap.minval)
-                for i in range(6)
-            ]
-        ]
-        self._labels.positions = [
-            (
-                self.position[0] + i * self.width / 4,
-                self.position[1] - 0.01,
-                0,
+            format_number(
+                self.colormap.minval
+                + i / (n_ticks - 1) * (self.colormap.maxval - self.colormap.minval),
+                self.number_format,
             )
-            for i in range(5)
+            for i in range(n_ticks)
         ]
+        if self._vertical:
+            # gradient runs bottom to top; labels sit to the right of the bar
+            self._labels.positions = [
+                (
+                    self.position[0] + self.width + 0.015,
+                    self.position[1] + i / (n_ticks - 1) * self.height,
+                    0,
+                )
+                for i in range(n_ticks)
+            ]
+            self._labels.h_align = "left"
+            self._labels.v_align = "center"
+        else:
+            self._labels.positions = [
+                (
+                    self.position[0] + i / (n_ticks - 1) * self.width,
+                    self.position[1] - 0.01,
+                    0,
+                )
+                for i in range(n_ticks)
+            ]
+            self._labels.h_align = "center"
+            self._labels.v_align = "top"
         super().update(options)
 
     def set_min(self, minval):

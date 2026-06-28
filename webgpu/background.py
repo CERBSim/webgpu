@@ -33,7 +33,7 @@ class BackgroundUniforms(UniformBase):
         ("width", ct.c_float),
         ("height", ct.c_float),
         ("bg_color", ct.c_float * 3),
-        ("_pad", ct.c_float),
+        ("vertical", ct.c_float),
     ]
 
 
@@ -59,7 +59,20 @@ class Background(Renderer):
         self._width = width
         self._height = height
         self._bg_color = (1.0, 1.0, 1.0)
+        self._vertical = False
         self.uniforms = None
+
+    @property
+    def vertical(self):
+        return self._vertical
+
+    @vertical.setter
+    def vertical(self, value):
+        self._vertical = bool(value)
+        if self.uniforms is not None:
+            self.uniforms.vertical = 1.0 if value else 0.0
+            self.uniforms.update_buffer()
+        self.set_needs_update()
 
     @property
     def bg_color(self):
@@ -122,6 +135,7 @@ class Background(Renderer):
             self.uniforms.width = self.width
             self.uniforms.height = self.height
             self.uniforms.bg_color = self._bg_color
+        self.uniforms.vertical = 1.0 if self._vertical else 0.0
         self.uniforms.update_buffer()
 
     def create_render_pipeline(self, options: RenderOptions) -> None:

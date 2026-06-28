@@ -5,6 +5,7 @@ struct BackgroundUniforms {
   width: f32,
   height: f32,
   bg_color: vec3f,
+  vertical: f32,
 };
 
 struct BgVertexOutput {
@@ -12,14 +13,26 @@ struct BgVertexOutput {
   @location(0) uv: vec2<f32>,
 };
 
+// Returns the padding around the content area as (left, right, top, bottom).
+// For a horizontal bar extra room is left below for the labels; for a vertical
+// bar the labels sit to the right, so the extra room is on the right instead.
+fn bg_padding() -> vec4<f32> {
+  if (u_bg_uniforms.vertical == 1.0) {
+    return vec4f(0.04, 0.16, 0.055, 0.055);
+  }
+  return vec4f(0.055, 0.055, 0.04, 0.1);
+}
+
 @vertex
 fn background_vertex(@builtin(vertex_index) vertId: u32) -> BgVertexOutput {
-  let pad_x = 0.055;
-  let pad_top = 0.04;
-  let pad_bottom = 0.1;
+  let pad = bg_padding();
+  let pad_left = pad.x;
+  let pad_right = pad.y;
+  let pad_top = pad.z;
+  let pad_bottom = pad.w;
 
-  let left = u_bg_uniforms.position.x - pad_x;
-  let right = u_bg_uniforms.position.x + u_bg_uniforms.width + pad_x;
+  let left = u_bg_uniforms.position.x - pad_left;
+  let right = u_bg_uniforms.position.x + u_bg_uniforms.width + pad_right;
   let top = u_bg_uniforms.position.y + u_bg_uniforms.height + pad_top;
   let bottom = u_bg_uniforms.position.y - pad_bottom;
 
@@ -46,11 +59,9 @@ fn background_fragment(vert: BgVertexOutput) -> @location(0) vec4<f32> {
   }
 
   // Compute quad aspect ratio for circular corners
-  let pad_x = 0.055;
-  let pad_top = 0.04;
-  let pad_bottom = 0.1;
-  let quad_w = u_bg_uniforms.width + 2.0 * pad_x;
-  let quad_h = u_bg_uniforms.height + pad_top + pad_bottom;
+  let pad = bg_padding();
+  let quad_w = u_bg_uniforms.width + pad.x + pad.y;
+  let quad_h = u_bg_uniforms.height + pad.z + pad.w;
   let aspect = quad_w / quad_h;
 
   // Rounded rectangle SDF in aspect-corrected space
