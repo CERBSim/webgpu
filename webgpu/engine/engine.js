@@ -57,6 +57,128 @@ function findSamplerIdForTexture(bindings, textureBindingNum) {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: draw-a-triangle init probe + adapter acquisition
+//
+// Some adapters accept requestDevice() but then fail to import the canvas
+// swapchain image memory, producing errors that only surface once we actually
+// render to the canvas, e.g.:
+//   "Requested allocation size (946176) is smaller than the image requires
+//    (1007616). at ImportMemory (.../vulkan/external_memory/...)"
+//   "[Invalid Texture] is invalid due to a previous error."
+// This is typically seen on a discrete "high-performance" GPU behind certain
+// Vulkan drivers, while the integrated "low-power" adapter works fine. There
+// is no way to fix the broken adapter, so the only reliable test is to really
+// draw a triangle to the canvas and watch for device errors — if it fails we
+// fall back to the other power preference and try again.
+// ---------------------------------------------------------------------------
+
+const TRIANGLE_PROBE_WGSL = `
+@vertex
+fn vs(@builtin(vertex_index) i : u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(0.0, 0.5), vec2f(-0.5, -0.5), vec2f(0.5, -0.5));
+  return vec4f(p[i], 0.0, 1.0);
+}
+@fragment
+fn fs() -> @location(0) vec4f {
+  return vec4f(1.0, 0.5, 0.2, 1.0);
+}
+`;
+
+// Draw a single triangle to the canvas and return any device error it provoked.
+// Resolves to an Error on failure, or null if the triangle rendered cleanly.
+async function probeDeviceByDrawingTriangle(device, context, format) {
+  // The swapchain-import failure can land in any error class, and may also
+  // arrive asynchronously as an uncaptured error — watch for all of them.
+  let captured = null;
+  const onUncaptured = (e) => { captured = captured || e.error; };
+  device.addEventListener('uncapturederror', onUncaptured);
+  device.pushErrorScope('out-of-memory');
+  device.pushErrorScope('internal');
+  device.pushErrorScope('validation');
+  try {
+    const module = device.createShaderModule({ code: TRIANGLE_PROBE_WGSL });
+    const pipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex:   { module, entryPoint: 'vs' },
+      fragment: { module, entryPoint: 'fs', targets: [{ format }] },
+      primitive: { topology: 'triangle-list' },
+    });
+    // Render into the real canvas texture — this is what exercises the
+    // swapchain image import that breaks on the bad adapter.
+    const view = context.getCurrentTexture().createView();
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view,
+        loadOp: 'clear',
+        storeOp: 'store',
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      }],
+    });
+    pass.setPipeline(pipeline);
+    pass.draw(3);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+    await device.queue.onSubmittedWorkDone();
+  } catch (e) {
+    captured = captured || e;
+  }
+  // Pop scopes in reverse push order; keep the first non-null error.
+  const scoped = [
+    await device.popErrorScope(),
+    await device.popErrorScope(),
+    await device.popErrorScope(),
+  ];
+  device.removeEventListener('uncapturederror', onUncaptured);
+  const err = captured || scoped.find(Boolean);
+  return err ? (err instanceof Error ? err : new Error(err.message || String(err))) : null;
+}
+
+// Acquire a working GPU device + configured canvas context, trying each power
+// preference in order and validating it by actually drawing a triangle.
+// Returns { device, context, canvasFormat, powerPreference }.
+async function acquireWebGpuDevice(canvas, powerPreferences) {
+  if (!navigator.gpu) throw new Error('WebGPU not supported');
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const context = canvas.getContext('webgpu');
+  let lastErr = null;
+  for (const powerPreference of powerPreferences) {
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference });
+    if (!adapter) {
+      lastErr = new Error(`No WebGPU adapter for "${powerPreference}"`);
+      continue;
+    }
+    let device;
+    try {
+      device = await adapter.requestDevice({
+        requiredLimits: {
+          maxBufferSize: adapter.limits.maxBufferSize,
+          maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+        },
+      });
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+    context.configure({
+      device,
+      format,
+      alphaMode: 'premultiplied',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
+    const probeErr = await probeDeviceByDrawingTriangle(device, context, format);
+    if (!probeErr) {
+      return { device, context, canvasFormat: format, powerPreference };
+    }
+    console.warn(`[engine] "${powerPreference}" adapter failed the triangle probe:`,
+                 probeErr.message || probeErr);
+    lastErr = probeErr;
+    device.destroy();
+  }
+  throw lastErr || new Error('No working WebGPU adapter');
+}
+
+// ---------------------------------------------------------------------------
 // RenderEngine
 // ---------------------------------------------------------------------------
 
@@ -113,27 +235,21 @@ class RenderEngine {
     // --- Parse blob ---
     this.scene = parseSceneBlob(arrayBuffer);
 
-    // --- WebGPU device ---
-    if (!navigator.gpu) throw new Error('WebGPU not supported');
-    const powerPreference = (typeof window !== 'undefined' && window.__webgpuPowerPreference) || 'high-performance';
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference });
-    if (!adapter) throw new Error('No WebGPU adapter found');
-    this.device = await adapter.requestDevice({
-      requiredLimits: {
-        maxBufferSize: adapter.limits.maxBufferSize,
-        maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
-      },
-    });
-
-    // --- Canvas context ---
-    this.canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-    this.context = canvas.getContext('webgpu');
-    this.context.configure({
-      device: this.device,
-      format: this.canvasFormat,
-      alphaMode: 'premultiplied',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
-    });
+    // --- WebGPU device + canvas context ---
+    // Validate each adapter by really drawing a triangle to the canvas; the
+    // preferred power preference is tried first, then the other one as a
+    // fallback (a broken "high-performance" adapter often works on "low-power").
+    const preferred = (typeof window !== 'undefined' && window.__webgpuPowerPreference) || 'high-performance';
+    const order = preferred === 'low-power'
+      ? ['low-power', 'high-performance']
+      : ['high-performance', 'low-power'];
+    const acquired = await acquireWebGpuDevice(canvas, order);
+    this.device = acquired.device;
+    this.context = acquired.context;
+    this.canvasFormat = acquired.canvasFormat;
+    if (acquired.powerPreference !== preferred) {
+      console.warn(`[engine] "${preferred}" adapter unusable, fell back to "${acquired.powerPreference}"`);
+    }
 
     // --- Create GPU resources ---
     this.buffers = new Map();   // id → GPUBuffer
