@@ -61,7 +61,7 @@ fn textLoadData(i: u32) -> TextData {
         f32(extractBits(color_packed, 24u, 8u)) / 255.0
     );
 
-    let shift = vec2<f32>(-0.5 * x_align - 0.278 / f32(length), -0.5 * y_align - 0.20);
+    let shift = vec2<f32>(-0.25 * x_align - 0.278 / f32(length), -0.25 * y_align - 0.20);
 
     return TextData(pos, normal, color, shift, length, ichar, char, apply_camera);
 }
