@@ -1,10 +1,27 @@
 import base64
+import functools
+import time
 import zlib
 from pathlib import Path
 
 from . import platform
 from .webgpu_api import *
 from .webgpu_api import toJS as to_js
+
+
+def time_function(func):
+    """Decorator that prints the wall-clock time taken by each call to ``func``."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            elapsed = time.perf_counter() - start
+            print(f"{func.__qualname__} took {elapsed * 1000:.3f} ms")
+
+    return wrapper
 
 try:
     import pyodide.ffi
