@@ -11,6 +11,7 @@ class Binding:
 
 
 class TriangulationRenderer(Renderer):
+    select_entry_point: str = ""
     n_vertices: int = 3
 
     def __init__(self, points, normals=None, color=(0.0, 1.0, 0.0, 1.0), label="Triangulation"):
