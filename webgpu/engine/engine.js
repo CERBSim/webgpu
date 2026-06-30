@@ -80,7 +80,7 @@ fn vs(@builtin(vertex_index) i : u32) -> @builtin(position) vec4f {
 }
 @fragment
 fn fs() -> @location(0) vec4f {
-  return vec4f(1.0, 0.5, 0.2, 1.0);
+  return vec4f(0.0, 0.0, 0.0, 1.0);
 }
 `;
 
@@ -145,10 +145,9 @@ async function probeDeviceByDrawingTriangle(device, context, format) {
 
 const WEBGPU_POWER_PREF_KEY = 'webgpuPowerPreference';
 
-// Resolve the GPU power preference to request. An explicit choice persisted in
-// localStorage wins; otherwise fall back to the value injected by the host
-// (window.__webgpuPowerPreference), then to 'high-performance'.
-function resolvePowerPreference() {
+// Read the persisted choice, if any. Returns 'low-power', 'high-performance',
+// or null when nothing valid is stored / localStorage is unavailable.
+function storedPowerPreference() {
   try {
     if (typeof localStorage !== 'undefined') {
       const stored = localStorage.getItem(WEBGPU_POWER_PREF_KEY);
@@ -157,17 +156,11 @@ function resolvePowerPreference() {
   } catch (e) {
     // localStorage can throw (private mode, disabled cookies) — ignore.
   }
-  if (typeof window !== 'undefined' && window.__webgpuPowerPreference) {
-    return window.__webgpuPowerPreference;
-  }
-  return 'high-performance';
+  return null;
 }
 
-// Persist a power preference. Takes effect on the next page reload.
-function setPowerPreference(pref) {
-  if (pref !== 'low-power' && pref !== 'high-performance') {
-    throw new Error(`Invalid power preference "${pref}"`);
-  }
+// Write the power preference to localStorage (silently; no-op if unavailable).
+function persistPowerPreference(pref) {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(WEBGPU_POWER_PREF_KEY, pref);
@@ -175,6 +168,23 @@ function setPowerPreference(pref) {
   } catch (e) {
     console.warn('[engine] could not persist power preference:', e);
   }
+}
+
+// Resolve the GPU power preference to request. An explicit choice persisted in
+// localStorage wins; otherwise fall back to the value injected by the host
+// (window.__webgpuPowerPreference), then to 'high-performance'.
+function resolvePowerPreference() {
+  return storedPowerPreference()
+    || (typeof window !== 'undefined' && window.__webgpuPowerPreference)
+    || 'high-performance';
+}
+
+// Persist a power preference from the console helpers. Takes effect on reload.
+function setPowerPreference(pref) {
+  if (pref !== 'low-power' && pref !== 'high-performance') {
+    throw new Error(`Invalid power preference "${pref}"`);
+  }
+  persistPowerPreference(pref);
   console.info(`[engine] WebGPU power preference set to "${pref}". Reload the page to apply.`);
 }
 
@@ -182,9 +192,9 @@ function webgpuSetLowPower() { setPowerPreference('low-power'); }
 function webgpuSetHighPerformance() { setPowerPreference('high-performance'); }
 
 // Acquire a working GPU device + configured canvas context, trying each power
-// preference in order and validating it by actually drawing a triangle.
+// preference in order.
 // Returns { device, context, canvasFormat, powerPreference }.
-async function acquireWebGpuDevice(canvas, powerPreferences) {
+async function acquireWebGpuDevice(canvas, powerPreferences, probe) {
   if (!navigator.gpu) throw new Error('WebGPU not supported');
   const format = navigator.gpu.getPreferredCanvasFormat();
   const context = canvas.getContext('webgpu');
@@ -213,8 +223,14 @@ async function acquireWebGpuDevice(canvas, powerPreferences) {
       alphaMode: 'premultiplied',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
+    // Trust an explicit persisted choice and skip the triangle probe.
+    if (!probe) {
+      return { device, context, canvasFormat: format, powerPreference };
+    }
     const probeErr = await probeDeviceByDrawingTriangle(device, context, format);
     if (!probeErr) {
+      // Remember the working adapter so future loads can skip the probe.
+      persistPowerPreference(powerPreference);
       return { device, context, canvasFormat: format, powerPreference };
     }
     console.warn(`[engine] "${powerPreference}" adapter failed the triangle probe:`,
@@ -283,14 +299,17 @@ class RenderEngine {
     this.scene = parseSceneBlob(arrayBuffer);
 
     // --- WebGPU device + canvas context ---
-    // Validate each adapter by really drawing a triangle to the canvas; the
-    // preferred power preference is tried first, then the other one as a
+    // The preferred power preference is tried first, then the other one as a
     // fallback (a broken "high-performance" adapter often works on "low-power").
+    // If the user has an explicit choice persisted in localStorage we trust it
+    // and skip the triangle probe; otherwise we probe each adapter by really
+    // drawing a triangle and persist the first one that works.
+    const stored = storedPowerPreference();
     const preferred = resolvePowerPreference();
     const order = preferred === 'low-power'
       ? ['low-power', 'high-performance']
       : ['high-performance', 'low-power'];
-    const acquired = await acquireWebGpuDevice(canvas, order);
+    const acquired = await acquireWebGpuDevice(canvas, order, !stored);
     this.device = acquired.device;
     this.context = acquired.context;
     this.canvasFormat = acquired.canvasFormat;
