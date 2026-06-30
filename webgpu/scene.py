@@ -1004,10 +1004,10 @@ class Scene:
         timer = self._camera_settle_timer
         if timer is not None:
             timer.cancel()
-        timer = threading.Timer(_CAMERA_SETTLE_DELAY, self._on_camera_settled)
-        timer.daemon = True
-        self._camera_settle_timer = timer
-        timer.start()
+        # timer = threading.Timer(_CAMERA_SETTLE_DELAY, self._on_camera_settled)
+        # timer.daemon = True
+        # self._camera_settle_timer = timer
+        # timer.start()
 
     def _on_camera_settled(self):
         """Trailing edge: the camera has settled. Fire the camera observers (so
