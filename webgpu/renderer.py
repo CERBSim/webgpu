@@ -599,7 +599,7 @@ class Renderer(BaseRenderer):
             index_buffer_id = buf_id
         select_shader = None
         select_entry_point = None
-        if self.select_entry_point:
+        if self.select_entry_point and getattr(self, "_select_active", True):
             select_shader = self._get_preprocessed_shader_code({"SELECT_PIPELINE": "1"})
             select_entry_point = self.select_entry_point
 
