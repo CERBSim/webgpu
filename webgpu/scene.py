@@ -243,15 +243,22 @@ class Scene:
 
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
 
-        # After core init, try to install the JS engine as the live renderer.
-        # Drops to legacy Python rendering if RenderEngine isn't reachable.
-        # Skipped during export and tests (the export path emits a fresh blob-
-        # driven engine; tests rely on the legacy Python render path for now).
-        self._js_engine = None
         if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
             self._install_live_engine()
 
         self._wire_input(camera)
+
+    def _dispose_live_engine(self):
+        """Dispose and clear the live engine (if any). Never just null the
+        reference — an orphaned engine keeps its canvas input listeners and
+        renders its stale buffers on every drag."""
+        eng = self._js_engine
+        self._js_engine = None
+        if eng is not None:
+            try:
+                eng.dispose()
+            except Exception:
+                pass
 
     def reconnect(self, canvas):
         """Re-attach a previously initialized scene to a (new) canvas.
@@ -280,7 +287,7 @@ class Scene:
             canvas.on_visibility(self._on_visibility_changed)
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
 
-        self._js_engine = None
+        self._dispose_live_engine()
         if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
             self._install_live_engine()
 
@@ -327,6 +334,12 @@ class Scene:
         Idempotent: safe to call again after pipelines change (rebuilds via
         ``engine.update`` if an engine is already installed).
         """
+        if is_pyodide or self._render_mutex is None:
+            return self._install_live_engine_locked()
+        with self._render_mutex:
+            return self._install_live_engine_locked()
+
+    def _install_live_engine_locked(self):
         if not self._use_js_engine:
             return
         if not hasattr(platform, 'js') or platform.js is None:
