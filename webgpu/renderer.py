@@ -603,16 +603,19 @@ class Renderer(BaseRenderer):
             select_shader = self._get_preprocessed_shader_code({"SELECT_PIPELINE": "1"})
             select_entry_point = self.select_entry_point
 
+        defines = {"OPAQUE_PASS": "1"} if self.transparent else None
+
         return ExportRenderPass(
             id=f"render_{self._id}",
-            shader=self._get_preprocessed_shader_code(),
+            shader=self._get_preprocessed_shader_code(defines),
             bindings=binding_map,
             vertex_count=self.n_vertices,
             instance_count=self.n_instances,
             topology=self.topology,
             depth_write=True,
             depth_bias=self.depthBias,
-            pass_type="transparent" if self.transparent else "opaque",
+            depth_bias_slope_scale=self.depthBiasSlopeScale,
+            pass_type="opaque",
             vertex_entry_point=self.vertex_entry_point,
             fragment_entry_point=self.fragment_entry_point,
             vertex_buffers=vb_descriptors,
@@ -620,6 +623,23 @@ class Renderer(BaseRenderer):
             index_format=index_format,
             select_shader=select_shader,
             select_entry_point=select_entry_point,
+        )
+
+    def get_export_transparent_twin(self, desc):
+        """Transparent half of a two-pass transparent renderer, or None.
+        """
+        if not self.transparent:
+            return None
+        from dataclasses import replace
+
+        return replace(
+            desc,
+            id=desc.id + "_transparent",
+            shader=self._get_preprocessed_shader_code({"TRANSPARENT_PASS": "1"}),
+            depth_write=False,
+            pass_type="transparent",
+            select_shader=None,
+            select_entry_point=None,
         )
 
     def get_export_compute_passes(self, options, buffer_registry):

@@ -63,7 +63,9 @@ class ExportRenderPass:
     topology: str = "triangle-list"
     depth_write: bool = True
     depth_bias: int = 0
-    pass_type: str = "opaque"  # "opaque" | "transparent"
+    depth_bias_slope_scale: float = 0.0
+    pass_type: str = "opaque"  # "opaque" | "transparent"  — draw order only
+    blend: str = "premultiplied"  # "premultiplied" | "straight"
     vertex_entry_point: str = "vertex_main"
     fragment_entry_point: str = "fragment_main"
     vertex_buffers: list = field(default_factory=list)
