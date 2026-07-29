@@ -191,6 +191,34 @@ function setPowerPreference(pref) {
 function webgpuSetLowPower() { setPowerPreference('low-power'); }
 function webgpuSetHighPerformance() { setPowerPreference('high-performance'); }
 
+// Probe a device that was created *outside* of this file (used from pyodide)
+async function webgpuProbeDevice(device, canvas) {
+  if (!navigator.gpu) return 'WebGPU not supported';
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const scratch = !canvas || !canvas.width || !canvas.height;
+  const target = scratch ? document.createElement('canvas') : canvas;
+  if (scratch) {
+    target.width = 64;
+    target.height = 64;
+  }
+  try {
+    const context = target.getContext('webgpu');
+    context.configure({
+      device,
+      format,
+      alphaMode: 'premultiplied',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
+    const err = await probeDeviceByDrawingTriangle(device, context, format);
+    // Leave the host's canvas alone — it configures the context itself once a
+    // device has been picked; only the throwaway one is torn down here.
+    if (scratch) context.unconfigure();
+    return err ? (err.message || String(err)) : null;
+  } catch (e) {
+    return e.message || String(e);
+  }
+}
+
 // Acquire a working GPU device + configured canvas context, trying each power
 // preference in order.
 // Returns { device, context, canvasFormat, powerPreference }.
@@ -1709,10 +1737,16 @@ function _bytesPerPixel(format) {
 }
 
 // Expose the power-preference console helpers as globals so they can be called
-// directly from the browser's JS console once the library is loaded.
+// directly from the browser's JS console once the library is loaded. The probe
+// and preference lookups are exposed for the host runtime (Python) so the live
+// path can validate its own device the same way init() does.
 if (typeof globalThis !== 'undefined') {
   globalThis.webgpuSetLowPower = webgpuSetLowPower;
   globalThis.webgpuSetHighPerformance = webgpuSetHighPerformance;
+  globalThis.webgpuProbeDevice = webgpuProbeDevice;
+  globalThis.webgpuStoredPowerPreference = storedPowerPreference;
+  globalThis.webgpuResolvePowerPreference = resolvePowerPreference;
+  globalThis.webgpuPersistPowerPreference = persistPowerPreference;
 }
 
-export { RenderEngine, webgpuSetLowPower, webgpuSetHighPerformance };
+export { RenderEngine, webgpuSetLowPower, webgpuSetHighPerformance, webgpuProbeDevice };

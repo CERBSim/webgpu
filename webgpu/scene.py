@@ -9,7 +9,7 @@ from . import platform
 from .canvas import Canvas, debounce
 from .input_handler import InputHandler
 from .renderer import BaseRenderer, RenderOptions, SelectEvent
-from .utils import max_bounding_box, read_buffer, read_texture, Lock, print_communications, take_dirty_buffers
+from .utils import max_bounding_box, read_buffer, read_texture, Lock, print_communications, take_dirty_buffers, ensure_engine_js
 from .platform import is_pyodide, is_pyodide_main_thread
 from .webgpu_api import *
 from .camera import Camera
@@ -312,21 +312,7 @@ class Scene:
         """Load the JS ``RenderEngine`` into the browser if not already present
         (some hosts, e.g. the ngapp app, don't inject it). Returns True if
         available afterwards."""
-        if not hasattr(platform, 'js') or platform.js is None:
-            return False
-        if getattr(platform.js, 'RenderEngine', None) is not None:
-            return True
-        try:
-            from .engine import engine_js
-
-            doc = platform.js.document
-            script = doc.createElement("script")
-            script.textContent = engine_js
-            doc.head.appendChild(script)
-        except Exception as e:
-            print(f"warning: could not inject engine_js: {e}")
-            return False
-        return getattr(platform.js, 'RenderEngine', None) is not None
+        return ensure_engine_js()
 
     def _install_live_engine(self):
         """Build a live descriptor and hand it to RenderEngine.createLive.

@@ -85,7 +85,7 @@ try:
 
         return d
 
-    def toJS(value):
+    def _toJS_direct(value):
         value = _convert(value)
         ret = pyodide.ffi.to_js(
             value,
@@ -94,6 +94,12 @@ try:
             create_pyproxies=False,
         )
         return ret
+
+    def toJS(value):
+        # In case we have alink object, let it handle the serialization
+        if link is not None:
+            return value
+        return _toJS_direct(value)
 
 except ImportError:
     pass

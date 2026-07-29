@@ -55,7 +55,66 @@ except ImportError:
 _lock_init_device = Lock(True)
 _device: Device = None
 
-def init_device_sync():
+_POWER_PREFERENCES = ("high-performance", "low-power")
+
+
+def ensure_engine_js():
+    """Load the JS ``RenderEngine`` bundle into the browser if not already there.
+
+    Some hosts (e.g. the ngapp app) don't inject it themselves. Besides
+    ``RenderEngine`` the bundle also provides the adapter helpers used below
+    (``webgpuProbeDevice`` and friends). Returns True if available afterwards.
+    """
+    if not hasattr(platform, "js") or platform.js is None:
+        return False
+    if getattr(platform.js, "RenderEngine", None) is not None:
+        return True
+    try:
+        from .engine import engine_js
+
+        doc = platform.js.document
+        script = doc.createElement("script")
+        script.textContent = engine_js
+        doc.head.appendChild(script)
+    except Exception as e:
+        print(f"warning: could not inject engine_js: {e}")
+        return False
+    return getattr(platform.js, "RenderEngine", None) is not None
+
+
+def _request_device(power_preference: str) -> Device | None:
+    """Request an adapter for *power_preference* and a device on it, or None."""
+    options = RequestAdapterOptions(
+        powerPreference=PowerPreference(power_preference),
+    ).toJS()
+    handle = platform.js.navigator.gpu.requestAdapter(options)
+    if handle is None:
+        print(f"warning: no WebGPU adapter for '{power_preference}'")
+        return None
+    try:
+        adapter = Adapter(handle)
+        device = adapter.requestDeviceSync(
+            requiredLimits=Limits(
+                maxBufferSize=adapter.limits.maxBufferSize,
+                maxStorageBufferBindingSize=adapter.limits.maxStorageBufferBindingSize,
+            ),
+            label="WebGPU device",
+        )
+    except Exception as e:
+        # requestDevice() rejecting comes back as a null handle, which trips up
+        # the Device wrapper — treat it like "this adapter is unusable".
+        print(f"warning: no WebGPU device for '{power_preference}': {e}")
+        return None
+    platform.js.console.log(f"adapter info ({power_preference})\n", adapter.info)
+    return device
+
+
+def init_device_sync(canvas=None):
+    """Create the global WebGPU device.
+
+    Args:
+        canvas: Optional HTML canvas to check which adapter actually works
+    """
     global _device
     with _lock_init_device:
         if _device is not None:
@@ -66,32 +125,67 @@ def init_device_sync():
             sys.exit(1)
 
         import os
-        _pref_env = os.environ.get("WEBGPU_POWER_PREFERENCE", "high-performance")
-        _power_pref = (
-            PowerPreference.low_power
-            if _pref_env == "low-power"
-            else PowerPreference.high_performance
+
+        js = platform.js
+        # The probe helpers ship with the engine bundle; a host page that
+        # already provides an older RenderEngine may not have them.
+        have_helpers = (
+            ensure_engine_js()
+            and getattr(js, "webgpuProbeDevice", None) is not None
         )
-        reqAdapter = platform.js.navigator.gpu.requestAdapter
-        options = RequestAdapterOptions(
-            powerPreference=_power_pref,
-        ).toJS()
-        adapter = Adapter(reqAdapter(options))
-        maxBufferSize = adapter.limits.maxBufferSize
-        maxStorageBufferBindingSize = adapter.limits.maxStorageBufferBindingSize
-        if not adapter:
-            platform.js.alert("WebGPU is not supported")
-            sys.exit(1)
-        _device = adapter.requestDeviceSync(
-            requiredLimits=Limits(
-                maxBufferSize=maxBufferSize,
-                maxStorageBufferBindingSize=maxStorageBufferBindingSize,
-            ),
-            label="WebGPU device",
+
+        # An explicit choice — from the environment or persisted in localStorage
+        # by a previous run / the webgpuSetLowPower() console helper — is
+        # trusted, and skips the probe.
+        explicit = os.environ.get("WEBGPU_POWER_PREFERENCE")
+        if explicit not in _POWER_PREFERENCES:
+            explicit = None
+        if explicit is None and have_helpers:
+            explicit = js.webgpuStoredPowerPreference()
+        preferred = explicit or "high-performance"
+        probe = (
+            explicit is None
+            and have_helpers
+            and not os.environ.get("WEBGPU_TESTING")
         )
-        limits = _device.limits
-        platform.js.console.log("adapter info\n", adapter.info)
-        platform.js.console.log("device limits\n", limits)
+
+        order = [preferred] + [p for p in _POWER_PREFERENCES if p != preferred]
+        # Kept undestroyed as a last resort in case no adapter passes the probe
+        # (e.g. the probe itself is what's broken) — a suspect device still
+        # beats no device at all.
+        fallback = None
+
+        for pref in order:
+            device = _request_device(pref)
+            if device is None:
+                continue
+            if not probe:
+                _device = device
+                break
+            error = js.webgpuProbeDevice(device.handle, canvas)
+            if error is None:
+                if pref != preferred:
+                    print(f"warning: '{preferred}' adapter unusable, using '{pref}'")
+                # Remember it so the next run can skip the probe.
+                js.webgpuPersistPowerPreference(pref)
+                _device = device
+                break
+            print(f"warning: '{pref}' adapter failed the triangle probe: {error}")
+            if fallback is None:
+                fallback = device
+            else:
+                device.handle.destroy()
+
+        if _device is None:
+            if fallback is None:
+                platform.js.alert("WebGPU is not supported")
+                sys.exit(1)
+            print("warning: no adapter passed the probe, using the preferred one anyway")
+            _device = fallback
+        elif fallback is not None and fallback is not _device:
+            fallback.handle.destroy()
+
+        platform.js.console.log("device limits\n", _device.limits)
         return _device
 
 

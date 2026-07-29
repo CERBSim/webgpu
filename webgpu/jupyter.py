@@ -80,7 +80,7 @@ def _draw_scene(scene: Scene, width, height, id_):
             print(f'warning: could not inject engine_js: {e}')
 
     # Lazily initialize the WebGPU device the first time we draw.
-    canvas = Canvas(init_device_sync(), html_canvas)
+    canvas = Canvas(init_device_sync(html_canvas), html_canvas)
     scene.init(canvas)
     scene.render()
 
