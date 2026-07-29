@@ -15,7 +15,7 @@ struct ShapeVertexIn {
 };
 
 struct ShapeVertexOut {
-    @builtin(position) position: vec4f,
+    @invariant @builtin(position) position: vec4f,
     @location(0) p: vec3f,
     @location(1) normal: vec3f,
     @location(2) color: vec4f,

@@ -25,7 +25,7 @@ fn Cross(a: vec3f, b: vec3f) -> vec3f {
 
 
 struct VectorFragmentInput {
-  @builtin(position) fragPosition: vec4<f32>,
+  @invariant @builtin(position) fragPosition: vec4<f32>,
   @location(0) color_val: f32,
   @location(1) p: vec3<f32>,
   @location(2) n: vec3<f32>
