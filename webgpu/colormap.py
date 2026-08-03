@@ -74,12 +74,8 @@ def _clean_autoscale_range(minval, maxval):
         if abs(value) < 1e-12:
             # Constant zero: use 0 to 1
             return 0.0, 1.0
-        elif value > 0:
-            # Positive constant: use 0 to value
-            return 0.0, value
-        else:
-            # Negative constant: use value to 0
-            return value, 0.0
+        eps = abs(value) * 1e-3
+        return value - eps, value + eps
 
     # Round near-zero values relative to the range
     # If a boundary is less than 1e-8 of the range away from zero,

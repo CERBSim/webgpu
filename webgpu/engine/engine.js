@@ -15,15 +15,22 @@ const DEPTH_FORMAT = 'depth24plus';
 // select pass renders into a host-owned texture of this format (non-MSAA).
 const SELECT_FORMAT = 'rgba32uint';
 
-const TRANSPARENT_BLEND = {
+const PREMULTIPLIED_BLEND = {
+  color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+  alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+};
+
+const STRAIGHT_ALPHA_BLEND = {
   color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
   alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
 };
 
-const OPAQUE_BLEND = {
-  color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-  alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-};
+function blendFor(rp) {
+  if (rp.blend === 'straight') return STRAIGHT_ALPHA_BLEND;
+  if (rp.blend === 'premultiplied') return PREMULTIPLIED_BLEND;
+  // Blobs written before `blend` existed inferred it from depth_write.
+  return rp.depth_write ? PREMULTIPLIED_BLEND : STRAIGHT_ALPHA_BLEND;
+}
 
 // ---------------------------------------------------------------------------
 // Helper: buffer usage flags from usage string
@@ -1061,11 +1068,10 @@ class RenderEngine {
   async _buildRenderPassObject(rp) {
     const device = this.device;
     const bindings = this._intKeyBindings(rp.bindings);
-    const isTransparent = !rp.depth_write;
 
     const module = device.createShaderModule({ code: rp.shader, label: rp.id });
 
-    const blend = isTransparent ? TRANSPARENT_BLEND : OPAQUE_BLEND;
+    const blend = blendFor(rp);
 
     // Build explicit layout — avoids layout:"auto" which strips unreachable bindings
     const vis = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
@@ -1098,6 +1104,7 @@ class RenderEngine {
         depthWriteEnabled: rp.depth_write,
         depthCompare: 'less',
         depthBias: rp.depth_bias || 0,
+        depthBiasSlopeScale: rp.depth_bias_slope_scale || 0,
       },
       multisample: { count: SAMPLE_COUNT },
       label: rp.id,
@@ -1150,6 +1157,7 @@ class RenderEngine {
       vertexEntryPoint: rp.vertex_entry_point || 'vertex_main',
       topology: rp.topology || 'triangle-list',
       depthBias: rp.depth_bias || 0,
+      depthBiasSlopeScale: rp.depth_bias_slope_scale || 0,
       selectPipeline: null,
     };
   }
@@ -1298,6 +1306,7 @@ class RenderEngine {
             depthWriteEnabled: true,
             depthCompare: 'less',
             depthBias: po.depthBias || 0,
+            depthBiasSlopeScale: po.depthBiasSlopeScale || 0,
           },
           multisample: { count: 1 },
           label: po.id + '-select',

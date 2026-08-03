@@ -97,6 +97,13 @@ def _capture_renderer(obj, options, registry, render_passes, compute_passes):
     """Recursively capture a renderer (handles MultipleRenderer)."""
     from ..renderer import Renderer, MultipleRenderer
 
+    def _append(renderer):
+        desc = renderer.get_export_descriptor(options, registry)
+        render_passes.append(desc)
+        twin = renderer.get_export_transparent_twin(desc)
+        if twin is not None:
+            render_passes.append(twin)
+
     if isinstance(obj, MultipleRenderer):
         for child in obj.render_objects:
             if child.active:
@@ -105,13 +112,13 @@ def _capture_renderer(obj, options, registry, render_passes, compute_passes):
         if obj.n_vertices > 0 and obj.n_instances > 0:
             # Compute passes first (may set up indirect buffers needed by descriptor)
             compute_passes.extend(obj.get_export_compute_passes(options, registry))
-            render_passes.append(obj.get_export_descriptor(options, registry))
+            _append(obj)
         # Also capture sub-renderers stored in gpu_objects (e.g. Colorbar's Labels)
         if hasattr(obj, 'gpu_objects'):
             for attr in obj.gpu_objects:
                 if isinstance(attr, Renderer) and attr is not obj:
                     if attr.n_vertices > 0 and attr.n_instances > 0:
-                        render_passes.append(attr.get_export_descriptor(options, registry))
+                        _append(attr)
                         compute_passes.extend(attr.get_export_compute_passes(options, registry))
 
 

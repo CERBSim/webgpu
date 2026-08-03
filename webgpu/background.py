@@ -197,6 +197,7 @@ class Background(Renderer):
         desc = super().get_export_descriptor(options, buffer_registry)
         desc.depth_write = False
         desc.pass_type = "transparent"
+        desc.blend = "straight"
         return desc
 
     def get_theme_buffer_id(self, registry):
