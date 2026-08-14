@@ -320,12 +320,13 @@ class Scene:
         Idempotent: safe to call again after pipelines change (rebuilds via
         ``engine.update`` if an engine is already installed).
         """
-        if is_pyodide or self._render_mutex is None:
+        if self._render_mutex is None:
             return self._install_live_engine_locked()
         with self._render_mutex:
             return self._install_live_engine_locked()
 
     def _install_live_engine_locked(self):
+        """Caller must hold _render_mutex."""
         if not self._use_js_engine:
             return
         if not hasattr(platform, 'js') or platform.js is None:
@@ -341,8 +342,7 @@ class Scene:
         from .export.capture import capture_scene_live, build_live_resource_maps
         from dataclasses import asdict
 
-        with self._render_mutex:
-            export, registry = capture_scene_live(self)
+        export, registry = capture_scene_live(self)
 
         # Keep the registry so render() can resolve host-written buffers (clip
         # plane, grid size, …) to engine ids for targeted compute re-triggers.
@@ -821,7 +821,8 @@ class Scene:
                     for obj in self.render_objects:
                         if obj.active:
                             obj._update_and_create_render_pipeline(self.options)
-                    self._install_live_engine()  # idempotent → engine.update()
+                    # _locked variant: we already hold _render_mutex here.
+                    self._install_live_engine_locked()  # idempotent → engine.update()
                     self._installed_active_set = active_ids
             engine = self._js_engine
             if engine is None:

@@ -552,7 +552,12 @@ class RenderEngine {
     this.input = new InputHandler(canvas, this.camera, () => this.render());
     if (this._onEvent) {
       this.input.setEventSink((ev) => {
-        try { this._onEvent(ev); }
+        try {
+          const r = this._onEvent(ev);
+          if (r && typeof r.then === 'function') {
+            r.catch((e) => console.warn('[engine] on_event failed:', e && (e.message || e)));
+          }
+        }
         catch (e) { console.warn('[engine] on_event failed:', e && (e.message || e)); }
       });
     }

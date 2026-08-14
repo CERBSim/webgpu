@@ -19,6 +19,16 @@ websocket_server = None
 link = None
 
 
+class _IgnoreReturnValue:
+    """Callable marker for a proxy the remote side must not wait for."""
+
+    def __init__(self, func):
+        self._func = func
+
+    def __call__(self, *args, **kwargs):
+        return self._func(*args, **kwargs)
+
+
 def create_event_handler(
     func,
     prevent_default=True,
@@ -42,6 +52,8 @@ try:
     from pyodide.ffi import create_proxy as _create_proxy
 
     def create_proxy(func, ignore_return_value=False):
+        if ignore_return_value:
+            func = _IgnoreReturnValue(func)
         return _create_proxy(func)
 
     def destroy_proxy(proxy):
@@ -124,7 +136,10 @@ if is_pyodide:
     def _serialize_jsproxy(link, value):
         if hasattr(value, "unwrap"):
             u = value.unwrap()
-            return link._dump_data(u)
+            data = link._dump_data(u)
+            if isinstance(u, _IgnoreReturnValue) and isinstance(data, dict):
+                data["ignore_return_value"] = True
+            return data
 
         return json.loads(pyodide_js.JSON.stringify(value))
 
