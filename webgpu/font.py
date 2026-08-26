@@ -197,7 +197,8 @@ class Font:
         return read_shader_file("font.wgsl")
 
     def set_font_size(self, font_size: float):
-        if self.uniforms.font_size == font_size:
+        # font_size is the size of the atlas, size is the rendered size
+        if self.uniforms.size == font_size:
             return
         self.uniforms.size = font_size
         self._update()

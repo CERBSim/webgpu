@@ -305,10 +305,14 @@ class Colorbar(MultipleRenderer):
         height=0.05,
         number_format=None,
         vertical=False,
+        label_h_align=None,
+        label_v_align=None,
     ):
         self.colormap = colormap or Colormap()
         self.number_format = number_format
         self.uniforms = None
+        self._label_h_align = label_h_align
+        self._label_v_align = label_v_align
 
         self._position = position
         self._width = width
@@ -371,6 +375,35 @@ class Colorbar(MultipleRenderer):
         self._bg.vertical = value
         self.set_needs_update()
 
+    @property
+    def label_h_align(self):
+        """Horizontal alignment of the tick labels, None derives it from the orientation."""
+        return self._label_h_align
+
+    @label_h_align.setter
+    def label_h_align(self, value):
+        self._label_h_align = value
+        self.set_needs_update()
+
+    @property
+    def label_v_align(self):
+        """Vertical alignment of the tick labels, None derives it from the orientation."""
+        return self._label_v_align
+
+    @label_v_align.setter
+    def label_v_align(self, value):
+        self._label_v_align = value
+        self.set_needs_update()
+
+    @property
+    def font_size(self):
+        return self._labels.font_size
+
+    @font_size.setter
+    def font_size(self, value):
+        self._labels.font_size = value
+        self.set_needs_update()
+
     def _get_all_bindings(self):
         return (
             self.colormap.get_bindings() + self._labels.get_bindings() + self.uniforms.get_bindings()
@@ -408,8 +441,7 @@ class Colorbar(MultipleRenderer):
                 )
                 for i in range(n_ticks)
             ]
-            self._labels.h_align = "left"
-            self._labels.v_align = "center"
+            h_align, v_align = "left", "center"
         else:
             self._labels.positions = [
                 (
@@ -419,8 +451,9 @@ class Colorbar(MultipleRenderer):
                 )
                 for i in range(n_ticks)
             ]
-            self._labels.h_align = "center"
-            self._labels.v_align = "top"
+            h_align, v_align = "center", "top"
+        self._labels.h_align = self._label_h_align or h_align
+        self._labels.v_align = self._label_v_align or v_align
         super().update(options)
 
     def set_min(self, minval):

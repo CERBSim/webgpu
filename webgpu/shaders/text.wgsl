@@ -19,7 +19,7 @@ struct TextData {
   pos: vec3f,
   normal: vec3f,
   color: vec4f,
-  shift: vec2f,
+  align: vec2f,
   length: u32,
   ichar: u32,
   char: u32,
@@ -61,9 +61,7 @@ fn textLoadData(i: u32) -> TextData {
         f32(extractBits(color_packed, 24u, 8u)) / 255.0
     );
 
-    let shift = vec2<f32>(-0.25 * x_align - 0.278 / f32(length), -0.25 * y_align - 0.20);
-
-    return TextData(pos, normal, color, shift, length, ichar, char, apply_camera);
+    return TextData(pos, normal, color, vec2f(x_align, y_align), length, ichar, char, apply_camera);
 }
 
 struct TextVertexOutput {
@@ -102,12 +100,18 @@ fn vertexText(@builtin(vertex_index) vertexId: u32, @builtin(instance_index) cha
         position = vec4f(text.pos, 1.0);
     }
 
+    // char_size = (glyph quad width, glyph quad height, advance per char)
     let char_size = fontGetSizeOnScreen();
     position.x += f32(text.ichar) * char_size.z * position.w;
 
-    let shift = text.shift;
-    position.x += char_size.x * shift.x * f32(text.length) * position.w;
-    position.y += char_size.y * shift.y * position.w;
+    let margin = vec3f(0.25, 0.24, 0.17); // left/right, below baseline, above cap
+
+    let ink_width = (f32(text.length) - 1.0) * char_size.z
+        + (1.0 - 2.0 * margin.x) * char_size.x;
+    let ink_height = (1.0 - margin.y - margin.z) * char_size.y;
+
+    position.x -= (margin.x * char_size.x + 0.5 * text.align.x * ink_width) * position.w;
+    position.y -= (margin.y * char_size.y + 0.5 * text.align.y * ink_height) * position.w;
 
     // snap position to pixel grid
     let resolution = vec2f(f32(u_camera.width), f32(u_camera.height));
