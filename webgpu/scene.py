@@ -336,7 +336,7 @@ class Scene:
         RenderEngine = platform.js.RenderEngine
 
         canvas = self.canvas
-        if canvas is None:
+        if canvas is None or canvas.context is None:
             return
 
         from .export.capture import capture_scene_live, build_live_resource_maps

@@ -630,7 +630,9 @@ def create_buffer(
         return reuse
 
     if reuse is not None:
-        reuse.destroy()
+        from .webgpu_api import _enqueue_destroy
+
+        _enqueue_destroy(reuse.__dict__.get("handle"))
 
     buffer = device.createBuffer(size, usage=usage, label=label)
     buffer._used_size = size

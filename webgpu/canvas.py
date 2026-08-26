@@ -316,6 +316,13 @@ class Canvas:
             self.canvas = html_canvas
             self.destroy_textures()
 
+            if self._resize_observer is not None:
+                self._resize_observer.disconnect()
+                self._resize_observer = None
+            if self._intersection_observer is not None:
+                self._intersection_observer.disconnect()
+                self._intersection_observer = None
+
             if html_canvas is None:
                 self.context = None
                 for func in self._on_update_html_canvas:
@@ -342,10 +349,6 @@ class Canvas:
                 for func in self._on_visibility_callbacks:
                     func(observer_entry[0].isIntersecting)
 
-            if self._resize_observer is not None:
-                self._resize_observer.disconnect()
-            if self._intersection_observer is not None:
-                self._intersection_observer.disconnect()
             self._resize_observer = platform.js.ResizeObserver._new(
                 platform.create_proxy(on_resize, True)
             )
@@ -394,6 +397,11 @@ class Canvas:
             ]:
                 if tex is not None:
                     tex.destroy()
+            self.target_texture = None
+            self.multisample_texture = None
+            self.depth_texture = None
+            self.select_texture = None
+            self.select_depth_texture = None
             self.target_texture_view = None
             self.multisample_texture_view = None
             self.depth_texture_view = None
@@ -419,6 +427,7 @@ class Canvas:
             if width == 0 or height == 0:
                 self.height = 0
                 self.width = 0
+                self.destroy_textures()
                 return False
 
             canvas.width = width
