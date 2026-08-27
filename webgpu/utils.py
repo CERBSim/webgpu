@@ -63,7 +63,7 @@ def ensure_engine_js():
 
     Some hosts (e.g. the ngapp app) don't inject it themselves. Besides
     ``RenderEngine`` the bundle also provides the adapter helpers used below
-    (``webgpuProbeDevice`` and friends). Returns True if available afterwards.
+    (``webgpuSelectDevice`` and friends). Returns True if available afterwards.
     """
     if not hasattr(platform, "js") or platform.js is None:
         return False
@@ -82,38 +82,17 @@ def ensure_engine_js():
     return getattr(platform.js, "RenderEngine", None) is not None
 
 
-def _request_device(power_preference: str) -> Device | None:
-    """Request an adapter for *power_preference* and a device on it, or None."""
-    options = RequestAdapterOptions(
-        powerPreference=PowerPreference(power_preference),
-    ).toJS()
-    handle = platform.js.navigator.gpu.requestAdapter(options)
-    if handle is None:
-        print(f"warning: no WebGPU adapter for '{power_preference}'")
-        return None
-    try:
-        adapter = Adapter(handle)
-        device = adapter.requestDeviceSync(
-            requiredLimits=Limits(
-                maxBufferSize=adapter.limits.maxBufferSize,
-                maxStorageBufferBindingSize=adapter.limits.maxStorageBufferBindingSize,
-            ),
-            label="WebGPU device",
-        )
-    except Exception as e:
-        # requestDevice() rejecting comes back as a null handle, which trips up
-        # the Device wrapper — treat it like "this adapter is unusable".
-        print(f"warning: no WebGPU device for '{power_preference}': {e}")
-        return None
-    platform.js.console.log(f"adapter info ({power_preference})\n", adapter.info)
-    return device
-
-
 def init_device_sync(canvas=None):
     """Create the global WebGPU device.
 
+    Adapter selection (try the preferred power preference, probe it by really
+    drawing a triangle, fall back to the other one) lives in the JS engine's
+    ``webgpuSelectDevice`` so the browser and this host follow identical rules.
+
     Args:
-        canvas: Optional HTML canvas to check which adapter actually works
+        canvas: Optional HTML canvas the probe renders into. Without one there
+            is no swapchain to exercise, so the probe is skipped and the adapter
+            is chosen by preference alone.
     """
     global _device
     with _lock_init_device:
@@ -127,105 +106,34 @@ def init_device_sync(canvas=None):
         import os
 
         js = platform.js
-        # The probe helpers ship with the engine bundle; a host page that
-        # already provides an older RenderEngine may not have them.
-        have_helpers = (
-            ensure_engine_js()
-            and getattr(js, "webgpuProbeDevice", None) is not None
-        )
+        if not (ensure_engine_js() and getattr(js, "webgpuSelectDevice", None)):
+            platform.js.alert("WebGPU engine unavailable")
+            sys.exit(1)
 
-        # An explicit choice — from the environment or persisted in localStorage
-        # by a previous run / the webgpuSetLowPower() console helper — is
-        # trusted, and skips the probe.
+        # An explicit choice pins the adapter and skips the probe. Tests do the
+        # same: they run against whatever adapter the harness provides.
         explicit = os.environ.get("WEBGPU_POWER_PREFERENCE")
         if explicit not in _POWER_PREFERENCES:
             explicit = None
-        if explicit is None and have_helpers:
-            explicit = js.webgpuStoredPowerPreference()
-        preferred = explicit or "high-performance"
-        probe = (
-            explicit is None
-            and have_helpers
-            and not os.environ.get("WEBGPU_TESTING")
-        )
+        if explicit is None and os.environ.get("WEBGPU_TESTING"):
+            explicit = "high-performance"
 
-        order = [preferred] + [p for p in _POWER_PREFERENCES if p != preferred]
-        # Kept undestroyed as a last resort in case no adapter passes the probe
-        # (e.g. the probe itself is what's broken) — a suspect device still
-        # beats no device at all.
-        fallback = None
+        try:
+            selected = js.webgpuSelectDevice(canvas, explicit)
+        except Exception as e:
+            print(f"warning: WebGPU device selection failed: {e}")
+            platform.js.alert("WebGPU is not supported")
+            sys.exit(1)
 
-        for pref in order:
-            device = _request_device(pref)
-            if device is None:
-                continue
-            if not probe:
-                _device = device
-                break
-            error = js.webgpuProbeDevice(device.handle, canvas)
-            if error is None:
-                if pref != preferred:
-                    print(f"warning: '{preferred}' adapter unusable, using '{pref}'")
-                # Remember it so the next run can skip the probe.
-                js.webgpuPersistPowerPreference(pref)
-                _device = device
-                break
-            print(f"warning: '{pref}' adapter failed the triangle probe: {error}")
-            if fallback is None:
-                fallback = device
-            else:
-                device.handle.destroy()
+        for message in selected.messages:
+            print(f"warning: {message}")
+        if selected.verdict == "unverified":
+            print("warning: no adapter could be verified, "
+                  f"using '{selected.powerPreference}' anyway")
 
-        if _device is None:
-            if fallback is None:
-                platform.js.alert("WebGPU is not supported")
-                sys.exit(1)
-            print("warning: no adapter passed the probe, using the preferred one anyway")
-            _device = fallback
-        elif fallback is not None and fallback is not _device:
-            fallback.handle.destroy()
-
+        _device = Device(selected.device)
         platform.js.console.log("device limits\n", _device.limits)
         return _device
-
-
-async def init_device() -> Device:
-    global _device
-
-    if _device is not None:
-        return _device
-
-    adapter = await requestAdapter(powerPreference=PowerPreference.low_power)
-
-    required_features = []
-    if "timestamp-query" in adapter.features:
-        print("have timestamp query")
-        required_features.append("timestamp-query")
-    else:
-        print("no timestamp query")
-
-    maxBufferSize = adapter.limits.maxBufferSize
-    maxStorageBufferBindingSize = adapter.limits.maxStorageBufferBindingSize
-    _device = adapter.requestDevice(
-        label="WebGPU device",
-        requiredLimits=Limits(
-            maxBufferSize=maxBufferSize,
-            maxStorageBufferBindingSize=maxStorageBufferBindingSize,
-        ),
-    )
-    try:
-        _device = await _device
-    except:
-        pass
-
-    limits = _device.limits
-    platform.js.console.log("device limits\n", limits)
-    platform.js.console.log("adapter info\n", adapter.info)
-
-    print(f"max storage buffer binding size {limits.maxStorageBufferBindingSize / one_meg:.2f} MB")
-    print(f"max buffer size {limits.maxBufferSize / one_meg:.2f} MB")
-
-    return _device
 
 
 def get_device() -> Device:

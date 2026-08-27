@@ -79,6 +79,25 @@ function findSamplerIdForTexture(bindings, textureBindingNum) {
 // fall back to the other power preference and try again.
 // ---------------------------------------------------------------------------
 
+// Total time budget for one probe. Drawing a single triangle completes within
+// a frame or two, and a broken adapter normally reports an error rather than
+// stalling — but one that stalls anyway must not take startup down with it.
+// Keep it short: this is time the user spends staring at nothing before we
+// fall back to the other adapter.
+const PROBE_TIMEOUT_MS = 750;
+
+// Resolve to true if `promise` settles within `ms`, false if it times out.
+// A rejection propagates so the caller's catch can classify it.
+async function raceWithTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(false), ms); });
+  try {
+    return await Promise.race([promise.then(() => true), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const TRIANGLE_PROBE_WGSL = `
 @vertex
 fn vs(@builtin(vertex_index) i : u32) -> @builtin(position) vec4f {
@@ -97,6 +116,10 @@ async function probeDeviceByDrawingTriangle(device, context, format) {
   // The swapchain-import failure can land in any error class, and may also
   // arrive asynchronously as an uncaptured error — watch for all of them.
   let captured = null;
+  let settled = false;
+  const trail = [];
+  const deadline = Date.now() + PROBE_TIMEOUT_MS;
+  const remaining = () => Math.max(0, deadline - Date.now());
   const onUncaptured = (e) => { captured = captured || e.error; };
   device.addEventListener('uncapturederror', onUncaptured);
   device.pushErrorScope('out-of-memory');
@@ -126,19 +149,36 @@ async function probeDeviceByDrawingTriangle(device, context, format) {
     pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
-    await device.queue.onSubmittedWorkDone();
+    // Bound the wait: an adapter that stalls here instead of reporting an
+    // error would block startup indefinitely. Timing out means "no verdict",
+    // which is not the same as blaming the adapter.
+    trail.push('submitted');
+    settled = await raceWithTimeout(device.queue.onSubmittedWorkDone(), remaining());
+    trail.push(settled ? 'workDone' : 'workDone:timeout');
   } catch (e) {
     captured = captured || e;
+    trail.push(`threw:${e.message || e}`);
   }
-  // Pop scopes in reverse push order; keep the first non-null error.
-  const scoped = [
-    await device.popErrorScope(),
-    await device.popErrorScope(),
-    await device.popErrorScope(),
-  ];
+  // Pop scopes in reverse push order; keep the first non-null error. These are
+  // awaits too, so they draw on the same budget.
+  const scoped = [];
+  for (let i = 0; i < 3; i++) {
+    let popped = null;
+    const done = await raceWithTimeout(
+      device.popErrorScope().then((e) => { popped = e; }), remaining())
+      .catch((e) => { popped = e; return true; });
+    trail.push(done ? 'pop' : 'pop:timeout');
+    scoped.push(popped);
+  }
   device.removeEventListener('uncapturederror', onUncaptured);
   const err = captured || scoped.find(Boolean);
-  return err ? (err instanceof Error ? err : new Error(err.message || String(err))) : null;
+  if (err) {
+    return { ok: false, inconclusive: !settled, trail,
+             error: err instanceof Error ? err : new Error(err.message || String(err)) };
+  }
+  // No error, but the draw never confirmably completed: we cannot vouch for
+  // this adapter, yet we have no reason to reject it either.
+  return { ok: settled, inconclusive: !settled, error: null, trail };
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +238,9 @@ function setPowerPreference(pref) {
 function webgpuSetLowPower() { setPowerPreference('low-power'); }
 function webgpuSetHighPerformance() { setPowerPreference('high-performance'); }
 
-// Probe a device that was created *outside* of this file (used from pyodide)
+// Configure a canvas context on `device` and probe it. Split out from
+// webgpuSelectDevice so the probe can also run against a device created
+// elsewhere.
 async function webgpuProbeDevice(device, canvas) {
   if (!navigator.gpu) return 'WebGPU not supported';
   const format = navigator.gpu.getPreferredCanvasFormat();
@@ -216,28 +258,60 @@ async function webgpuProbeDevice(device, canvas) {
       alphaMode: 'premultiplied',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
-    const err = await probeDeviceByDrawingTriangle(device, context, format);
+    const res = await probeDeviceByDrawingTriangle(device, context, format);
     // Leave the host's canvas alone — it configures the context itself once a
     // device has been picked; only the throwaway one is torn down here.
     if (scratch) context.unconfigure();
-    return err ? (err.message || String(err)) : null;
+    return { ok: res.ok, inconclusive: res.inconclusive,
+             trail: (res.trail || []).join(','),
+             error: res.error ? (res.error.message || String(res.error)) : null };
   } catch (e) {
-    return e.message || String(e);
+    return { ok: false, inconclusive: false, trail: 'setup',
+             error: e.message || String(e) };
   }
 }
 
-// Acquire a working GPU device + configured canvas context, trying each power
-// preference in order.
-// Returns { device, context, canvasFormat, powerPreference }.
-async function acquireWebGpuDevice(canvas, powerPreferences, probe) {
+// ---------------------------------------------------------------------------
+// The single device-selection entry point.
+//
+// Tries each power preference in turn, probing each candidate, and returns the
+// first adapter that passes. Used by RenderEngine in the browser and by the
+// Python host (webgpu.utils.init_device_sync) so both follow identical rules.
+//
+// `canvas` may be null — the probe then renders into a throwaway canvas.
+// `explicit` pins a preference (e.g. from WEBGPU_POWER_PREFERENCE). A choice
+// persisted in localStorage by an earlier successful probe is trusted the same
+// way, so the probe only runs when we have nothing confirmed to go on.
+// Returns { device, powerPreference, verdict, messages }, where verdict is
+// 'probed' (confirmed good), 'unprobed' (probe skipped) or 'unverified'
+// (no adapter could be confirmed; the preferred one is returned anyway).
+// ---------------------------------------------------------------------------
+async function webgpuSelectDevice(canvas, explicit) {
   if (!navigator.gpu) throw new Error('WebGPU not supported');
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  const context = canvas.getContext('webgpu');
-  let lastErr = null;
-  for (const powerPreference of powerPreferences) {
+
+  const messages = [];
+  // Probing means drawing into a canvas swapchain and waiting for the draw to
+  // complete, so it needs a real canvas and a host that runs a frame loop. A
+  // headless host (the docs exporter) says so via __webgpuHeadless: there the
+  // probe can never reach a verdict, and merely attempting it leaves the device
+  // with submitted work that never completes, wedging the next buffer readback.
+  // In both cases pick by preference alone rather than testing.
+  const headless = globalThis.__webgpuHeadless === true;
+  const canProbe = !headless && !!(canvas && canvas.width && canvas.height);
+  const trusted = explicit || storedPowerPreference() || (canProbe ? null : 'high-performance');
+  const preferred = trusted || resolvePowerPreference();
+  const order = [preferred].concat(
+    ['high-performance', 'low-power'].filter((p) => p !== preferred));
+
+  // Kept as a last resort when no adapter can be confirmed (e.g. the probe
+  // itself cannot run) — a suspect device still beats no device at all.
+  let unverified = null;
+  let unverifiedPref = null;
+
+  for (const powerPreference of order) {
     const adapter = await navigator.gpu.requestAdapter({ powerPreference });
     if (!adapter) {
-      lastErr = new Error(`No WebGPU adapter for "${powerPreference}"`);
+      messages.push(`no WebGPU adapter for '${powerPreference}'`);
       continue;
     }
     let device;
@@ -249,31 +323,65 @@ async function acquireWebGpuDevice(canvas, powerPreferences, probe) {
         },
       });
     } catch (e) {
-      lastErr = e;
+      messages.push(`no WebGPU device for '${powerPreference}': ${e.message || e}`);
       continue;
     }
-    context.configure({
-      device,
-      format,
-      alphaMode: 'premultiplied',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
-    });
-    // Trust an explicit persisted choice and skip the triangle probe.
-    if (!probe) {
-      return { device, context, canvasFormat: format, powerPreference };
+
+    if (trusted) {
+      if (!canProbe && !explicit) {
+        messages.push(headless
+          ? 'headless host, selecting by preference only'
+          : 'no canvas to probe, selecting by preference only');
+      }
+      return { device, powerPreference, verdict: 'unprobed', messages };
     }
-    const probeErr = await probeDeviceByDrawingTriangle(device, context, format);
-    if (!probeErr) {
-      // Remember the working adapter so future loads can skip the probe.
+
+    const res = await webgpuProbeDevice(device, canvas);
+    if (res.ok) {
+      if (powerPreference !== preferred) {
+        messages.push(`'${preferred}' adapter unusable, using '${powerPreference}'`);
+      }
       persistPowerPreference(powerPreference);
-      return { device, context, canvasFormat: format, powerPreference };
+      return { device, powerPreference, verdict: 'probed', messages };
     }
-    console.warn(`[engine] "${powerPreference}" adapter failed the triangle probe:`,
-                 probeErr.message || probeErr);
-    lastErr = probeErr;
+    if (res.inconclusive) {
+      // The draw never confirmably finished, so there is no verdict — and no
+      // grounds to blame this adapter. Whatever stalled it would stall the
+      // other one just as long for the same non-answer, so stop here and keep
+      // this device, without persisting a choice we never confirmed.
+      messages.push(`probe inconclusive for '${powerPreference}' [${res.trail}]`
+                    + (res.error ? `: ${res.error}` : ''));
+      unverified = device;
+      unverifiedPref = powerPreference;
+      break;
+    }
+    messages.push(`'${powerPreference}' adapter failed the triangle probe [${res.trail}]: ${res.error}`);
     device.destroy();
   }
-  throw lastErr || new Error('No working WebGPU adapter');
+
+  if (unverified) {
+    return { device: unverified, powerPreference: unverifiedPref,
+             verdict: 'unverified', messages };
+  }
+  throw new Error(`No working WebGPU adapter (${messages.join('; ')})`);
+}
+
+// Acquire a working GPU device and configure the canvas context on it.
+// Device selection itself lives in webgpuSelectDevice() so the browser and the
+// Python host pick adapters by exactly the same rules.
+// Returns { device, context, canvasFormat, powerPreference }.
+async function acquireWebGpuDevice(canvas) {
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const { device, powerPreference, messages } = await webgpuSelectDevice(canvas, null);
+  for (const m of messages) console.warn(`[engine] ${m}`);
+  const context = canvas.getContext('webgpu');
+  context.configure({
+    device,
+    format,
+    alphaMode: 'premultiplied',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+  });
+  return { device, context, canvasFormat: format, powerPreference };
 }
 
 // ---------------------------------------------------------------------------
@@ -334,23 +442,13 @@ class RenderEngine {
     this.scene = parseSceneBlob(arrayBuffer);
 
     // --- WebGPU device + canvas context ---
-    // The preferred power preference is tried first, then the other one as a
-    // fallback (a broken "high-performance" adapter often works on "low-power").
-    // If the user has an explicit choice persisted in localStorage we trust it
-    // and skip the triangle probe; otherwise we probe each adapter by really
-    // drawing a triangle and persist the first one that works.
-    const stored = storedPowerPreference();
-    const preferred = resolvePowerPreference();
-    const order = preferred === 'low-power'
-      ? ['low-power', 'high-performance']
-      : ['high-performance', 'low-power'];
-    const acquired = await acquireWebGpuDevice(canvas, order, !stored);
+    // An explicit choice persisted in localStorage is trusted and skips the
+    // probe; otherwise webgpuSelectDevice() probes each power preference in
+    // turn and remembers the first one that really renders.
+    const acquired = await acquireWebGpuDevice(canvas);
     this.device = acquired.device;
     this.context = acquired.context;
     this.canvasFormat = acquired.canvasFormat;
-    if (acquired.powerPreference !== preferred) {
-      console.warn(`[engine] "${preferred}" adapter unusable, fell back to "${acquired.powerPreference}"`);
-    }
 
     // --- Create GPU resources ---
     this.buffers = new Map();   // id → GPUBuffer
@@ -1750,17 +1848,14 @@ function _bytesPerPixel(format) {
   return map[format] || 4;
 }
 
-// Expose the power-preference console helpers as globals so they can be called
-// directly from the browser's JS console once the library is loaded. The probe
-// and preference lookups are exposed for the host runtime (Python) so the live
-// path can validate its own device the same way init() does.
+// webgpuSetLowPower/webgpuSetHighPerformance let a user override the adapter
+// choice from the browser's JS console. webgpuSelectDevice is the entry point
+// the host runtime (Python) calls so it picks a device by the same rules as
+// RenderEngine.init(); webgpuProbeDevice is exposed alongside it for debugging.
 if (typeof globalThis !== 'undefined') {
   globalThis.webgpuSetLowPower = webgpuSetLowPower;
   globalThis.webgpuSetHighPerformance = webgpuSetHighPerformance;
-  globalThis.webgpuProbeDevice = webgpuProbeDevice;
-  globalThis.webgpuStoredPowerPreference = storedPowerPreference;
-  globalThis.webgpuResolvePowerPreference = resolvePowerPreference;
-  globalThis.webgpuPersistPowerPreference = persistPowerPreference;
+  globalThis.webgpuSelectDevice = webgpuSelectDevice;
 }
 
-export { RenderEngine, webgpuSetLowPower, webgpuSetHighPerformance, webgpuProbeDevice };
+export { RenderEngine, webgpuSetLowPower, webgpuSetHighPerformance, webgpuSelectDevice };

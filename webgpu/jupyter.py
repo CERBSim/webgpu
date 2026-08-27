@@ -408,6 +408,7 @@ def _init_export_gpu():
                 "<html><body><script>\n"
                 # Disable patchedRequestAnimationFrame — it blocks mapAsync in headless
                 + "window.patchedRequestAnimationFrame = () => {};\n"
+                + "window.__webgpuHeadless = true;\n"
                 + _link_js_code + "\n"
                 + f"WebsocketLink('ws://127.0.0.1:{ws_port}?token={ws_token}');\n"
                 + "</script></body></html>"
