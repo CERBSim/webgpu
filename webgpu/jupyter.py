@@ -313,7 +313,6 @@ def _capture_screenshot_subprocess(blob_b64, width, height, color_scheme):
             [sys.executable, "-m", "webgpu.export.screenshot"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             text=True,
         )
         # Wait for READY signal

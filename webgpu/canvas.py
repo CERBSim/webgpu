@@ -1,4 +1,5 @@
 from typing import Callable
+import os
 import threading
 import time
 import functools
@@ -329,15 +330,18 @@ class Canvas:
                     func(html_canvas)
                 return
 
-            self.context = html_canvas.getContext("webgpu")
-            self.context.configure(
-                {
-                    "device": self.device.handle,
-                    "format": self.format,
-                    "alphaMode": "premultiplied",
-                    "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST | TextureUsage.COPY_SRC,
-                }
-            )
+            if os.environ.get("WEBGPU_EXPORTING"):
+                self.context = None
+            else:
+                self.context = html_canvas.getContext("webgpu")
+                self.context.configure(
+                    {
+                        "device": self.device.handle,
+                        "format": self.format,
+                        "alphaMode": "premultiplied",
+                        "usage": TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_DST | TextureUsage.COPY_SRC,
+                    }
+                )
 
             def on_resize(*args):
                 self.resize()

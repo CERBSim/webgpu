@@ -326,6 +326,9 @@ async function webgpuSelectDevice(canvas, explicit) {
       messages.push(`no WebGPU device for '${powerPreference}': ${e.message || e}`);
       continue;
     }
+    device.lost.then((info) => {
+      console.error(`[engine] device lost: ${info.reason}: ${info.message}`);
+    });
 
     if (trusted) {
       if (!canProbe && !explicit) {

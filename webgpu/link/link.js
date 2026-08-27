@@ -381,6 +381,20 @@ class CrossLink {
     return data;
   }
 
+  sendError(error, request_id) {
+    if (request_id === undefined || request_id === null) return;
+    this.connection.send({
+      type: 'response',
+      request_id,
+      value: {
+        __is_crosslink_type__: true,
+        type: 'error',
+        error: (error && (error.message || String(error))) || 'unknown error',
+        error_type: (error && error.name) || 'Error',
+      },
+    });
+  }
+
   async sendResponse(data, request_id, parent_id) {
     if (request_id === undefined || request_id === null) {
       return;
@@ -604,14 +618,20 @@ class CrossLink {
     } catch (e) {
       if (request_id !== undefined && data.type !== 'response') {
         console.error('Error processing message:', e, data);
-        this.sendResponse(null, request_id);
+        this.sendError(e, request_id);
         return;
       }
       throw e;
     }
 
     if (request_id !== undefined && data.type !== 'response') {
-      response = await response;
+      try {
+        response = await response;
+      } catch (e) {
+        console.error('Error awaiting result:', e, data);
+        this.sendError(e, request_id);
+        return;
+      }
       if (data.result_callback) {
         const callback = this._loadData(data.result_callback, buffer);
         await callback(response);

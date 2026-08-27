@@ -20,29 +20,67 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 
-def main():
-    # Use Xvfb with -displayfd to let the OS assign a free display
-    # and signal readiness via a pipe (no race, no sleep).
-    read_fd, write_fd = os.pipe()
-    xvfb_proc = subprocess.Popen(
-        ['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x1024x24', '-ac'],
-        pass_fds=(write_fd,),
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+# Start well above any display a real session would use, so a collision with
+# the user's desktop is not even a possibility.
+_FIRST_DISPLAY = 90
+_LAST_DISPLAY = 130
+
+
+def _display_is_free(disp):
+    return not os.path.exists(f"/tmp/.X{disp}-lock") and not os.path.exists(
+        f"/tmp/.X11-unix/X{disp}"
     )
-    os.close(write_fd)
-    # Xvfb writes the display number to the fd once ready
-    with os.fdopen(read_fd) as f:
-        disp_num = f.read().strip()
+
+
+def _start_xvfb():
+    """Start Xvfb on an explicitly picked display and return (process, display).
+
+    Deliberately not ``-displayfd``: that makes Xvfb scan for a free display
+    starting at :0, and probing a display that is already taken can unlink the
+    socket of the running server there, killing the user's real session.
+    """
+    for disp in range(_FIRST_DISPLAY, _LAST_DISPLAY):
+        if not _display_is_free(disp):
+            continue
+        proc = subprocess.Popen(
+            ['Xvfb', f':{disp}', '-screen', '0', '1280x1024x24', '-ac'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        socket_path = f"/tmp/.X11-unix/X{disp}"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                break  # died (lost a race for this display) — try the next one
+            if os.path.exists(socket_path):
+                return proc, disp
+            time.sleep(0.05)
+        else:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    raise RuntimeError(
+        f"could not start Xvfb on any display in "
+        f":{_FIRST_DISPLAY}..:{_LAST_DISPLAY - 1}"
+    )
+
+
+def main():
+    xvfb_proc, disp_num = _start_xvfb()
     os.environ['DISPLAY'] = f':{disp_num}'
     os.environ.pop('WAYLAND_DISPLAY', None)
 
     tmpdir = Path(tempfile.mkdtemp(prefix="webgpu_ss_"))
     try:
         _run_worker(tmpdir)
+    except (KeyboardInterrupt, BrokenPipeError):
+        pass
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
         xvfb_proc.terminate()

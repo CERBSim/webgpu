@@ -16,6 +16,13 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
+class RemoteError(RuntimeError):
+    """Raised when the remote side reports an error for a request.
+
+    Without this the caller would just wait for a response that never
+    arrives and fail with a timeout that says nothing about the cause."""
+
+
 class ReleasedObjectError(KeyError):
     """Raised when a message targets an object that has already been released.
 
@@ -351,8 +358,9 @@ class LinkBase:
             return buffers[data["index"]]
 
         if data["type"] == "error":
-            print(f"Remote error: [{data.get('error_type', 'Error')}] {data.get('error', 'Unknown error')}")
-            return None
+            return RemoteError(
+                f"[{data.get('error_type', 'Error')}] {data.get('error', 'Unknown error')}"
+            )
 
         raise Exception(f"Unknown result type: {data}")
 
@@ -576,7 +584,10 @@ class PyodideLink(LinkBase):
             while not event.done():
                 time.sleep(0.001)
 
-            return self._requests.pop(request_id)
+            result = self._requests.pop(request_id)
+            if isinstance(result, BaseException):
+                raise result
+            return result
 
 
 class LinkBaseAsync(LinkBase):
