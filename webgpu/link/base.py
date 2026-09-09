@@ -574,15 +574,21 @@ class PyodideLink(LinkBase):
         event = None
         self._send_message(data)
         if type != "response" and request_id is not None:
-            # from pyodide.ffi import run_sync
-            import asyncio
-
             event = asyncio.Future()
             self._requests[request_id] = event, key
-            # todo: this shouldn't be necessary
-            # but run_sync(event) gives an error
-            while not event.done():
-                time.sleep(0.001)
+
+            if sys.version_info >= (3, 14):
+                # newer pyodide (python 3.14): run_sync works and polling deadlocks
+                from pyodide.ffi import run_sync
+
+                async def wait():
+                    await event
+
+                run_sync(wait())
+            else:
+                # older pyodide: run_sync(event) errors out, poll instead
+                while not event.done():
+                    time.sleep(0.001)
 
             result = self._requests.pop(request_id)
             if isinstance(result, BaseException):
