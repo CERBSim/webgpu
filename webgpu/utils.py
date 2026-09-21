@@ -54,8 +54,18 @@ except ImportError:
 
 _lock_init_device = Lock(True)
 _device: Device = None
+_device_unavailable_handler = None
 
 _POWER_PREFERENCES = ("high-performance", "low-power")
+
+
+def set_device_unavailable_handler(handler):
+    """Register ``handler(attempt, error) -> bool``, called by
+    ``init_device_sync`` when no WebGPU device can be created. Returning True
+    retries the device selection, False gives up. Pass None to unregister.
+    """
+    global _device_unavailable_handler
+    _device_unavailable_handler = handler
 
 
 def ensure_engine_js():
@@ -118,12 +128,19 @@ def init_device_sync(canvas=None):
         if explicit is None and os.environ.get("WEBGPU_TESTING"):
             explicit = "high-performance"
 
-        try:
-            selected = js.webgpuSelectDevice(canvas, explicit)
-        except Exception as e:
-            print(f"warning: WebGPU device selection failed: {e}")
-            platform.js.alert("WebGPU is not supported")
-            sys.exit(1)
+        attempt = 0
+        while True:
+            try:
+                selected = js.webgpuSelectDevice(canvas, explicit)
+                break
+            except Exception as e:
+                print(f"warning: WebGPU device selection failed: {e}")
+                handler = _device_unavailable_handler
+                if handler is not None and handler(attempt, e):
+                    attempt += 1
+                    continue
+                platform.js.alert("WebGPU is not supported")
+                sys.exit(1)
 
         for message in selected.messages:
             print(f"warning: {message}")

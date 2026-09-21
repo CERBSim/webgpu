@@ -251,6 +251,7 @@ def reset():
     # Reset cached WebGPU device so it is re-requested on the new connection.
     from . import utils as _utils
     _utils._device = None
+    _utils._device_unavailable_handler = None
 
     # Reset the cached font atlas — its GPU texture is tied to the old
     # connection and would deadlock when accessed on a new one.

@@ -180,6 +180,7 @@ class LinkBase:
         self._objects = {}
         self._cache = {}
         self._release_queue = collections.deque()
+        self._chunks = {}
         self._js_id_refcount = {}  # js_id → number of live Proxies referencing it
         self._refcount_lock = threading.Lock()
 
@@ -406,6 +407,23 @@ class LinkBase:
             obj = obj[data["key"]]
         return obj
 
+    def _reassemble_chunk(self, data, buffers):
+        """Collect a chunked frame; return the full frame once the last chunk is in.
+
+        The counterpart of _split_and_send on the sending side: both peers split
+        messages above _max_message_size, so both have to put them back together.
+        """
+        key = data.get("parent_request_id")
+        buf = self._chunks.get(key)
+        if buf is None:
+            buf = self._chunks[key] = bytearray(data["total_size"])
+        offset = data["offset"]
+        buf[offset : offset + data["size"]] = buffers[0]
+        if data["chunk_id"] + 1 < data["n_chunks"]:
+            return None
+        del self._chunks[key]
+        return bytes(buf)
+
     async def _on_message_async(self, message: str | memoryview | bytes):
         data, buffers = _unpack_message(message)
         obj = None
@@ -457,6 +475,12 @@ class LinkBase:
                 case "release_batch":
                     for id_ in data["ids"]:
                         self._objects.pop(id_, None)
+
+                case "chunk":
+                    frame = self._reassemble_chunk(data, buffers)
+                    if frame is not None:
+                        await self._on_message_async(frame)
+                    return
 
                 case _:
                     print("unknown message type", msg_type)
@@ -517,6 +541,12 @@ class LinkBase:
                 case "release_batch":
                     for id_ in data["ids"]:
                         self._objects.pop(id_, None)
+
+                case "chunk":
+                    frame = self._reassemble_chunk(data, buffers)
+                    if frame is not None:
+                        return self._on_message(frame)
+                    return
 
                 case _:
                     print("unknown message type", msg_type, data, type(message))
