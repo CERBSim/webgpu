@@ -67,6 +67,7 @@ def serialize_scene(scene) -> bytes:
                 else [cp.workgroups, 1, 1],
                 "triggers": cp.triggers,
                 "reset_buffers": cp.reset_buffers,
+                "entry_point": cp.entry_point,
                 "indirect_setup": cp.indirect_setup,
                 "count_then_fill": cp.count_then_fill,
             }
@@ -178,6 +179,7 @@ def deserialize_scene(blob: bytes):
             workgroups=cp["workgroups"],
             triggers=cp["triggers"],
             reset_buffers=cp["reset_buffers"],
+            entry_point=cp.get("entry_point", "main"),
             indirect_setup=cp.get("indirect_setup"),
             count_then_fill=cp.get("count_then_fill"),
         )
