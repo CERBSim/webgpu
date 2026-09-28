@@ -1,9 +1,10 @@
 import asyncio
+import collections
 import json
 import os
 import secrets
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from urllib.parse import parse_qs, urlparse
 
 os.environ.setdefault("WEBSOCKETS_MAX_LINE_LENGTH", "1048576")
@@ -49,6 +50,61 @@ class WebsocketLinkBase(LinkBaseAsync):
         raise NotImplementedError
 
 
+class _OrderedLane:
+    """FIFO for fire-and-forget calls flagged ``ordered`` (UI events).
+
+    Handlers start in wire order and run one at a time. One still running after
+    ``timeout`` seconds keeps running, but no longer blocks later events
+    (``None``: strictly serial). A queued message with the same ``coalesce`` key
+    as the newest queued one replaces it.
+    """
+
+    def __init__(self, run, timeout=0.5):
+        self._run = run
+        self.timeout = timeout
+        self._queue = collections.deque()
+        self._cond = threading.Condition()
+        self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="link-ordered")
+        self._thread = None
+        self._stopped = False
+
+    def push(self, message, coalesce=None):
+        with self._cond:
+            if self._stopped:
+                return
+            q = self._queue
+            if coalesce is not None and q and q[-1][1] == coalesce:
+                q[-1] = (message, coalesce)
+            else:
+                q.append((message, coalesce))
+            if self._thread is None:
+                self._thread = threading.Thread(
+                    target=self._work, daemon=True, name="link-ordered-lane"
+                )
+                self._thread.start()
+            self._cond.notify()
+
+    def _work(self):
+        while True:
+            with self._cond:
+                while not self._queue and not self._stopped:
+                    self._cond.wait()
+                if self._stopped:
+                    return
+                message, _ = self._queue.popleft()
+            try:
+                wait([self._executor.submit(self._run, message)], self.timeout)
+            except RuntimeError:
+                return  # executor shut down
+
+    def stop(self):
+        with self._cond:
+            self._stopped = True
+            self._queue.clear()
+            self._cond.notify()
+        self._executor.shutdown(wait=False, cancel_futures=True)
+
+
 class WebsocketLinkServer(WebsocketLinkBase):
     _stop: asyncio.Future
     _port: int = None
@@ -58,6 +114,9 @@ class WebsocketLinkServer(WebsocketLinkBase):
         self._port = 8700
         self._auth_token = secrets.token_urlsafe(32)
         self._executor = ThreadPoolExecutor(max_workers=8)
+        self._ordered = _OrderedLane(self._on_message)
+        # fire-and-forget calls to these methods are ordered without the flag
+        self.ordered_methods = set()
         self._chunk_buffers = {}
         self._stop = None
         super().__init__()
@@ -70,6 +129,15 @@ class WebsocketLinkServer(WebsocketLinkBase):
     def port(self):
         return self._port
 
+    @property
+    def ordered_timeout(self):
+        """Seconds an ordered handler may block later ordered events."""
+        return self._ordered.timeout
+
+    @ordered_timeout.setter
+    def ordered_timeout(self, value):
+        self._ordered.timeout = value
+
     def _check_auth(self, connection, request):
         """Reject WebSocket connections that don't carry a valid token."""
         params = parse_qs(urlparse(request.path).query)
@@ -79,18 +147,22 @@ class WebsocketLinkServer(WebsocketLinkBase):
         return None
 
     @staticmethod
-    def _message_type(message):
-        """Return the top-level message type, parsing only the JSON header
-        (not buffer payloads). Returns None on malformed input."""
+    def _message_header(message):
+        """Return the top-level JSON header, without parsing buffer payloads.
+        Returns {} on malformed input."""
         try:
             if isinstance(message, (memoryview, bytes)):
                 prefix_size = 4 + int.from_bytes(message[:4], byteorder="little")
                 header = json.loads(bytes(message[4:prefix_size]).decode("utf-8"))
             else:
                 header = json.loads(message)
-            return header.get("type") if isinstance(header, dict) else None
+            return header if isinstance(header, dict) else {}
         except Exception:
-            return None
+            return {}
+
+    @classmethod
+    def _message_type(cls, message):
+        return cls._message_header(message).get("type")
 
     def _is_response(self, message):
         return self._message_type(message) == "response"
@@ -114,10 +186,31 @@ class WebsocketLinkServer(WebsocketLinkBase):
         return None
 
     def _dispatch(self, message):
-        if self._is_response(message):
+        header = self._message_header(message)
+        kind = header.get("type")
+        if kind == "response" or kind == "call" and self._is_enqueue_call(header):
             self._on_message(message)
+        elif (
+            kind == "call"
+            and header.get("request_id") is None
+            and (header.get("ordered") or header.get("prop") in self.ordered_methods)
+        ):
+            # only fire-and-forget: JS never waits on the lane, so no deadlock
+            coalesce = header.get("coalesce")
+            if coalesce is not None:
+                coalesce = (header.get("id"), header.get("prop"), coalesce)
+            self._ordered.push(message, coalesce)
         else:
             self._executor.submit(self._on_message, message)
+
+    def _is_enqueue_call(self, header):
+        if header.get("prop") is not None:
+            return False
+        try:
+            obj = self._objects.get(header.get("id"))
+        except TypeError:
+            return False
+        return getattr(obj, "_link_enqueue", False)
 
     async def _websocket_handler(self, websocket, path=""):
         if self._connection is not None:
@@ -184,6 +277,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
 
     def stop(self):
         self._executor.shutdown(wait=False)
+        self._ordered.stop()
         try:
             if self._stop is not None and not self._stop.done():
                 self._send_loop.call_soon_threadsafe(self._stop.set_result, None)
