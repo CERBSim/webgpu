@@ -115,8 +115,6 @@ class WebsocketLinkServer(WebsocketLinkBase):
         self._auth_token = secrets.token_urlsafe(32)
         self._executor = ThreadPoolExecutor(max_workers=8)
         self._ordered = _OrderedLane(self._on_message)
-        # fire-and-forget calls to these methods are ordered without the flag
-        self.ordered_methods = set()
         self._chunk_buffers = {}
         self._stop = None
         super().__init__()
@@ -193,7 +191,7 @@ class WebsocketLinkServer(WebsocketLinkBase):
         elif (
             kind == "call"
             and header.get("request_id") is None
-            and (header.get("ordered") or header.get("prop") in self.ordered_methods)
+            and header.get("ordered")
         ):
             # only fire-and-forget: JS never waits on the lane, so no deadlock
             coalesce = header.get("coalesce")

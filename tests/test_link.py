@@ -86,15 +86,6 @@ class TestServer:
         assert rec.started == list(range(300))
         assert not rec.overlap
 
-    def test_ordered_methods(self, server):
-        rec = Recorder(lambda i: time.sleep(0.001))
-        server.expose("rec", rec)
-        server.ordered_methods.add("ev")
-        _send_calls(server.client, "rec", 200, prop="ev")
-        assert _wait(lambda: len(rec.done) == 200)
-        assert rec.started == list(range(200))
-        assert not rec.overlap
-
     def test_unordered_calls_still_concurrent(self, server):
         rec = Recorder(lambda i: time.sleep(0.2))
         server.expose("rec", rec)
