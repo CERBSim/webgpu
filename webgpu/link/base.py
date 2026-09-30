@@ -652,6 +652,8 @@ class LinkBaseAsync(LinkBase):
                 self._callback_queue.put((func, args)), self._callback_loop
             )
 
+        # only enqueues, so the reader may call it inline (keeps wire order)
+        wrapper._link_enqueue = True
         id_ = id(wrapper)
         self._objects[id_] = wrapper
         return {

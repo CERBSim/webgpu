@@ -25,6 +25,7 @@ function serializeEvent(event) {
     'deltaMode',
     'movementX',
     'movementY',
+    'timeStamp',
   ];
   let obj = Object.fromEntries(keys.map((k) => [k, event[k]]));
   if (event.x !== undefined) {
@@ -116,8 +117,8 @@ function createProxy(link, id, parent_id, ignore_return = false) {
   target.handleEvent = async (eventType, event) => {
     return link.callIgnoreResult(id, [eventType, event], parent_id);
   };
-  target.callMethodIgnoreResult = (prop, args) => {
-    link.callMethodIgnoreResult(id, prop, args);
+  target.callMethodIgnoreResult = (prop, args, options) => {
+    link.callMethodIgnoreResult(id, prop, args, options);
   };
   if (ignore_return) {
     target.callFunction = (self, arg) => {
@@ -183,6 +184,7 @@ class CrossLink {
     this.objects = {};
 
     this.connection = connection;
+    this._sendTail = Promise.resolve();
     this.connection.onMessage((data) => this.onMessage(data));
     this.connected = new Promise((resolve) => {
       this.connection.onOpen(() => {
@@ -244,13 +246,27 @@ class CrossLink {
     });
   }
 
-  async callIgnoreResult(id, args = [], parent_id = undefined) {
-    return await this.connection.send({
-      type: 'call',
-      id,
-      parent_id,
-      args: await this._dumpData(args),
-    });
+  // Fire-and-forget calls leave in call order, even if their args take a
+  // different number of microtasks to serialize.
+  _sendCall(data, args, options) {
+    const dumped = this._dumpData(args);
+    const sent = this._sendTail
+      .then(() => dumped)
+      .then((a) => {
+        data.args = a;
+        if (options && options.ordered) data.ordered = true;
+        if (options && options.coalesce) data.coalesce = options.coalesce;
+        return this.connection.send(data);
+      });
+    this._sendTail = sent.catch((e) => console.error('send failed', e));
+    return sent;
+  }
+
+  // options: { ordered: true } runs the Python handler in wire order with
+  // other ordered calls, { coalesce: key } lets a newer queued call with the
+  // same key replace this one
+  async callIgnoreResult(id, args = [], parent_id = undefined, options = undefined) {
+    return await this._sendCall({ type: 'call', id, parent_id }, args, options);
   }
 
   async call(id, args = [], parent_id = undefined, prop = undefined) {
@@ -272,13 +288,8 @@ class CrossLink {
     });
   }
 
-  async callMethodIgnoreResult(id, prop, args = []) {
-    return await this.connection.send({
-      type: 'call',
-      id,
-      args: await this._dumpData(args),
-      prop,
-    });
+  async callMethodIgnoreResult(id, prop, args = [], options = undefined) {
+    return await this._sendCall({ type: 'call', id, prop }, args, options);
   }
 
   expose(name, obj) {
