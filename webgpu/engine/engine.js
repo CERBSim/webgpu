@@ -14,6 +14,9 @@ const DEPTH_FORMAT = 'depth24plus';
 // Object-id / pick texture format. Matches Python canvas.select_format. The
 // select pass renders into a host-owned texture of this format (non-MSAA).
 const SELECT_FORMAT = 'rgba32uint';
+// Quiet time (ms) after the last camera change before the host gets a
+// settled camera notification.
+const CAMERA_SETTLE_MS = 300;
 
 const PREMULTIPLIED_BLEND = {
   color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
@@ -649,6 +652,7 @@ class RenderEngine {
       }
       this.render();
       this._notifyCameraChanged();
+      this._scheduleCameraSettle();
     });
     this.input = new InputHandler(canvas, this.camera, () => this.render());
     if (this._onEvent) {
@@ -663,7 +667,7 @@ class RenderEngine {
       });
     }
     if (this._onCameraChanged) {
-      this.input.onGestureEnd = () => this._notifyCameraChanged(true);
+      this.input.onGestureEnd = () => this._notifyCameraChanged(true, true);
     }
 
     // --- Interactions (lil-gui) ---
@@ -987,7 +991,7 @@ class RenderEngine {
     this._updateCameraBuffer();
     if (this._cameraBufferId) this.computeDAG.markDirty(this._cameraBufferId);
     this.render();
-    this._notifyCameraChanged(true);
+    this._notifyCameraChanged(true, true);
   }
 
   /** Live-mode hook: host switches between orthographic and perspective. */
@@ -1015,15 +1019,24 @@ class RenderEngine {
     if (this.input && this.input._releaseMove) this.input._releaseMove();
   }
 
-  /** Report the current camera transform to the host (debounced). */
-  _notifyCameraChanged(immediate = false) {
+  /**
+   * Report the current camera transform to the host (debounced). `settled`
+   * marks the end of a camera interaction, so the host can recompute
+   * view-dependent data (e.g. LIC) once instead of on every move.
+   */
+  _notifyCameraChanged(immediate = false, settled = false) {
     if (!this._onCameraChanged || this._suppressCameraNotify) return;
+    if (settled && this._camSettleTimer) {
+      clearTimeout(this._camSettleTimer);
+      this._camSettleTimer = null;
+    }
     const send = () => {
       this._camNotifyTimer = null;
       try {
         this._onCameraChanged({
           matrix: Array.from(this.camera.transform._mat),
           center: Array.from(this.camera.transform._center),
+          settled,
         });
       } catch (e) {
         console.warn('[engine] on_camera_changed failed:', e && (e.message || e));
@@ -1036,6 +1049,16 @@ class RenderEngine {
     }
     if (this._camNotifyTimer) return;  // trailing-edge debounce already scheduled
     this._camNotifyTimer = setTimeout(send, 100);
+  }
+
+  /** (Re)arm the settle timer: fires once the camera was still for CAMERA_SETTLE_MS. */
+  _scheduleCameraSettle() {
+    if (!this._onCameraChanged || this._suppressCameraNotify) return;
+    if (this._camSettleTimer) clearTimeout(this._camSettleTimer);
+    this._camSettleTimer = setTimeout(() => {
+      this._camSettleTimer = null;
+      this._notifyCameraChanged(true, true);
+    }, CAMERA_SETTLE_MS);
   }
 
   /**
@@ -1796,6 +1819,7 @@ class RenderEngine {
   dispose() {
     if (this._resizeObserver) this._resizeObserver.disconnect();
     if (this._camNotifyTimer) { clearTimeout(this._camNotifyTimer); this._camNotifyTimer = null; }
+    if (this._camSettleTimer) { clearTimeout(this._camSettleTimer); this._camSettleTimer = null; }
     this._teardownThemeObserver();
     if (this.input) this.input.dispose();
     if (this.interactions) this.interactions.dispose();

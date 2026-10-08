@@ -967,16 +967,26 @@ class Scene:
         return True
 
     def _apply_camera_from_js(self, payload):
-        """Mirror a JS-engine camera move back into the Python camera, then arm a
-        trailing-edge timer that re-dispatches camera-dependent renderers once the
-        camera settles."""
+        """Mirror a JS-engine camera move back into the Python camera. Payloads
+        flagged ``settled`` (sent by the engine once the interaction ended)
+        re-dispatch camera-dependent renderers."""
         try:
+            try:
+                import pyodide.ffi
+
+                if isinstance(payload, pyodide.ffi.JsProxy):
+                    payload = payload.to_py()
+            except ImportError:
+                pass
             if not self._set_camera_transform_from_payload(payload):
                 return
             if self._render_mutex is not None:
                 with self._render_mutex:
                     self._select_buffer_valid = False
-            self._schedule_camera_settle()
+            if payload.get("settled"):
+                self._on_camera_settled()
+            else:
+                self._schedule_camera_settle()
         except Exception as e:
             print(f"warning: apply camera from js failed: {e}")
 
