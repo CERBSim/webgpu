@@ -95,6 +95,8 @@ class Colormap(BaseRenderer):
 
     def __init__(self, minval=None, maxval=None, colormap: list | str = "matlab:jet", n_colors=8):
         self.texture = None
+        self._texture_size = None
+        self._texture_binding = None
         self.autoscale = minval is None or maxval is None
         self.minval = minval if minval is not None else 0
         self.maxval = maxval if maxval is not None else 1
@@ -124,6 +126,7 @@ class Colormap(BaseRenderer):
 
         if self.texture is None or self._needs_new_texture:
             self._create_texture()
+            self._needs_new_texture = False
 
     def set_colormap(self, colormap: list | str):
         if isinstance(colormap, str):
@@ -137,9 +140,7 @@ class Colormap(BaseRenderer):
         for callback in self._callbacks:
             callback()
 
-        if self.texture is not None and self._texture_dims(len(self.colors)) == (
-            self.texture.width, self.texture.height
-        ):
+        if self.texture is not None and self._texture_dims(len(self.colors)) == self._texture_size:
             self._create_texture()
             self._needs_new_texture = False
         else:
@@ -231,8 +232,11 @@ class Colormap(BaseRenderer):
             callback()
 
     def get_bindings(self):
+        # createView is a round trip to the browser: one view per texture
+        if self._texture_binding is None or self._texture_binding.texture is not self.texture:
+            self._texture_binding = TextureBinding(Binding.COLORMAP_TEXTURE, self.texture, dim=2)
         return [
-            TextureBinding(Binding.COLORMAP_TEXTURE, self.texture, dim=2),
+            self._texture_binding,
             SamplerBinding(Binding.COLORMAP_SAMPLER, self.sampler),
             *self.uniforms.get_bindings(),
         ]
@@ -250,7 +254,8 @@ class Colormap(BaseRenderer):
         data = data + [255] * ((w * h - n) * 4)
 
         device = get_device()
-        if self.texture is None or self.texture.width != w or self.texture.height != h:
+        # size kept here: texture.width/height are round trips to the browser
+        if self.texture is None or self._texture_size != (w, h):
             import os
             extra = TextureUsage.COPY_SRC if os.environ.get("WEBGPU_EXPORTING") else 0
             self.texture = device.createTexture(
@@ -260,6 +265,7 @@ class Colormap(BaseRenderer):
                 dimension="2d",
                 label="colormap_texture",
             )
+            self._texture_size = (w, h)
 
         device.queue.writeTexture(
             TexelCopyTextureInfo(self.texture),
