@@ -193,7 +193,7 @@ class ComputeDAG {
     this.dirty.clear();
   }
 
-  async initPipelines(device, buffers) {
+  async initPipelines(device, buffers, onPassReady = null) {
     // Create the shared cap-indirect pipeline (one shader for all passes)
     if (!this._capModule) {
       try {
@@ -218,6 +218,7 @@ class ComputeDAG {
 
     for (const [id, pass] of this.passes) {
       await this._initPass(device, buffers, id);
+      if (onPassReady) onPassReady();
     }
   }
 

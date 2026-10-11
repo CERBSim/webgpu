@@ -218,9 +218,9 @@ class Scene:
         with self._render_mutex:
             self.options.timestamp = time.time()
             self.options.update_buffers()
-            for obj in self.render_objects:
-                if not obj.active:
-                    continue
+            objs = [obj for obj in self.render_objects if obj.active]
+            for k, obj in enumerate(objs):
+                self._show_progress("Preparing data", f"object {k + 1} of {len(objs)}", k / len(objs))
                 try:
                     obj._update_and_create_render_pipeline(self.options)
                 except Exception as e:
@@ -244,9 +244,30 @@ class Scene:
             canvas.on_update_html_canvas(self.__on_update_html_canvas)
 
         if not os.environ.get("WEBGPU_EXPORTING") and not os.environ.get("WEBGPU_TESTING"):
+            self._show_progress("Uploading data")
             self._install_live_engine()
+        self._hide_progress()
 
         self._wire_input(camera)
+
+    def _show_progress(self, title, detail="", fraction=None):
+        """Progress panel over the canvas, appears if the first render takes long."""
+        if os.environ.get("WEBGPU_EXPORTING") or os.environ.get("WEBGPU_TESTING"):
+            return
+        try:
+            if self._use_js_engine and self._ensure_engine_js():
+                platform.js.webgpuShowProgress(self.canvas.canvas, title, detail, fraction)
+        except Exception:
+            pass
+
+    def _hide_progress(self):
+        if os.environ.get("WEBGPU_EXPORTING") or os.environ.get("WEBGPU_TESTING"):
+            return
+        try:
+            if self._use_js_engine and self._ensure_engine_js():
+                platform.js.webgpuHideProgress(self.canvas.canvas)
+        except Exception:
+            pass
 
     def _dispose_live_engine(self):
         """Dispose and clear the live engine (if any). Never just null the

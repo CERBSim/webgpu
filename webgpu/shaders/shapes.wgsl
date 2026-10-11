@@ -114,12 +114,14 @@ struct ShapeComplexUniform {
     return lightCalcColor(input.p, input.normal, input.color);
 }
 
+#ifdef SELECT_PIPELINE
 @fragment fn shape_fragment_main_select(
     input: ShapeVertexOut,
 ) -> @location(0) vec4<u32> {
     checkClipping(input.p);
     return vec4<u32>(@RENDER_OBJECT_ID@, bitcast<u32>(input.position.z), input.instance, bitcast<u32>(input.color.x));
 }
+#endif SELECT_PIPELINE
 
 fn quaternion(vTo: vec3f, vFrom: vec3f) -> vec4f {
     const EPS: f32 = 1e-6;

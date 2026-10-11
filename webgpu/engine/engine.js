@@ -600,7 +600,7 @@ class RenderEngine {
     for (const cp of this.scene.compute_passes) {
       this.computeDAG.addPass(cp.id, this._translateComputePass(cp));
     }
-    await this.computeDAG.initPipelines(this.device, this.buffers);
+    await this.computeDAG.initPipelines(this.device, this.buffers, () => this._stepCompileProgress());
     for (const cp of this.scene.compute_passes) {
       for (const t of cp.triggers) this.computeDAG.markDirty(t);
     }
@@ -634,12 +634,17 @@ class RenderEngine {
   async _finishInit() {
     const canvas = this.canvas;
 
-    // --- Compute ---
-    await this._buildComputeDAG();
+    this._beginCompileProgress(this.scene.compute_passes.length + this.scene.render_passes.length);
+    try {
+      // --- Compute ---
+      await this._buildComputeDAG();
 
-    // --- Render pipelines ---
-    this.renderPassObjects = [];
-    await this._createRenderPipelines();
+      // --- Render pipelines ---
+      this.renderPassObjects = [];
+      await this._createRenderPipelines();
+    } finally {
+      this._endCompileProgress();
+    }
 
     // --- Input + camera ---
     // The JS engine owns the camera and input loop in both modes. In live mode
@@ -920,10 +925,13 @@ class RenderEngine {
     // Rebuild render pipelines from scratch — cheap relative to a full reload.
     this._updating = true;
     this.renderPassObjects = [];
+    this._beginCompileProgress(this.scene.render_passes.length);
     try {
       await this._createRenderPipelines();
     } catch (e) {
       console.error('[engine] _createRenderPipelines failed in update():', e.message || e);
+    } finally {
+      this._endCompileProgress();
     }
     this._updating = false;
     // The host dispatches this async update() WITHOUT awaiting it and then
@@ -1191,8 +1199,35 @@ class RenderEngine {
     for (const rp of this.scene.render_passes) {
       const obj = await this._buildRenderPassObject(rp);
       this.renderPassObjects.push(obj);
+      this._stepCompileProgress();
     }
   }
+
+  // The first compile of a shader can take seconds (Chrome compiles pipelines one
+  // after another), show the progress over the canvas.
+  _beginCompileProgress(total) {
+    this._compileDone = 0;
+    this._compileTotal = total;
+    this._updateCompileProgress();
+  }
+
+  _stepCompileProgress() {
+    this._compileDone = (this._compileDone || 0) + 1;
+    this._updateCompileProgress();
+  }
+
+  _endCompileProgress() {
+    webgpuHideProgress(this.canvas);
+  }
+
+  _updateCompileProgress() {
+    const done = Math.min(this._compileDone, this._compileTotal);
+    webgpuShowProgress(this.canvas, 'Compiling shaders',
+      `${done} of ${this._compileTotal} pipelines, first use only, cached afterwards`,
+      this._compileTotal ? done / this._compileTotal : 0);
+  }
+
+
 
   async _buildRenderPassObject(rp) {
     const device = this.device;
@@ -1893,3 +1928,70 @@ if (typeof globalThis !== 'undefined') {
 }
 
 export { RenderEngine, webgpuSetLowPower, webgpuSetHighPerformance, webgpuSelectDevice };
+
+// ---------------------------------------------------------------------------
+// Progress panel over a canvas, for slow first renders (data preparation on the
+// host, shader compilation). Only appears if it isn't hidden within 300 ms.
+// ---------------------------------------------------------------------------
+const _progressPanels = new WeakMap();
+
+function webgpuShowProgress(canvas, title, detail, fraction) {
+  if (typeof document === 'undefined' || !canvas || !canvas.getBoundingClientRect) return;
+  let p = _progressPanels.get(canvas);
+  if (!p) {
+    if (!document.getElementById('webgpu-progress-style')) {
+      const style = document.createElement('style');
+      style.id = 'webgpu-progress-style';
+      style.textContent = '@keyframes webgpu-progress-spin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(style);
+    }
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;transform:translate(-50%,-50%);padding:14px 20px;border-radius:8px;'
+      + 'background:rgba(30,30,30,0.85);color:#fff;font:14px sans-serif;pointer-events:none;z-index:1000;'
+      + 'display:none;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(0,0,0,0.4)';
+    const spinner = document.createElement('div');
+    spinner.style.cssText = 'width:22px;height:22px;border:3px solid rgba(255,255,255,0.3);border-top-color:#fff;'
+      + 'border-radius:50%;animation:webgpu-progress-spin 0.8s linear infinite;flex:none';
+    const text = document.createElement('div');
+    const titleEl = document.createElement('div');
+    titleEl.style.fontWeight = 'bold';
+    const detailEl = document.createElement('div');
+    detailEl.style.cssText = 'font-size:12px;opacity:0.8;margin-top:2px';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'height:4px;margin-top:6px;border-radius:2px;background:rgba(255,255,255,0.25);width:180px';
+    const fill = document.createElement('div');
+    fill.style.cssText = 'height:100%;border-radius:2px;background:#fff;width:0;transition:width 0.2s';
+    bar.appendChild(fill);
+    text.append(titleEl, detailEl, bar);
+    el.append(spinner, text);
+    document.body.appendChild(el);
+    p = { el, titleEl, detailEl, bar, fill };
+    p.timer = setTimeout(() => { p.el.style.display = 'flex'; _placeProgress(canvas, p); }, 300);
+    _progressPanels.set(canvas, p);
+  }
+  p.titleEl.textContent = title || '';
+  p.detailEl.textContent = detail || '';
+  const known = typeof fraction === 'number' && isFinite(fraction);
+  p.bar.style.display = known ? 'block' : 'none';
+  if (known) p.fill.style.width = `${100 * Math.min(Math.max(fraction, 0), 1)}%`;
+  _placeProgress(canvas, p);
+}
+
+function _placeProgress(canvas, p) {
+  const r = canvas.getBoundingClientRect();
+  p.el.style.left = `${r.left + r.width / 2}px`;
+  p.el.style.top = `${r.top + r.height / 2}px`;
+}
+
+function webgpuHideProgress(canvas) {
+  const p = canvas && _progressPanels.get(canvas);
+  if (!p) return;
+  clearTimeout(p.timer);
+  p.el.remove();
+  _progressPanels.delete(canvas);
+}
+
+if (typeof window !== 'undefined') {
+  window.webgpuShowProgress = webgpuShowProgress;
+  window.webgpuHideProgress = webgpuHideProgress;
+}
