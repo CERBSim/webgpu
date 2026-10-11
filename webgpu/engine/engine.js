@@ -1459,6 +1459,13 @@ class RenderEngine {
    * SELECT_FORMAT; depthTexture must be DEPTH_FORMAT; both non-MSAA and the same
    * size as the canvas.
    */
+  // Leave a render pass out of (or back into) picking, without rebuilding pipelines.
+  // Kept by id, so it also holds for passes still being built (pipelines are created async).
+  setSelectable(id, on) {
+    if (!this._selectOff) this._selectOff = new Set();
+    if (on) this._selectOff.delete(id); else this._selectOff.add(id);
+  }
+
   renderSelectInto(colorTexture, depthTexture) {
     if (!this.device || !this.computeDAG) return;
     if (!colorTexture || !depthTexture) return;
@@ -1492,7 +1499,7 @@ class RenderEngine {
     });
 
     for (const po of this.renderPassObjects) {
-      if (po.enabled === false || !po.selectPipeline || po.selectPipeline === 'failed') continue;
+      if (po.enabled === false || (this._selectOff && this._selectOff.has(po.id)) || !po.selectPipeline || po.selectPipeline === 'failed') continue;
       pass.setPipeline(po.selectPipeline);
       pass.setBindGroup(0, po.bindGroup);
       if (po.vertexBufferRefs) {
