@@ -10,7 +10,13 @@ CAUTION:
 
 import ctypes as ct
 
-from .utils import BaseBinding, UniformBinding, get_device, mark_buffer_dirty
+from .utils import (
+    BaseBinding,
+    UniformBinding,
+    device_available,
+    get_device,
+    mark_buffer_dirty,
+)
 from .webgpu_api import BufferUsage, Device
 
 
@@ -75,6 +81,8 @@ class UniformBase(ct.Structure):
             self.update_buffer()
 
     def update_buffer(self):
+        if self._buffer is None and not device_available():
+            return
         self._ensure_buffer()
         data = bytes(self)
         if self._last_update_values == data:

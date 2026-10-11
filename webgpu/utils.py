@@ -153,6 +153,11 @@ def init_device_sync(canvas=None):
         return _device
 
 
+def device_available() -> bool:
+    """True if a device exists or can be created now (frontend connected)."""
+    return _device is not None or getattr(platform, "js", None) is not None
+
+
 def get_device() -> Device:
     if _device is None:
         init_device_sync()
