@@ -1931,8 +1931,9 @@ export { RenderEngine, webgpuSetLowPower, webgpuSetHighPerformance, webgpuSelect
 
 // ---------------------------------------------------------------------------
 // Progress panel over a canvas, for slow first renders (data preparation on the
-// host, shader compilation). Only appears if it isn't hidden within 300 ms.
+// host, shader compilation). Only appears if it isn't hidden within PROGRESS_DELAY_MS.
 // ---------------------------------------------------------------------------
+const PROGRESS_DELAY_MS = 500;
 const _progressPanels = new WeakMap();
 
 function webgpuShowProgress(canvas, title, detail, fraction) {
@@ -1966,7 +1967,7 @@ function webgpuShowProgress(canvas, title, detail, fraction) {
     el.append(spinner, text);
     document.body.appendChild(el);
     p = { el, titleEl, detailEl, bar, fill };
-    p.timer = setTimeout(() => { p.el.style.display = 'flex'; _placeProgress(canvas, p); }, 300);
+    p.timer = setTimeout(() => { p.el.style.display = 'flex'; _placeProgress(canvas, p); }, PROGRESS_DELAY_MS);
     _progressPanels.set(canvas, p);
   }
   p.titleEl.textContent = title || '';
